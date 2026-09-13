@@ -10,12 +10,18 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
     private let secureStore: any SecureStore
     private let persistence: SessionPersistence
 
+    /// Retenu ici pour la durée de vie du client : le SDK s'en sert à chaque rafraîchissement de
+    /// jeton, et un delegate libéré ne persisterait plus rien.
+    private let sessionDelegate: SessionDelegate
+
     public init(homeserver: URL, storage: MatrixStorage) {
         self.homeserver = homeserver
         self.storage = storage
         let secureStore = KeychainSecureStore(storage: storage)
         self.secureStore = secureStore
-        self.persistence = SessionPersistence(store: secureStore)
+        let persistence = SessionPersistence(store: secureStore)
+        self.persistence = persistence
+        self.sessionDelegate = SessionDelegate(persistence: persistence)
     }
 
     /// Ouvre une session.
@@ -46,7 +52,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
             let client = try await makeClient(localStore: localStore)
             try await client.restoreSession(session: SessionMapper.session(from: data))
 
-            try await persistence.save(data)
+            try persistence.save(data)
             return try await RustMatrixSession.make(
                 client: client,
                 persistence: persistence,
@@ -58,7 +64,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
     }
 
     public func restoreSession() async throws -> (any MatrixClientKitCore.MatrixSession)? {
-        guard let data = try await persistence.load() else { return nil }
+        guard let data = try persistence.load() else { return nil }
 
         let localStore = makeLocalStore(for: data.userID)
         let client = try await makeClient(localStore: localStore)
@@ -82,7 +88,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
             // jamais rouvert, et laisser sur disque un store crypto inutilisable est exactement
             // ce que la purge au logout existe pour éviter.
             if case .authentication = mapped {
-                try? await persistence.clear()
+                try? persistence.clear()
                 try? localStore.purge()
             }
 
@@ -103,6 +109,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
             return try await ClientBuilder()
                 .homeserverUrl(url: homeserver.absoluteString)
                 .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
+                .setSessionDelegate(sessionDelegate: sessionDelegate)
                 .inMemoryStore()
                 .build()
         } catch {
@@ -118,6 +125,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
             return try await ClientBuilder()
                 .homeserverUrl(url: homeserver.absoluteString)
                 .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
+                .setSessionDelegate(sessionDelegate: sessionDelegate)
                 .sqliteStore(
                     config: SqliteStoreBuilder(
                         dataPath: paths.dataDirectory.path,

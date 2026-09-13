@@ -72,11 +72,11 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             await sync.stop()
             try await client.logout()
         } catch {
-            try? await persistence.clear()
+            try? persistence.clear()
             try? localStore.purge()
             throw ErrorMapper.map(error)
         }
-        try await persistence.clear()
+        try persistence.clear()
         try localStore.purge()
     }
 }

@@ -4,7 +4,11 @@ import Foundation
 ///
 /// - Note: portée `package`, comme ``SecureStore`` : aucun point d'entrée public n'expose la
 ///   persistance de session.
-package actor SessionPersistence {
+/// - Note: type synchrone et non un `actor` : ``SecureStore`` est déjà sûr en concurrence — le
+///   Keychain l'est par construction, et l'implémentation en mémoire porte son verrou. Un acteur
+///   n'ajouterait aucune garantie, et rendrait cette persistance inutilisable depuis le delegate
+///   de session du SDK, dont les deux méthodes sont synchrones.
+package struct SessionPersistence: Sendable {
     package static let storageKey = "com.matrixclientkit.session"
 
     private let store: any SecureStore
