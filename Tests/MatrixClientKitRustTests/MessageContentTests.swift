@@ -28,7 +28,26 @@ import MatrixClientKitCore
     #expect(failed.isFailed)
 
     // `reason` finit dans une interface : il doit être lisible, pas un nom de cas Swift amont.
-    guard case let .failed(reason) = failed else { return }
+    guard case let .failed(reason, isRecoverable) = failed else { return }
     #expect(!reason.contains("crossVerificationRequired"))
     #expect(reason.contains("vérifiée"))
+    // Relayé depuis l'amont, pas reconstruit : c'est la seule information sur laquelle une
+    // interface décide d'offrir « réessayer ».
+    #expect(isRecoverable)
+}
+
+/// Le drapeau doit être relayé dans les deux sens : le figer à `true` ferait offrir « réessayer »
+/// sur un envoi garé jusqu'à intervention de l'utilisateur, et le figer à `false` priverait de
+/// réessai un envoi qui repartirait tout seul.
+@Test(arguments: [true, false])
+func recoverabilityIsRelayedFromUpstream(isRecoverable: Bool) {
+    let state = TimelineMapper.sendState(
+        from: .sendingFailed(error: .missingMediaContent, isRecoverable: isRecoverable))
+
+    let expected = SendState.failed(
+        reason: "le média à envoyer est introuvable dans le cache",
+        isRecoverable: isRecoverable
+    )
+    #expect(state == expected)
+    #expect(state.isRecoverableFailure == isRecoverable)
 }

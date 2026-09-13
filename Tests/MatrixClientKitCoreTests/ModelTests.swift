@@ -31,9 +31,16 @@ private func makeSummary(notifications: Int, highlights: Int) -> RoomSummary {
 }
 
 @Test func sendStateDistinguishesFailure() {
-    #expect(SendState.failed(reason: "réseau").isFailed)
+    #expect(SendState.failed(reason: "réseau", isRecoverable: true).isFailed)
     #expect(SendState.sending.isFailed == false)
     #expect(SendState.sent.isFailed == false)
+
+    // `isRecoverableFailure` répond à la question qu'une interface pose réellement : proposer
+    // « réessayer », ou demander à l'utilisateur de résoudre le problème d'abord.
+    #expect(SendState.failed(reason: "réseau", isRecoverable: true).isRecoverableFailure)
+    let unrecoverable = SendState.failed(reason: "session non vérifiée", isRecoverable: false)
+    #expect(unrecoverable.isRecoverableFailure == false)
+    #expect(SendState.sent.isRecoverableFailure == false)
 }
 
 @Test func messageContentExposesPlainBody() {

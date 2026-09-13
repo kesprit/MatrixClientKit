@@ -22,17 +22,18 @@ enum TimelineMapper {
         }
     }
 
-    /// - Note: `EventSendState.sendingFailed` porte aussi `isRecoverable`, la seule information
-    ///   réellement actionable (réessayer, ou demander à l'utilisateur d'abandonner l'envoi).
-    ///   ``SendState/failed(reason:)`` ne sait pas la transporter : l'ajouter changerait la
-    ///   signature d'un cas d'enum public. Le point est remonté à la revue plutôt que tranché
-    ///   ici ; en attendant, le drapeau est perdu.
+    /// - Note: `isRecoverable` est relayé tel quel depuis l'amont, qui le définit ainsi : une
+    ///   erreur récupérable désactive la file d'envoi de la room (l'envoi repartira), tandis
+    ///   qu'une erreur non récupérable gare l'événement jusqu'à ce que l'utilisateur décide de
+    ///   l'abandonner. C'est bien la distinction « réessayer » / « l'utilisateur doit agir »
+    ///   qu'expose ``SendState/failed(reason:isRecoverable:)``.
     static func sendState(from state: EventSendState?) -> SendState {
         guard let state else { return .sent }
         switch state {
         case .notSentYet: return .sending
         case .sent: return .sent
-        case let .sendingFailed(error, _): return .failed(reason: reason(from: error))
+        case let .sendingFailed(error, isRecoverable):
+            return .failed(reason: reason(from: error), isRecoverable: isRecoverable)
         }
     }
 

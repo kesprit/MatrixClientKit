@@ -7,11 +7,27 @@ public enum SendState: Sendable, Hashable {
     /// Le homeserver a accepté le message.
     case sent
     /// L'envoi a échoué ; `reason` décrit la cause.
-    case failed(reason: String)
+    ///
+    /// - Parameters:
+    ///   - reason: cause de l'échec, rédigée pour être lisible. Diagnostic : une application qui
+    ///     localise son interface doit produire son propre texte plutôt que d'afficher celui-ci.
+    ///   - isRecoverable: l'envoi peut être réessayé **tel quel**, typiquement une fois la
+    ///     connectivité revenue, par opposition à un échec que l'utilisateur doit d'abord
+    ///     résoudre (vérifier sa session, retirer un appareil non vérifié, choisir un autre
+    ///     média). C'est la distinction sur laquelle une interface décide d'offrir « réessayer »
+    ///     ou « abandonner l'envoi ».
+    case failed(reason: String, isRecoverable: Bool)
 
     /// Vrai si l'envoi a échoué.
     public var isFailed: Bool {
         if case .failed = self { return true }
+        return false
+    }
+
+    /// Vrai si l'envoi a échoué et peut être réessayé tel quel ; `false` dans tous les autres cas,
+    /// y compris lorsque l'envoi n'a pas échoué.
+    public var isRecoverableFailure: Bool {
+        if case let .failed(_, isRecoverable) = self { return isRecoverable }
         return false
     }
 }
