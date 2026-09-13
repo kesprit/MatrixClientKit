@@ -74,3 +74,10 @@ private func mapApi(_ kind: ErrorKind, code: String = "M_UNKNOWN") -> MatrixErro
         return
     }
 }
+
+@Test func captchaNeededAndCaptchaInvalidAreMappedSeparately() {
+    // Deux situations différentes pour l'utilisateur : ne pas avoir résolu de captcha, ou en
+    // avoir résolu un de travers. Les fusionner priverait l'application de la distinction.
+    #expect(mapApi(.captchaNeeded) == .authentication(.captchaRequired))
+    #expect(mapApi(.captchaInvalid) == .authentication(.captchaInvalid))
+}

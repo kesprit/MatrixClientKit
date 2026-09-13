@@ -51,8 +51,10 @@ enum ErrorMapper {
             return .authentication(.missingToken)
         case .unauthorized:
             return .authentication(.invalidCredentials)
-        case .captchaNeeded, .captchaInvalid:
+        case .captchaNeeded:
             return .authentication(.captchaRequired)
+        case .captchaInvalid:
+            return .authentication(.captchaInvalid)
         case .notFound:
             return .notFound(.unspecified)
         case .connectionFailed:

@@ -38,8 +38,18 @@ import Testing
         .server(.maintenance),
         .storage(.unavailable),
         .unexpected(message: "boom", details: nil),
+        // Le SDK amont peut remonter une erreur sans message ; `.unexpected` est le déversoir de
+        // toute erreur non encore distinguée, donc ce cas n'a rien d'exotique.
+        .unexpected(message: "", details: nil),
+        .unexpected(message: "", details: ""),
+        .unexpected(message: "", details: "détail"),
     ]
     for error in errors {
         #expect(error.errorDescription?.isEmpty == false)
     }
+}
+
+@Test func captchaRequiredIsDistinctFromCaptchaInvalid() {
+    #expect(MatrixError.authentication(.captchaRequired)
+            != MatrixError.authentication(.captchaInvalid))
 }

@@ -13,7 +13,13 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
         case unknownToken(soft: Bool)
         case userDeactivated
         case missingToken
+        /// Le serveur exige la résolution d'un captcha, pas encore fournie.
         case captchaRequired
+        /// Un captcha a été fourni mais refusé par le serveur.
+        ///
+        /// Distinct de ``captchaRequired`` : l'un demande à l'utilisateur de faire quelque chose
+        /// qu'il n'a pas fait, l'autre de refaire ce qu'il a raté.
+        case captchaInvalid
         case unsupportedLoginType
     }
 
@@ -93,6 +99,13 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
         return delay
     }
 
+    /// Description **de diagnostic**, en français, destinée aux journaux et aux rapports de bug.
+    ///
+    /// - Important: ce n'est pas de la copy d'interface. Ces chaînes mêlent une phrase rédigée et
+    ///   le nom du cas Swift imbriqué, ne sont pas localisées, et leur formulation peut changer
+    ///   d'une version à l'autre sans que ce soit un changement cassant. Une application doit
+    ///   faire correspondre les cas de ``MatrixError`` à ses propres textes localisés plutôt que
+    ///   d'afficher cette valeur telle quelle. La localisation du package est hors périmètre v0.1.
     public var errorDescription: String? {
         switch self {
         case let .authentication(value): return "Erreur d'authentification : \(value)"
@@ -106,8 +119,12 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
         case let .server(value): return "Erreur du serveur : \(value)"
         case let .storage(value): return "Erreur de stockage : \(value)"
         case let .unexpected(message, details):
-            guard let details else { return message }
-            return "\(message) (\(details))"
+            // Toute erreur amont non encore distinguée atterrit ici (règle d'évolution du type),
+            // y compris celles dont le SDK ne fournit aucun message. Rendre la chaîne vide
+            // laisserait une interface afficher un cadre d'erreur sans une ligne de texte.
+            let text = message.isEmpty ? "Erreur inattendue du SDK Matrix." : message
+            guard let details, !details.isEmpty else { return text }
+            return "\(text) (\(details))"
         }
     }
 }
