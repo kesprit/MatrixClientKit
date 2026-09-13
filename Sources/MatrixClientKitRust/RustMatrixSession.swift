@@ -50,7 +50,10 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     ///
     /// - Important: l'effacement local doit survenir même si l'appel serveur échoue — un
     ///   utilisateur qui se déconnecte hors ligne ne doit pas rester connecté localement.
-    ///   L'erreur serveur, elle, doit tout de même remonter à l'appelant.
+    ///   L'erreur serveur, elle, doit tout de même remonter à l'appelant. Si l'effacement local
+    ///   échoue à son tour dans cette branche, l'échec est volontairement avalé (`try?`) : c'est
+    ///   l'erreur serveur, plus significative pour l'appelant, qui doit rester celle qu'il voit —
+    ///   pas un échec secondaire de nettoyage local.
     public func logout() async throws {
         do {
             await sync.stop()

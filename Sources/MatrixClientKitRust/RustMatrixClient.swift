@@ -45,7 +45,18 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
             try await client.restoreSession(session: SessionMapper.session(from: data))
             return try await RustMatrixSession.make(client: client, persistence: persistence)
         } catch {
-            throw ErrorMapper.map(error)
+            let mapped = ErrorMapper.map(error)
+
+            // Une authentification refusée signifie que la session persistée est morte : la
+            // conserver ferait échouer chaque lancement à l'identique, sans qu'aucune API
+            // publique ne permette de l'effacer avant une nouvelle connexion réussie. Une panne
+            // réseau, de stockage ou serveur, elle, ne dit rien sur la validité de la session —
+            // l'effacer déconnecterait l'utilisateur à chaque démarrage hors ligne.
+            if case .authentication = mapped {
+                try? await persistence.clear()
+            }
+
+            throw mapped
         }
     }
 
