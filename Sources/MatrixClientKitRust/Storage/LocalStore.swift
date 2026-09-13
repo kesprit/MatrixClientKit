@@ -60,9 +60,29 @@ struct LocalStore: Sendable {
             return existing
         }
 
+        // Clé absente alors qu'un store existe : celui-ci est déjà définitivement illisible, sa
+        // clé n'existant plus nulle part. Le cas se produit quand l'entrée Keychain est perdue
+        // sans que le conteneur le soit — un changement de `keychainAccessGroup` entre deux
+        // versions de l'application, par exemple.
+        //
+        // Générer une clé neuve par-dessus laisserait l'application en échec à chaque lancement,
+        // sans aucune API publique pour en sortir. On efface donc l'orphelin avant de repartir :
+        // rien d'exploitable n'est perdu, puisque rien ne pouvait plus être déchiffré.
+        try purgeOrphanedStore()
+
         let key = try Self.makeRandomKey()
         try secureStore.set(key, forKey: keychainKey)
         return key
+    }
+
+    /// Efface les répertoires d'un store dont la clé a disparu.
+    private func purgeOrphanedStore() throws {
+        let paths = try paths()
+        guard FileManager.default.fileExists(atPath: paths.userDirectory.path) else { return }
+
+        try remove(paths.dataDirectory)
+        try remove(paths.cacheDirectory)
+        try? remove(paths.userDirectory)
     }
 
     /// Efface le store local de cet utilisateur : répertoires d'abord, clé ensuite.

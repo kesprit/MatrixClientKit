@@ -89,3 +89,31 @@ private func makeStore(
     let store = makeStore(root: makeRoot())
     try store.purge()
 }
+
+@Test func aStoreWhoseKeyDisappearedIsPurgedRatherThanLeftUnreadable() throws {
+    let root = makeRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let secureStore = InMemorySecureStore()
+    let store = makeStore(root: root, secureStore: secureStore)
+
+    // Un store existant, avec un fichier dedans pour vérifier qu'il disparaît réellement.
+    let key = try store.encryptionKey()
+    let paths = try store.paths()
+    try paths.createDirectoriesIfNeeded()
+    let database = paths.dataDirectory.appendingPathComponent("matrix.sqlite")
+    try Data("données chiffrées".utf8).write(to: database)
+
+    // La clé disparaît sans que le store parte avec elle — cas d'un changement d'access group
+    // du Keychain entre deux versions de l'application.
+    try secureStore.removeValue(forKey: "\(LocalStore.keyPrefix).\(StoragePaths.segment(for: alice))")
+
+    let regenerated = try makeStore(root: root, secureStore: secureStore).encryptionKey()
+
+    #expect(regenerated.count == LocalStore.keyByteCount)
+    #expect(regenerated != key)
+    // L'orphelin doit être parti : le conserver condamnerait l'application à échouer à chaque
+    // lancement, sans aucune API publique pour s'en sortir.
+    #expect(FileManager.default.fileExists(atPath: database.path) == false)
+    #expect(FileManager.default.fileExists(atPath: paths.userDirectory.path) == false)
+}
