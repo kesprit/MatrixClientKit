@@ -12,6 +12,8 @@ public enum Membership: Sendable, Hashable {
     case knocked
     /// L'utilisateur courant a été banni de la room.
     case banned
+    /// L'état d'appartenance n'a pas pu être déterminé.
+    case unknown
 }
 
 /// Vue résumée d'une room, telle qu'affichée dans une liste.
@@ -26,8 +28,9 @@ public struct RoomSummary: Sendable, Hashable, Identifiable {
     public let avatarURL: URL?
     /// Vrai s'il s'agit d'une conversation directe (DM) plutôt que d'une room de groupe.
     public let isDirect: Bool
-    /// Vrai si la room est chiffrée de bout en bout.
-    public let isEncrypted: Bool
+    /// Vrai si la room est chiffrée de bout en bout ; `nil` lorsque l'état de chiffrement n'a pas
+    /// pu être déterminé — ne jamais l'afficher comme non chiffré dans ce cas.
+    public let isEncrypted: Bool?
     /// Nombre de membres ayant rejoint la room.
     public let joinedMemberCount: Int
     /// Nombre total d'événements non lus générant une notification.
@@ -43,7 +46,7 @@ public struct RoomSummary: Sendable, Hashable, Identifiable {
         topic: String?,
         avatarURL: URL?,
         isDirect: Bool,
-        isEncrypted: Bool,
+        isEncrypted: Bool?,
         joinedMemberCount: Int,
         notificationCount: Int,
         highlightCount: Int,

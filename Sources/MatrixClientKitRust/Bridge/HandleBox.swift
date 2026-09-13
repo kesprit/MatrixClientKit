@@ -11,16 +11,22 @@ import MatrixRustSDK
 final class HandleBox: @unchecked Sendable {
     private let lock = NSLock()
     private var handle: (any TaskHandleProtocol)?
+    private var retained: AnyObject?
     private var isCancelled = false
 
     /// Retient le handle, ou l'annule immédiatement si la terminaison a déjà eu lieu.
-    func store(_ handle: any TaskHandleProtocol) {
+    ///
+    /// - Parameter object: objet additionnel à garder en vie tant que le handle n'est pas
+    ///   annulé — utile quand l'abonnement amont dépend d'un objet intermédiaire dont la durée
+    ///   de vie réelle n'est pas documentée par les bindings.
+    func store(_ handle: any TaskHandleProtocol, retaining object: AnyObject? = nil) {
         lock.lock()
         defer { lock.unlock() }
         if isCancelled {
             handle.cancel()
         } else {
             self.handle = handle
+            self.retained = object
         }
     }
 
@@ -28,6 +34,7 @@ final class HandleBox: @unchecked Sendable {
         lock.lock()
         let handle = self.handle
         self.handle = nil
+        self.retained = nil
         isCancelled = true
         lock.unlock()
         handle?.cancel()

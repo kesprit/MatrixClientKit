@@ -36,17 +36,16 @@ public final class RustRoomService: RoomService {
                     let result = roomList.entriesWithDynamicAdapters(pageSize: 50, listener: listener)
                     _ = result.controller().setFilter(kind: filterKind)
 
-                    // `entriesStream()` renvoie un `TaskHandle`, et le SDK documente ce type
-                    // comme « a way to keep the handle a task running by itself in detached
-                    // mode » (matrix_sdk_ffi.swift, TaskHandleProtocol) : la tâche amont tourne
-                    // de façon détachée une fois lancée, indépendamment de la durée de vie de
-                    // `result`. L'appel est synchrone — la tâche est déjà démarrée avant que
-                    // `entriesStream()` ne retourne — donc `result` (et son `controller()`,
-                    // utilisé une seule fois ici) peut être relâché sans arrêter la
-                    // souscription. C'est le même schéma que `RustTimeline.items`, où
-                    // `timeline.addListener()` renvoie directement un `TaskHandle` détaché sans
-                    // qu'aucun autre objet ne soit retenu.
-                    box.store(result.entriesStream())
+                    // Les bindings ne documentent pas si l'abonnement survit à la libération de
+                    // `result` : `entriesWithDynamicAdapters` renvoie un objet intermédiaire
+                    // (`controller()` / `entriesStream()`) — contrairement à
+                    // `RustTimeline.items`, où `addListener` renvoie directement le `TaskHandle`
+                    // sans indirection —, et `result` comme le contrôleur qu'il expose libèrent
+                    // leur côté Rust dans leur `deinit`. Faute de certitude, on retient `result`
+                    // explicitement jusqu'à l'annulation plutôt que de parier sur une durée de
+                    // vie non garantie : le coût d'une référence retenue est nul face au risque
+                    // d'une liste qui cesse silencieusement de se mettre à jour.
+                    box.store(result.entriesStream(), retaining: result)
                 } catch {
                     continuation.finish()
                 }
@@ -67,10 +66,9 @@ public final class RustRoomService: RoomService {
             let task = Task {
                 for await batch in updates {
                     var translated: [CollectionDiff<RoomSummary>] = []
+                    translated.reserveCapacity(batch.count)
                     for update in batch {
-                        if let diff = await RoomMapper.diff(from: update) {
-                            translated.append(diff)
-                        }
+                        translated.append(await RoomMapper.diff(from: update))
                     }
                     continuation.yield(translated)
                 }
