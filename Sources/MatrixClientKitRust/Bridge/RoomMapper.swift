@@ -27,7 +27,10 @@ enum RoomMapper {
     /// est inexploitable : les diffs amont portent des index absolus, et écarter une entrée
     /// désalignerait toutes les positions suivantes.
     static func summary(from room: Room) async -> RoomSummary {
-        guard let id = RoomID(rawValue: room.id()) else { return placeholderSummary() }
+        let rawIdentifier = room.id()
+        guard let id = RoomID(rawValue: rawIdentifier) else {
+            return placeholderSummary(for: rawIdentifier)
+        }
 
         let info = try? await room.roomInfo()
 
@@ -53,9 +56,14 @@ enum RoomMapper {
     /// Écarter la room décalerait toutes les positions suivantes : les diffs amont portent des
     /// index absolus, et en retirer un désaligne la liste entière. On conserve donc la place,
     /// avec une entrée visiblement incomplète plutôt qu'une liste silencieusement fausse.
-    private static func placeholderSummary() -> RoomSummary {
+    ///
+    /// - Important: l'identifiant est **dérivé** de la valeur amont, pas tiré au hasard. Un
+    ///   `UUID()` neuf à chaque appel donnerait à la même room une identité différente à chaque
+    ///   diff : `ForEach` détruirait et reconstruirait la ligne à chaque mise à jour de la liste.
+    ///   L'empreinte garde l'entrée stable tout en restant manifestement factice.
+    static func placeholderSummary(for rawIdentifier: String) -> RoomSummary {
         RoomSummary(
-            id: RoomID(rawValue: "!unparseable-\(UUID().uuidString)")!,
+            id: RoomID(rawValue: "!unparseable-\(StableDigest.short(rawIdentifier))")!,
             displayName: nil,
             topic: nil,
             avatarURL: nil,

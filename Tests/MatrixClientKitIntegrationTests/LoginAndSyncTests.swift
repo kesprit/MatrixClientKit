@@ -22,10 +22,22 @@ private struct IntegrationConfiguration {
     static var isAvailable: Bool { current != nil }
 }
 
-private func makeClient(_ configuration: IntegrationConfiguration) -> any MatrixClient {
+/// Client d'intégration et répertoire qui l'héberge.
+///
+/// Le répertoire est rendu à l'appelant : sans cela, chaque exécution laisse sous le répertoire
+/// temporaire un store SQLite contenant une vraie session — jetons compris.
+private struct IntegrationClient {
+    let client: any MatrixClient
+    let directory: URL
+}
+
+private func makeClient(_ configuration: IntegrationConfiguration) -> IntegrationClient {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent("mck-integration-\(UUID().uuidString)", isDirectory: true)
-    return Matrix.client(homeserver: configuration.homeserver, storage: .local(directory: directory))
+    return IntegrationClient(
+        client: Matrix.client(homeserver: configuration.homeserver, storage: .local(directory: directory)),
+        directory: directory
+    )
 }
 
 /// Exécute un nettoyage même lorsque la tâche de test a été annulée — par exemple par
@@ -34,6 +46,12 @@ private func makeClient(_ configuration: IntegrationConfiguration) -> any Matrix
 /// d'atteindre le serveur au lieu d'échouer immédiatement sur un contexte déjà annulé.
 private func cleaningUp(_ body: @escaping @Sendable () async -> Void) async {
     await Task.detached(operation: body).value
+}
+
+/// Supprime le répertoire de travail d'une exécution. L'échec est ignoré : le nettoyage ne doit
+/// jamais masquer le résultat du test qu'il suit.
+private func removeDirectory(_ directory: URL) {
+    try? FileManager.default.removeItem(at: directory)
 }
 
 @Suite(.enabled(if: IntegrationConfiguration.isAvailable))
@@ -50,7 +68,9 @@ struct LoginAndSyncTests {
     @Test(.timeLimit(.minutes(1)))
     func loginSyncAndListRooms() async throws {
         let configuration = try #require(IntegrationConfiguration.current)
-        let client = makeClient(configuration)
+        let integration = makeClient(configuration)
+        let client = integration.client
+        let directory = integration.directory
 
         let session = try await client.login(
             .password(
@@ -84,13 +104,16 @@ struct LoginAndSyncTests {
         await cleaningUp {
             await session.sync.stop()
             try? await session.logout()
+            removeDirectory(directory)
         }
     }
 
     @Test(.timeLimit(.minutes(1)))
     func wrongPasswordSurfacesAsInvalidCredentials() async throws {
         let configuration = try #require(IntegrationConfiguration.current)
-        let client = makeClient(configuration)
+        let integration = makeClient(configuration)
+        let client = integration.client
+        let directory = integration.directory
 
         await #expect(throws: MatrixError.authentication(.invalidCredentials)) {
             _ = try await client.login(
@@ -101,6 +124,8 @@ struct LoginAndSyncTests {
                 )
             )
         }
+
+        await cleaningUp { removeDirectory(directory) }
     }
 
     @Test(.timeLimit(.minutes(1)))
@@ -110,7 +135,9 @@ struct LoginAndSyncTests {
         let roomIdentifier = try #require(environment["MATRIX_TEST_ROOM_ID"])
         let roomID = try #require(RoomID(rawValue: roomIdentifier))
 
-        let client = makeClient(configuration)
+        let integration = makeClient(configuration)
+        let client = integration.client
+        let directory = integration.directory
         let session = try await client.login(
             .password(
                 username: configuration.username,
@@ -139,6 +166,7 @@ struct LoginAndSyncTests {
         await cleaningUp {
             await session.sync.stop()
             try? await session.logout()
+            removeDirectory(directory)
         }
     }
 }

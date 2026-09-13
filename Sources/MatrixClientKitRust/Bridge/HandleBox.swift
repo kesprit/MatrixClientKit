@@ -19,14 +19,21 @@ final class HandleBox: @unchecked Sendable {
     /// - Parameter object: objet additionnel à garder en vie tant que le handle n'est pas
     ///   annulé — utile quand l'abonnement amont dépend d'un objet intermédiaire dont la durée
     ///   de vie réelle n'est pas documentée par les bindings.
+    /// - Important: comme ``cancel()``, cette méthode relâche le verrou **avant** d'appeler du
+    ///   code amont. Aucun blocage n'existe aujourd'hui, mais tenir un verrou pendant un appel
+    ///   vers du code dont on ne contrôle pas l'implémentation est la discipline qui, un jour de
+    ///   changement amont, produit un interblocage introuvable.
     func store(_ handle: any TaskHandleProtocol, retaining object: AnyObject? = nil) {
         lock.lock()
-        defer { lock.unlock() }
-        if isCancelled {
-            handle.cancel()
-        } else {
+        let wasCancelled = isCancelled
+        if !wasCancelled {
             self.handle = handle
             self.retained = object
+        }
+        lock.unlock()
+
+        if wasCancelled {
+            handle.cancel()
         }
     }
 

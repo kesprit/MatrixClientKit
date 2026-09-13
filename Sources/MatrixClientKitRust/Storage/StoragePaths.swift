@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import MatrixClientKitCore
 
@@ -54,14 +53,9 @@ struct StoragePaths: Sendable {
     }
 
     /// Segment de chemin propre à un utilisateur, sûr pour le système de fichiers et stable d'un
-    /// lancement à l'autre.
-    ///
-    /// - Important: l'empreinte est calculée par SHA-256 et non par `Hasher`/`hashValue`, dont la
-    ///   graine change à chaque lancement du processus : un store ne serait alors jamais retrouvé
-    ///   après un redémarrage.
+    /// lancement à l'autre — voir ``StableDigest``.
     static func segment(for userID: UserID) -> String {
-        let digest = SHA256.hash(data: Data(userID.rawValue.utf8))
-        return String(digest.map { String(format: "%02x", $0) }.joined().prefix(32))
+        StableDigest.short(userID.rawValue)
     }
 
     /// Crée les répertoires et applique la protection de fichiers requise par les extensions.

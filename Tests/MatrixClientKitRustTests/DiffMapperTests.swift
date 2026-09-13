@@ -88,3 +88,18 @@ func roomListTruncateKeepsItsLength(length: UInt32) async {
     #expect(applied(.truncate(length: 2)) == ["a", "b"])
     #expect(applied(.truncate(length: 0)) == [])
 }
+
+// MARK: - Identité du résumé de repli
+
+/// Une room dont l'identifiant amont ne parse pas garde sa place dans la liste, sous une identité
+/// factice. Si cette identité changeait à chaque diff (un `UUID()` neuf par appel), `ForEach`
+/// détruirait et reconstruirait la ligne à chaque mise à jour.
+@Test func thePlaceholderKeepsAStableIdentityForTheSameUpstreamValue() {
+    let first = RoomMapper.placeholderSummary(for: "identifiant-invalide")
+    let second = RoomMapper.placeholderSummary(for: "identifiant-invalide")
+
+    #expect(first.id == second.id)
+    #expect(first.id != RoomMapper.placeholderSummary(for: "un-autre").id)
+    #expect(first.membership == .unknown)
+    #expect(first.isEncrypted == nil)
+}

@@ -22,12 +22,38 @@ enum TimelineMapper {
         }
     }
 
+    /// - Note: `EventSendState.sendingFailed` porte aussi `isRecoverable`, la seule information
+    ///   réellement actionable (réessayer, ou demander à l'utilisateur d'abandonner l'envoi).
+    ///   ``SendState/failed(reason:)`` ne sait pas la transporter : l'ajouter changerait la
+    ///   signature d'un cas d'enum public. Le point est remonté à la revue plutôt que tranché
+    ///   ici ; en attendant, le drapeau est perdu.
     static func sendState(from state: EventSendState?) -> SendState {
         guard let state else { return .sent }
         switch state {
         case .notSentYet: return .sending
         case .sent: return .sent
-        case .sendingFailed: return .failed(reason: String(describing: state))
+        case let .sendingFailed(error, _): return .failed(reason: reason(from: error))
+        }
+    }
+
+    /// Traduit la cause d'un envoi bloqué en une phrase lisible.
+    ///
+    /// - Important: `reason` finit dans une interface. Y déverser `String(describing:)` d'un enum
+    ///   amont y ferait apparaître des identifiants Swift.
+    private static func reason(from error: QueueWedgeError) -> String {
+        switch error {
+        case .insecureDevices:
+            "des appareils non vérifiés sont présents dans la room"
+        case .identityViolations:
+            "l'identité d'un participant a changé et doit être vérifiée à nouveau"
+        case .crossVerificationRequired:
+            "cette session doit être vérifiée avant de pouvoir envoyer des messages"
+        case .missingMediaContent:
+            "le média à envoyer est introuvable dans le cache"
+        case let .invalidMimeType(mimeType):
+            "type de contenu non pris en charge : \(mimeType)"
+        case let .genericApiError(msg):
+            msg.isEmpty ? "l'envoi a échoué" : msg
         }
     }
 
