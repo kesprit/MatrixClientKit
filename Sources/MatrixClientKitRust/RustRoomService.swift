@@ -34,7 +34,15 @@ public final class RustRoomService: RoomService {
                     let roomList = try await service.allRooms()
                     let listener = EntriesListener { continuation.yield($0) }
                     let result = roomList.entriesWithDynamicAdapters(pageSize: 50, listener: listener)
-                    _ = result.controller().setFilter(kind: filterKind)
+
+                    // `setFilter` dit si le filtre a bien été posé. Ignorer ce booléen livrerait,
+                    // sous le nom de « rooms rejointes », la liste complète — rooms quittées et
+                    // bannies comprises. Une liste qui répond à une autre question que celle
+                    // posée est pire qu'une absence de liste : on termine le flux.
+                    guard result.controller().setFilter(kind: filterKind) else {
+                        continuation.finish()
+                        return
+                    }
 
                     // Les bindings ne documentent pas si l'abonnement survit à la libération de
                     // `result` : `entriesWithDynamicAdapters` renvoie un objet intermédiaire
@@ -47,6 +55,9 @@ public final class RustRoomService: RoomService {
                     // d'une liste qui cesse silencieusement de se mettre à jour.
                     box.store(result.entriesStream(), retaining: result)
                 } catch {
+                    // `AsyncStream` n'a pas de canal d'erreur : un abonnement qui échoue ne peut
+                    // que terminer le flux sans valeur. Documenté comme tel sur
+                    // ``RoomService/list(filter:)``.
                     continuation.finish()
                 }
             }
