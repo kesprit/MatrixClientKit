@@ -32,6 +32,11 @@ let package = Package(
         ),
         .testTarget(name: "MatrixClientKitRustTests", dependencies: ["MatrixClientKitRust"]),
         .testTarget(name: "MatrixClientKitTests", dependencies: ["MatrixClientKit"]),
+        .testTarget(
+            name: "MatrixClientKitIntegrationTests",
+            dependencies: ["MatrixClientKit"],
+            exclude: ["README.md"]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
