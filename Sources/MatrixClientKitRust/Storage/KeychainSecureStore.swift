@@ -3,7 +3,10 @@ import Security
 import MatrixClientKitCore
 
 /// Stockage de secrets adossé au Keychain, partageable avec une extension via un access group.
-public struct KeychainSecureStore: SecureStore {
+///
+/// - Note: portée `package`, comme ``SecureStore`` : construit en interne par le client, jamais
+///   injecté par une application.
+package struct KeychainSecureStore: SecureStore {
     private let service = "com.matrixclientkit"
     private let accessGroup: String?
     // Stocké sous forme de valeur Sendable : `CFString` (retourné par les constantes
@@ -11,7 +14,7 @@ public struct KeychainSecureStore: SecureStore {
     // est différée à l'utilisation dans `set`.
     private let accessibility: MatrixStorage.KeychainAccessibility
 
-    public init(storage: MatrixStorage) {
+    package init(storage: MatrixStorage) {
         accessGroup = storage.keychainAccessGroup
         accessibility = storage.accessibility
     }
@@ -38,7 +41,7 @@ public struct KeychainSecureStore: SecureStore {
         return query
     }
 
-    public func data(forKey key: String) throws -> Data? {
+    package func data(forKey key: String) throws -> Data? {
         var query = baseQuery(forKey: key)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -60,7 +63,7 @@ public struct KeychainSecureStore: SecureStore {
     ///   `load()` renvoie alors `nil` au lieu de faire remonter l'échec, et l'utilisateur se
     ///   retrouve déconnecté sans explication — précisément ce que la décision de sécurité sur le
     ///   traitement des données corrompues doit empêcher.
-    public func set(_ data: Data, forKey key: String) throws {
+    package func set(_ data: Data, forKey key: String) throws {
         let query = baseQuery(forKey: key)
         let attributes: [String: Any] = [
             kSecValueData as String: data,
@@ -85,7 +88,7 @@ public struct KeychainSecureStore: SecureStore {
         }
     }
 
-    public func removeValue(forKey key: String) throws {
+    package func removeValue(forKey key: String) throws {
         let status = SecItemDelete(baseQuery(forKey: key) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw MatrixError.storage(.keychainFailure(status: status))

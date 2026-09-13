@@ -1,16 +1,19 @@
 import Foundation
 
 /// Enregistre et relit les données de session dans un stockage sécurisé.
-public actor SessionPersistence {
-    public static let storageKey = "com.matrixclientkit.session"
+///
+/// - Note: portée `package`, comme ``SecureStore`` : aucun point d'entrée public n'expose la
+///   persistance de session.
+package actor SessionPersistence {
+    package static let storageKey = "com.matrixclientkit.session"
 
     private let store: any SecureStore
 
-    public init(store: any SecureStore) {
+    package init(store: any SecureStore) {
         self.store = store
     }
 
-    public func save(_ session: MatrixSessionData) throws {
+    package func save(_ session: MatrixSessionData) throws {
         do {
             let data = try JSONEncoder().encode(session)
             try store.set(data, forKey: Self.storageKey)
@@ -21,7 +24,7 @@ public actor SessionPersistence {
         }
     }
 
-    public func load() throws -> MatrixSessionData? {
+    package func load() throws -> MatrixSessionData? {
         let data: Data?
         do {
             data = try store.data(forKey: Self.storageKey)
@@ -40,7 +43,7 @@ public actor SessionPersistence {
         }
     }
 
-    public func clear() throws {
+    package func clear() throws {
         do {
             try store.removeValue(forKey: Self.storageKey)
         } catch {

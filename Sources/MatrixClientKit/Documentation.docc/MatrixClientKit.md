@@ -47,7 +47,6 @@ premier flux complet, et le README du dépôt pour ce que cette version ne couvr
 ### Stockage
 
 - ``MatrixStorage``
-- ``SecureStore``
 
 ### Identifiants
 

@@ -2,9 +2,9 @@
 ///
 /// Un diff dont l'index est hors bornes est ignoré ; les diffs suivants sont appliqués
 /// normalement. L'application ne provoque jamais d'erreur fatale.
-public enum CollectionDiffApplier: Sendable {
+enum CollectionDiffApplier: Sendable {
 
-    public static func apply<Element: Sendable>(
+    static func apply<Element: Sendable>(
         _ diffs: [CollectionDiff<Element>],
         to items: [Element]
     ) -> [Element] {

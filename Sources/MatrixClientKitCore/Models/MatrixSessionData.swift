@@ -2,26 +2,30 @@ import Foundation
 
 /// Données de session persistées entre deux lancements.
 ///
+/// - Note: portée `package`. Ce type n'existait en `public` que pour être visible depuis la
+///   cible Rust ; aucune API publique ne le produit ni ne le consomme, et un modèle porteur de
+///   jeton n'a rien à faire dans la documentation générée.
+///
 /// - Warning: contient un jeton d'accès. Ce type ne doit être écrit que dans un stockage
 ///   sécurisé — voir ``SecureStore``.
-public struct MatrixSessionData: Sendable, Hashable, Codable {
+package struct MatrixSessionData: Sendable, Hashable, Codable {
     /// Identifiant de l'utilisateur propriétaire de la session.
-    public let userID: UserID
+    package let userID: UserID
     /// Identifiant de l'appareil associé à la session.
-    public let deviceID: DeviceID
+    package let deviceID: DeviceID
     /// Adresse du homeserver auquel la session est rattachée.
-    public let homeserverURL: URL
+    package let homeserverURL: URL
     /// Jeton d'accès utilisé pour authentifier les requêtes.
-    public let accessToken: String
+    package let accessToken: String
     /// Jeton permettant de renouveler l'accès sans nouvelle authentification, s'il existe.
-    public let refreshToken: String?
+    package let refreshToken: String?
     /// Données OAuth opaques à restituer au SDK amont lors de la restauration, le cas échéant.
-    public let oauthData: String?
+    package let oauthData: String?
     /// Variante de sliding sync utilisée par la session : `"none"`, `"native"` ou
     /// `"discoverNative"`.
-    public let slidingSyncVersion: String
+    package let slidingSyncVersion: String
 
-    public init(
+    package init(
         userID: UserID,
         deviceID: DeviceID,
         homeserverURL: URL,
@@ -42,7 +46,7 @@ public struct MatrixSessionData: Sendable, Hashable, Codable {
 
 extension MatrixSessionData: CustomStringConvertible, CustomDebugStringConvertible {
     /// Description expurgée : n'expose jamais le jeton d'accès ni le jeton de renouvellement.
-    public var description: String {
+    package var description: String {
         """
         MatrixSessionData(userID: \(userID), deviceID: \(deviceID), \
         homeserverURL: \(homeserverURL), accessToken: <redacted>, \
@@ -50,7 +54,7 @@ extension MatrixSessionData: CustomStringConvertible, CustomDebugStringConvertib
         """
     }
 
-    public var debugDescription: String { description }
+    package var debugDescription: String { description }
 }
 
 extension UserID: Codable {
