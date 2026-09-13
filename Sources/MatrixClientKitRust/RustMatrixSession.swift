@@ -10,10 +10,12 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
 
     private let client: Client
     private let persistence: SessionPersistence
+    private let localStore: LocalStore
 
     private init(
         client: Client,
         persistence: SessionPersistence,
+        localStore: LocalStore,
         userID: UserID,
         deviceID: DeviceID,
         rooms: any RoomService,
@@ -21,13 +23,18 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     ) {
         self.client = client
         self.persistence = persistence
+        self.localStore = localStore
         self.userID = userID
         self.deviceID = deviceID
         self.rooms = rooms
         self.sync = sync
     }
 
-    static func make(client: Client, persistence: SessionPersistence) async throws -> RustMatrixSession {
+    static func make(
+        client: Client,
+        persistence: SessionPersistence,
+        localStore: LocalStore
+    ) async throws -> RustMatrixSession {
         do {
             let session = try client.session()
             let data = try SessionMapper.sessionData(from: session)
@@ -36,6 +43,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             return RustMatrixSession(
                 client: client,
                 persistence: persistence,
+                localStore: localStore,
                 userID: data.userID,
                 deviceID: data.deviceID,
                 rooms: RustRoomService(roomListService: syncService.roomListService()),
@@ -46,7 +54,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         }
     }
 
-    /// Ferme la session côté serveur et efface les données persistées localement.
+    /// Ferme la session côté serveur et efface toutes les données locales : session persistée,
+    /// store SQLite (historique **et** store crypto) et clé de chiffrement associée.
     ///
     /// - Important: l'effacement local doit survenir même si l'appel serveur échoue — un
     ///   utilisateur qui se déconnecte hors ligne ne doit pas rester connecté localement.
@@ -54,14 +63,20 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     ///   échoue à son tour dans cette branche, l'échec est volontairement avalé (`try?`) : c'est
     ///   l'erreur serveur, plus significative pour l'appelant, qui doit rester celle qu'il voit —
     ///   pas un échec secondaire de nettoyage local.
+    ///
+    /// - Important: `Client.logout()` amont ne fait que la déconnexion côté serveur ; il ne
+    ///   supprime rien en local. Sans la purge ci-dessous, l'identité d'appareil et les clés de
+    ///   room Megolm resteraient sur disque après une déconnexion.
     public func logout() async throws {
         do {
             await sync.stop()
             try await client.logout()
         } catch {
             try? await persistence.clear()
+            try? localStore.purge()
             throw ErrorMapper.map(error)
         }
         try await persistence.clear()
+        try localStore.purge()
     }
 }

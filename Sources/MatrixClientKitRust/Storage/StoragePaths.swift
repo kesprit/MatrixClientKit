@@ -1,19 +1,35 @@
+import CryptoKit
 import Foundation
 import MatrixClientKitCore
 
-/// Résout les répertoires utilisés par le store SQLite du SDK.
+/// Résout les répertoires utilisés par le store SQLite du SDK, pour un utilisateur donné.
+///
+/// - Important: l'amont documente que les chemins « **must** be unique per session as the SDK
+///   stores aren't capable of handling multiple users ». Un chemin fixe partagé par tous les
+///   comptes fait donc rouvrir le store — et le store crypto — du compte précédent lors d'une
+///   connexion sous un autre identifiant : configuration non supportée, qui échoue sans erreur
+///   exploitable. D'où le segment par utilisateur.
 struct StoragePaths: Sendable {
+    /// Répertoire propre à l'utilisateur : contient ``dataDirectory`` et ``cacheDirectory``.
+    let userDirectory: URL
     let dataDirectory: URL
     let cacheDirectory: URL
 
-    /// - Parameter containerURL: résout l'URL du conteneur d'un app group. Injectable car ce
-    ///   comportement diffère selon la plateforme : sur iOS, `FileManager` retourne `nil` pour un
-    ///   app group absent des entitlements ; sur macOS non sandboxé (dont les tests SwiftPM), il
-    ///   synthétise un chemin sous `~/Library/Group Containers/` quelle que soit l'entitlement.
-    ///   L'injection permet de figer le chemin d'échec par le test plutôt que par le comportement
-    ///   de l'hôte.
+    /// - Parameters:
+    ///   - storage: emplacement racine choisi par l'application.
+    ///   - userID: utilisateur propriétaire du store. Le segment de chemin en est dérivé par
+    ///     empreinte : un identifiant Matrix brut (`@alice:matrix.org`) contient `@` et `:`, et
+    ///     deux identifiants ne différant que par la casse se retrouveraient dans le même
+    ///     répertoire sur un système de fichiers insensible à la casse.
+    ///   - containerURL: résout l'URL du conteneur d'un app group. Injectable car ce
+    ///     comportement diffère selon la plateforme : sur iOS, `FileManager` retourne `nil` pour un
+    ///     app group absent des entitlements ; sur macOS non sandboxé (dont les tests SwiftPM), il
+    ///     synthétise un chemin sous `~/Library/Group Containers/` quelle que soit l'entitlement.
+    ///     L'injection permet de figer le chemin d'échec par le test plutôt que par le comportement
+    ///     de l'hôte.
     init(
         storage: MatrixStorage,
+        userID: UserID,
         containerURL: (String) -> URL? = { identifier in
             FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
         }
@@ -29,8 +45,23 @@ struct StoragePaths: Sendable {
             root = directory
         }
 
-        dataDirectory = root.appendingPathComponent("MatrixClientKit/data", isDirectory: true)
-        cacheDirectory = root.appendingPathComponent("MatrixClientKit/cache", isDirectory: true)
+        userDirectory = root.appendingPathComponent(
+            "MatrixClientKit/\(Self.segment(for: userID))",
+            isDirectory: true
+        )
+        dataDirectory = userDirectory.appendingPathComponent("data", isDirectory: true)
+        cacheDirectory = userDirectory.appendingPathComponent("cache", isDirectory: true)
+    }
+
+    /// Segment de chemin propre à un utilisateur, sûr pour le système de fichiers et stable d'un
+    /// lancement à l'autre.
+    ///
+    /// - Important: l'empreinte est calculée par SHA-256 et non par `Hasher`/`hashValue`, dont la
+    ///   graine change à chaque lancement du processus : un store ne serait alors jamais retrouvé
+    ///   après un redémarrage.
+    static func segment(for userID: UserID) -> String {
+        let digest = SHA256.hash(data: Data(userID.rawValue.utf8))
+        return String(digest.map { String(format: "%02x", $0) }.joined().prefix(32))
     }
 
     /// Crée les répertoires et applique la protection de fichiers requise par les extensions.
