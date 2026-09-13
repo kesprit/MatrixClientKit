@@ -3,16 +3,16 @@ import MatrixRustSDK
 import MatrixClientKitCore
 @testable import MatrixClientKitRust
 
-// `RoomMessageEventContentWithoutRelation` est un objet opaque du binding généré : il n'expose
-// que `withMentions(mentions:)`, aucune propriété inspectable (pas de `.body`). On ne peut donc
-// tester ici que l'absence d'erreur pour une entrée typique ; la couverture du contenu produit
-// relève de la suite d'intégration manuelle de la Task 16.
-@Test func plainTextProducesEventContentWithoutThrowing() throws {
+// La construction du contenu ne peut pas être vérifiée plus finement à ce niveau :
+// `RoomMessageEventContentWithoutRelation` est un objet FFI opaque, sans accesseur au corps
+// du message. Le mappage réel est couvert par la suite d'intégration (Task 16), qui envoie
+// un message et vérifie son écho local dans la timeline.
+//
+// Le cas `.markdown` n'a pas de test équivalent : `messageEventContentFromMarkdown(md:)` n'est
+// pas une fonction qui peut lever d'erreur en amont, donc `eventContent(for: .markdown)` ne peut
+// échouer pour aucune entrée — un test dessus ne vérifierait rien de plus que la compilation.
+@Test func plainTextEventContentIsBuiltWithoutThrowing() throws {
     _ = try TimelineMapper.eventContent(for: .text("bonjour"))
-}
-
-@Test func markdownProducesEventContentWithoutThrowing() throws {
-    _ = try TimelineMapper.eventContent(for: .markdown("**gras**"))
 }
 
 @Test func sendStateIsMappedFromUpstream() {
