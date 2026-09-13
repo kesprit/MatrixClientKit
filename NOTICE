@@ -1,0 +1,5 @@
+MatrixClientKit
+Copyright 2026 Kevin Esprit
+
+Ce produit embarque le Matrix Rust SDK (https://github.com/matrix-org/matrix-rust-sdk),
+Copyright The Matrix.org Foundation C.I.C., distribué sous licence Apache-2.0.
