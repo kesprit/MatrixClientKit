@@ -13,5 +13,16 @@ homeserver réel et doivent être lancés **manuellement avant chaque montée de
 
 Sans ces variables, la suite est ignorée : c'est le comportement attendu en CI.
 
-Utilisez un compte dédié aux tests. Ces tests envoient de vrais messages et ferment la session
-à la fin de chaque cas.
+## Préalables sur le compte de test
+
+Utilisez un compte **dédié** aux tests, pour les deux raisons suivantes :
+
+- Le compte doit appartenir à **au moins une room rejointe** : `loginSyncAndListRooms` vérifie
+  qu'un instantané de la liste de rooms jointes est non vide, pas seulement qu'il est cohérent.
+- Ces tests envoient de vrais messages dans `MATRIX_TEST_ROOM_ID` et ouvrent une vraie session à
+  chaque cas. Chaque test signe la session à sa fin — mais si un cas est interrompu ou dépasse sa
+  minute impartie (`.timeLimit`), l'appareil peut rester enregistré côté serveur : le nettoyage
+  s'exécute dans une tâche détachée pour maximiser ses chances d'atteindre le serveur même après
+  une annulation, mais rien ne garantit que le homeserver l'aura traité avant que le processus ne
+  se termine. Ne réutilisez donc pas ce compte pour autre chose, et purgez ses appareils de temps
+  en temps si vous relancez la suite souvent.

@@ -28,15 +28,25 @@ private func makeClient(_ configuration: IntegrationConfiguration) -> any Matrix
     return Matrix.client(homeserver: configuration.homeserver, storage: .local(directory: directory))
 }
 
+/// Exécute un nettoyage même lorsque la tâche de test a été annulée — par exemple par
+/// `.timeLimit` lorsqu'un flux attendu ne produit jamais la valeur cherchée. Une tâche détachée
+/// n'hérite pas de l'annulation de son appelant, donc `session.logout()` a une vraie chance
+/// d'atteindre le serveur au lieu d'échouer immédiatement sur un contexte déjà annulé.
+private func cleaningUp(_ body: @escaping @Sendable () async -> Void) async {
+    await Task.detached(operation: body).value
+}
+
 @Suite(.enabled(if: IntegrationConfiguration.isAvailable))
 struct LoginAndSyncTests {
 
-    // Les tests ci-dessous attendent un élément d'un `AsyncStream` (un état de sync, un écho
-    // local) qui peut ne jamais arriver si le chemin testé est cassé. Sans borne, un `for await`
-    // sur un flux qui ne produit plus rien fait pendre la suite indéfiniment au lieu de la faire
-    // échouer — inacceptable pour une suite lancée à la main contre un vrai homeserver, où la
-    // personne qui la lance se retrouve à attendre sans le moindre indice. `.timeLimit` est le
-    // mécanisme idiomatique de Swift Testing pour borner un test dans son ensemble.
+    // Les tests ci-dessous attendent un élément d'un `AsyncStream` (un état de sync, une liste de
+    // rooms, un écho local) qui peut ne jamais arriver si le chemin testé est cassé. Sans borne,
+    // un `for await` sur un flux qui ne produit plus rien fait pendre la suite indéfiniment au
+    // lieu de la faire échouer — inacceptable pour une suite lancée à la main contre un vrai
+    // homeserver, où la personne qui la lance se retrouve à attendre sans le moindre indice.
+    // `.timeLimit` est le mécanisme idiomatique de Swift Testing pour borner un test dans son
+    // ensemble ; on le pose aussi sur le test de mot de passe erroné, qui fait un vrai appel
+    // réseau et peut pendre tout autant qu'une boucle sur un flux.
     @Test(.timeLimit(.minutes(1)))
     func loginSyncAndListRooms() async throws {
         let configuration = try #require(IntegrationConfiguration.current)
@@ -59,16 +69,26 @@ struct LoginAndSyncTests {
         }
         #expect(states.contains(.running))
 
+        var receivedRooms: [RoomSummary]?
         for await rooms in session.rooms.list(filter: .joined) {
-            #expect(rooms.allSatisfy { $0.membership == .joined })
+            receivedRooms = rooms
             break
         }
 
-        await session.sync.stop()
-        try await session.logout()
+        // Un instantané vide ferait passer `allSatisfy` sans avoir vérifié quoi que ce soit ; le
+        // compte de test doit donc appartenir à au moins une room jointe (voir README).
+        let rooms = try #require(receivedRooms, "aucun instantané de liste de rooms n'a été reçu")
+        #expect(!rooms.isEmpty, "le compte de test doit appartenir à au moins une room rejointe")
+        #expect(rooms.allSatisfy { $0.membership == .joined })
+
+        await cleaningUp {
+            await session.sync.stop()
+            try? await session.logout()
+        }
     }
 
-    @Test func wrongPasswordSurfacesAsInvalidCredentials() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func wrongPasswordSurfacesAsInvalidCredentials() async throws {
         let configuration = try #require(IntegrationConfiguration.current)
         let client = makeClient(configuration)
 
@@ -116,7 +136,9 @@ struct LoginAndSyncTests {
         }
         #expect(found)
 
-        await session.sync.stop()
-        try await session.logout()
+        await cleaningUp {
+            await session.sync.stop()
+            try? await session.logout()
+        }
     }
 }
