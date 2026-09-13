@@ -29,18 +29,6 @@ for await rooms in session.rooms.list(filter: .joined) {
 - **Testable.** Toute l'API publique repose sur des protocoles, et le produit
   `MatrixClientKitMocks` fournit des doubles pilotables qui ne lient aucun binaire du SDK Rust.
 
-## Installation
-
-```swift
-.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.1.0")
-```
-
-## Compatibilité
-
-| MatrixClientKit | Matrix Rust SDK embarqué | iOS | macOS | Swift |
-| --- | --- | --- | --- | --- |
-| 0.1.x | 26.09.07 | 18+ | 15+ | 6.2+ |
-
 ## Périmètre
 
 La v0.1 couvre l'authentification par mot de passe, la session persistée, la synchronisation, la
@@ -56,13 +44,46 @@ SDK Rust, sans opt-in de votre part. En revanche, la v0.1 **n'expose pas** :
 Si votre application a besoin de l'un de ces trois points dès maintenant, cette version ne
 convient pas encore. Voir la feuille de route ci-dessous.
 
+`MatrixClient.loginDetails()` — qui décrit les modes de connexion acceptés par un homeserver — est
+prévu mais **non implémenté** en v0.1 : une application qui doit interroger le homeserver avant de
+présenter un écran de connexion devra attendre. Son absence est un choix, pas un oubli.
+
 | Version | Contenu |
 | --- | --- |
 | 0.1 | Socle : auth, session, sync, rooms, timeline, envoi texte |
 | 0.2 | Vérification d'appareils, récupération et sauvegarde de clés |
 | 0.3 | Notifications push et extension de service |
-| 0.4 | Médias, accusés de lecture, frappe, présence, compte, OAuth |
+| 0.4 | Médias, accusés de lecture, frappe, présence, compte, OAuth, `loginDetails()` |
 | 1.0 | Gel de l'API |
+
+## Installation
+
+```swift
+.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.1.0")
+```
+
+## Compatibilité
+
+| MatrixClientKit | Matrix Rust SDK embarqué | iOS | macOS | Swift |
+| --- | --- | --- | --- | --- |
+| 0.1.x | 26.09.07 | 18+ | 15+ | 6.2+ |
+
+## Erreurs : règle d'évolution
+
+Toutes les erreurs du package sont des `MatrixError`, un enum public. Dans un package SPM, un enum
+public est exhaustif côté consommateur : **ajouter un cas casserait la compilation de votre
+application**, ce qui imposerait une version majeure à chaque release du SDK amont.
+
+La règle retenue, pour la durée d'une version majeure :
+
+> Les cas de premier niveau de `MatrixError` sont **figés**. Toute erreur que le SDK amont
+> permettrait nouvellement de distinguer atterrit dans `.unexpected(message:details:)` jusqu'à la
+> prochaine version majeure.
+
+Concrètement : votre `switch` sur `MatrixError` reste exhaustif sans `default` d'une version
+mineure à l'autre, mais un cas traité aujourd'hui par `.unexpected` peut le rester longtemps —
+n'écrivez pas de logique métier qui dépende du contenu textuel de `.unexpected`. Les enums
+imbriqués (`MatrixError.Authentication`, `.Network`, …) suivent la même règle.
 
 ## Note sur l'API
 

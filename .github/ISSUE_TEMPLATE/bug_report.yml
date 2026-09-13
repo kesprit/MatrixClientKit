@@ -1,0 +1,50 @@
+name: Rapport de bug
+description: Signaler un comportement incorrect de MatrixClientKit.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de remplir ce rapport.
+
+        **Si le problème concerne une faille de sécurité**, n'ouvrez pas d'issue publique :
+        suivez [`SECURITY.md`](../blob/main/SECURITY.md).
+
+        **Si le problème vient du protocole ou du chiffrement eux-mêmes** plutôt que de cette
+        façade Swift, il relève probablement de
+        [`matrix-rust-sdk`](https://github.com/matrix-org/matrix-rust-sdk).
+  - type: input
+    id: version
+    attributes:
+      label: Version de MatrixClientKit
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Plateforme et version d'OS
+      placeholder: "iOS 18.2, simulateur iPhone 16"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportement observé
+      description: Erreur complète et trace si disponible. Retirez jetons, identifiants et adresses de homeserver privées.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes de reproduction
+      description: Un extrait de code minimal vaut mieux qu'une description.
+      render: swift
+    validations:
+      required: true
