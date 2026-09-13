@@ -9,6 +9,7 @@ public enum SendState: Sendable, Hashable {
     /// L'envoi a échoué ; `reason` décrit la cause.
     case failed(reason: String)
 
+    /// Vrai si l'envoi a échoué.
     public var isFailed: Bool {
         if case .failed = self { return true }
         return false
@@ -72,7 +73,11 @@ public struct TimelineItem: Sendable, Hashable, Identifiable {
         case unsupported(description: String)
     }
 
+    /// Identité stable de l'élément au sein de la timeline, utilisée pour le diffing d'une
+    /// liste affichée. Ce n'est pas un identifiant d'événement Matrix : un élément sans
+    /// événement associé (séparateur, marqueur de lecture) en a un tout de même.
     public let id: String
+    /// Contenu de l'élément.
     public let kind: Kind
 
     public init(id: String, kind: Kind) {
