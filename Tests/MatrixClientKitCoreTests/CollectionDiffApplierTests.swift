@@ -65,3 +65,11 @@ private func apply(_ diffs: [CollectionDiff<String>], to items: [String]) -> [St
     let result = apply([.pushBack("b"), .pushFront("z"), .remove(index: 1)], to: ["a"])
     #expect(result == ["z", "b"])
 }
+
+@Test func insertIsIgnoredWhenIndexIsPastTheEnd() {
+    #expect(apply([.insert(index: 3, "x")], to: ["a", "b"]) == ["a", "b"])
+}
+
+@Test func removeIsIgnoredWhenIndexIsOutOfBounds() {
+    #expect(apply([.remove(index: 2)], to: ["a", "b"]) == ["a", "b"])
+}
