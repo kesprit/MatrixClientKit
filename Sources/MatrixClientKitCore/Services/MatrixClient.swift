@@ -2,7 +2,20 @@ import Foundation
 
 /// Identifiants de connexion. La v0.1 couvre le mot de passe ; OAuth arrive en v0.4.
 public enum Credentials: Sendable, Hashable {
+    /// Connexion par nom d'utilisateur et mot de passe, avec un nom d'appareil optionnel.
     case password(username: String, password: String, deviceName: String?)
+}
+
+extension Credentials: CustomStringConvertible, CustomDebugStringConvertible {
+    /// Description expurgée : n'expose jamais le mot de passe.
+    public var description: String {
+        switch self {
+        case let .password(username, _, deviceName):
+            return "Credentials.password(username: \(username), password: <redacted>, deviceName: \(deviceName ?? "nil"))"
+        }
+    }
+
+    public var debugDescription: String { description }
 }
 
 /// Client non authentifié : point d'entrée avant l'ouverture d'une session.

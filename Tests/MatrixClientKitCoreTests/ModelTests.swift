@@ -73,3 +73,30 @@ private func makeSummary(notifications: Int, highlights: Int) -> RoomSummary {
     let decoded = try JSONDecoder().decode(MatrixSessionData.self, from: encoded)
     #expect(decoded == data)
 }
+
+@Test func sessionDataDescriptionRedactsTokens() {
+    let data = MatrixSessionData(
+        userID: alice,
+        deviceID: DeviceID(rawValue: "DEV1")!,
+        homeserverURL: URL(string: "https://matrix.org")!,
+        accessToken: "secret-access-token",
+        refreshToken: "secret-refresh-token",
+        oauthData: nil,
+        slidingSyncVersion: "native"
+    )
+    #expect(data.description.contains("secret-access-token") == false)
+    #expect(data.description.contains("secret-refresh-token") == false)
+    #expect(data.debugDescription.contains("secret-access-token") == false)
+    #expect(data.debugDescription.contains("secret-refresh-token") == false)
+}
+
+@Test func credentialsDescriptionRedactsPassword() {
+    let credentials = Credentials.password(
+        username: "alice",
+        password: "hunter2",
+        deviceName: "iPhone"
+    )
+    #expect(credentials.description.contains("hunter2") == false)
+    #expect(credentials.debugDescription.contains("hunter2") == false)
+    #expect(credentials.description.contains("alice"))
+}
