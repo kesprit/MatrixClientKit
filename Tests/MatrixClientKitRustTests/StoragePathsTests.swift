@@ -24,8 +24,8 @@ import MatrixClientKitCore
     try? FileManager.default.removeItem(at: root)
 }
 
-@Test func unknownAppGroupSurfacesAsStorageError() {
+@Test func missingAppGroupContainerSurfacesAsStorageError() {
     #expect(throws: MatrixError.storage(.unavailable)) {
-        _ = try StoragePaths(storage: .appGroup("group.invalide.inexistant"))
+        _ = try StoragePaths(storage: .appGroup("group.invalide.inexistant"), containerURL: { _ in nil })
     }
 }

@@ -16,7 +16,10 @@ public struct KeychainSecureStore: SecureStore {
         accessibility = storage.accessibility
     }
 
-    private var secAccessibility: CFString {
+    // Visibilité interne (et non `private`) pour rester vérifiable par un test : un
+    // renversement silencieux de ce mapping (`afterFirstUnlock` → mauvaise constante)
+    // resterait invisible jusqu'à ce qu'une extension échoue à lire le jeton, appareil verrouillé.
+    var secAccessibility: CFString {
         switch accessibility {
         case .afterFirstUnlock: kSecAttrAccessibleAfterFirstUnlock
         case .whenUnlocked: kSecAttrAccessibleWhenUnlocked
