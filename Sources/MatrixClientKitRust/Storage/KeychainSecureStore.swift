@@ -53,16 +53,35 @@ public struct KeychainSecureStore: SecureStore {
         }
     }
 
+    /// Met à jour l'entrée existante plutôt que de la supprimer puis la recréer.
+    ///
+    /// - Important: un delete-puis-add laisse une fenêtre pendant laquelle aucune valeur n'existe.
+    ///   Un échec du `SecItemAdd` dans cette fenêtre est indiscernable de « jamais connecté » :
+    ///   `load()` renvoie alors `nil` au lieu de faire remonter l'échec, et l'utilisateur se
+    ///   retrouve déconnecté sans explication — précisément ce que la décision de sécurité sur le
+    ///   traitement des données corrompues doit empêcher.
     public func set(_ data: Data, forKey key: String) throws {
-        try removeValue(forKey: key)
+        let query = baseQuery(forKey: key)
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: secAccessibility,
+        ]
 
-        var query = baseQuery(forKey: key)
-        query[kSecValueData as String] = data
-        query[kSecAttrAccessible as String] = secAccessibility
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
 
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw MatrixError.storage(.keychainFailure(status: status))
+        switch updateStatus {
+        case errSecSuccess:
+            return
+        case errSecItemNotFound:
+            var insertion = query
+            insertion[kSecValueData as String] = data
+            insertion[kSecAttrAccessible as String] = secAccessibility
+            let addStatus = SecItemAdd(insertion as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw MatrixError.storage(.keychainFailure(status: addStatus))
+            }
+        default:
+            throw MatrixError.storage(.keychainFailure(status: updateStatus))
         }
     }
 
