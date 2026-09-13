@@ -16,6 +16,11 @@ private func mapApi(_ kind: ErrorKind, code: String = "M_UNKNOWN") -> MatrixErro
     #expect(mapApi(.limitExceeded(retryAfterMs: nil)) == .rateLimited(retryAfter: nil))
 }
 
+@Test func limitExceededClampsRetryDelayInsteadOfTrapping() {
+    #expect(mapApi(.limitExceeded(retryAfterMs: UInt64.max))
+            == .rateLimited(retryAfter: .milliseconds(Int64.max)))
+}
+
 @Test func unknownTokenPreservesSoftLogoutFlag() {
     #expect(mapApi(.unknownToken(softLogout: true)) == .authentication(.unknownToken(soft: true)))
     #expect(mapApi(.unknownToken(softLogout: false)) == .authentication(.unknownToken(soft: false)))
@@ -35,7 +40,7 @@ private func mapApi(_ kind: ErrorKind, code: String = "M_UNKNOWN") -> MatrixErro
 }
 
 @Test func notFoundBecomesResourceNotFound() {
-    #expect(mapApi(.notFound) == .notFound(.event))
+    #expect(mapApi(.notFound) == .notFound(.unspecified))
 }
 
 @Test func connectionFailuresBecomeNetworkErrors() {

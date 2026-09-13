@@ -34,6 +34,8 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
         case event
         case user
         case media
+        /// Le serveur n'a pas précisé quelle ressource est introuvable.
+        case unspecified
     }
 
     public enum Encryption: Sendable, Hashable {

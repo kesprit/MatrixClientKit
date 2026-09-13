@@ -44,7 +44,7 @@ enum ErrorMapper {
         case .guestAccessForbidden:
             return .permission(.guestAccessForbidden)
         case let .limitExceeded(retryAfterMs):
-            return .rateLimited(retryAfter: retryAfterMs.map { .milliseconds(Int64($0)) })
+            return .rateLimited(retryAfter: retryAfterMs.map { .milliseconds(Int64(clamping: $0)) })
         case let .unknownToken(softLogout):
             return .authentication(.unknownToken(soft: softLogout))
         case .missingToken:
@@ -54,7 +54,7 @@ enum ErrorMapper {
         case .captchaNeeded, .captchaInvalid:
             return .authentication(.captchaRequired)
         case .notFound:
-            return .notFound(.event)
+            return .notFound(.unspecified)
         case .connectionFailed:
             return .network(.offline)
         case .connectionTimeout:
