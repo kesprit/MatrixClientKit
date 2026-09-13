@@ -5,6 +5,10 @@ import MatrixClientKitCore
 /// ``stop()``, et permet de pousser des états arbitraires dans ``state``.
 ///
 /// - Note: ``state`` expose un flux unique, mono-consommateur.
+/// - Note: ``start()`` et ``stop()`` imitent la séquence d'états produite par le contrôleur réel
+///   (`.running` puis `.terminated`) pour qu'un `switch` testé contre ce mock reste valide face
+///   au vrai homeserver. C'est une commodité pour les tests, pas une garantie du protocole : rien
+///   n'empêche d'``emit(_:)`` n'importe quel autre ``SyncState`` pour couvrir un cas particulier.
 public final class MockSyncController: SyncController, @unchecked Sendable {
     private let lock = NSLock()
     private let stream: AsyncStream<SyncState>
@@ -45,9 +49,9 @@ public final class MockSyncController: SyncController, @unchecked Sendable {
         emit(.running)
     }
 
-    /// Incrémente ``stopCallCount`` et pousse ``SyncState/idle`` dans ``state``.
+    /// Incrémente ``stopCallCount`` et pousse ``SyncState/terminated`` dans ``state``.
     public func stop() async {
         lock.withLock { _stopCallCount += 1 }
-        emit(.idle)
+        emit(.terminated)
     }
 }
