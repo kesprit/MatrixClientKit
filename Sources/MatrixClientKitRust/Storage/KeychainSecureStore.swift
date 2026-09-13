@@ -80,6 +80,20 @@ package struct KeychainSecureStore: SecureStore {
             insertion[kSecValueData as String] = data
             insertion[kSecAttrAccessible as String] = secAccessibility
             let addStatus = SecItemAdd(insertion as CFDictionary, nil)
+
+            // Un autre écrivain a créé l'entrée entre notre `SecItemUpdate` et notre `SecItemAdd`.
+            // Le cas n'est pas théorique : l'application et son extension de notification
+            // partagent le même access group et rafraîchissent la même session. Sans cette
+            // reprise, la perdante des deux voit son écriture échouer alors que la valeur est
+            // parfaitement écrivable — et c'est un jeton de session qu'elle perd.
+            if addStatus == errSecDuplicateItem {
+                let retryStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+                guard retryStatus == errSecSuccess else {
+                    throw MatrixError.storage(.keychainFailure(status: retryStatus))
+                }
+                return
+            }
+
             guard addStatus == errSecSuccess else {
                 throw MatrixError.storage(.keychainFailure(status: addStatus))
             }

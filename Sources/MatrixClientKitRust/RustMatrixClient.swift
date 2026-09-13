@@ -102,6 +102,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
         do {
             return try await ClientBuilder()
                 .homeserverUrl(url: homeserver.absoluteString)
+                .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
                 .inMemoryStore()
                 .build()
         } catch {
@@ -116,6 +117,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
 
             return try await ClientBuilder()
                 .homeserverUrl(url: homeserver.absoluteString)
+                .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
                 .sqliteStore(
                     config: SqliteStoreBuilder(
                         dataPath: paths.dataDirectory.path,

@@ -54,7 +54,10 @@ private func removeDirectory(_ directory: URL) {
     try? FileManager.default.removeItem(at: directory)
 }
 
-@Suite(.enabled(if: IntegrationConfiguration.isAvailable))
+// Sérialisée : les trois cas se connectent au même compte et partagent donc le même store et les
+// mêmes entrées Keychain. Les laisser tourner en parallèle ferait échouer des cas pour une raison
+// qui ne concerne pas le chemin testé, et masquerait les vraies régressions.
+@Suite(.enabled(if: IntegrationConfiguration.isAvailable), .serialized)
 struct LoginAndSyncTests {
 
     // Les tests ci-dessous attendent un élément d'un `AsyncStream` (un état de sync, une liste de
@@ -89,15 +92,17 @@ struct LoginAndSyncTests {
         }
         #expect(states.contains(.running))
 
-        var receivedRooms: [RoomSummary]?
-        for await rooms in session.rooms.list(filter: .joined) {
-            receivedRooms = rooms
+        // La liste part vide et se remplit à la première réponse de sync : prendre le premier
+        // instantané venu testerait l'état initial, pas la synchronisation. On attend donc le
+        // premier instantané non vide — la borne de temps du test fait échouer l'attente si la
+        // sync ne produit jamais rien.
+        var rooms: [RoomSummary] = []
+        for await snapshot in session.rooms.list(filter: .joined) {
+            guard !snapshot.isEmpty else { continue }
+            rooms = snapshot
             break
         }
 
-        // Un instantané vide ferait passer `allSatisfy` sans avoir vérifié quoi que ce soit ; le
-        // compte de test doit donc appartenir à au moins une room jointe (voir README).
-        let rooms = try #require(receivedRooms, "aucun instantané de liste de rooms n'a été reçu")
         #expect(!rooms.isEmpty, "le compte de test doit appartenir à au moins une room rejointe")
         #expect(rooms.allSatisfy { $0.membership == .joined })
 
@@ -146,6 +151,12 @@ struct LoginAndSyncTests {
             )
         )
         await session.sync.start()
+
+        // `room(_:)` interroge la liste synchronisée : tant que la sync n'a pas fait apparaître
+        // la room, elle répond qu'elle n'existe pas. On attend sa visibilité avant de la demander.
+        for await snapshot in session.rooms.list(filter: .joined) {
+            if snapshot.contains(where: { $0.id == roomID }) { break }
+        }
 
         let room = try await session.rooms.room(roomID)
         let timeline = try await room.timeline()

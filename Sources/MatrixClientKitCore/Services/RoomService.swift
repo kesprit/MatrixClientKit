@@ -27,6 +27,11 @@ public protocol RoomService: Sendable {
     func list(filter: RoomFilter) -> AsyncStream<[RoomSummary]>
 
     /// Récupère une room par identifiant.
+    ///
+    /// - Important: la résolution se fait sur la liste synchronisée, pas sur le serveur. Tant que
+    ///   la synchronisation n'a pas fait apparaître la room, cet appel échoue avec
+    ///   ``MatrixError/notFound(_:)`` alors même que la room existe côté serveur. Après une
+    ///   connexion, attendez que la room figure dans ``list(filter:)`` avant de la demander.
     func room(_ id: RoomID) async throws -> any RoomHandle
 }
 

@@ -15,3 +15,8 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le ve
 - `MatrixError`, erreurs typées avec `isRetryable` et `retryAfter`.
 - Produit `MatrixClientKitMocks` pour les tests des applications.
 - Matrix Rust SDK embarqué : 26.09.07.
+
+### Validé
+
+- Chemin complet éprouvé contre un homeserver réel (Tuwunel 1.8.1) : connexion, synchronisation,
+  liste de rooms, envoi de message et écho local.
