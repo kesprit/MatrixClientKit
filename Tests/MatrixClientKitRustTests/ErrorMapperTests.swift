@@ -88,7 +88,12 @@ private func mapApi(_ kind: ErrorKind, code: String = "M_UNKNOWN") -> MatrixErro
     // Constaté contre un homeserver réel : un mot de passe erroné renvoie
     // `M_FORBIDDEN: Wrong username or password.` Hors contexte d'authentification, `forbidden`
     // reste une erreur de permission.
-    let error = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDDEN", msg: "Wrong username or password.", details: nil)
+    let error = ClientError.MatrixApi(
+        kind: .forbidden,
+        code: "M_FORBIDDEN",
+        msg: "Wrong username or password.",
+        details: nil
+    )
 
     #expect(ErrorMapper.map(error) == .permission(.forbidden))
     #expect(ErrorMapper.mapAuthentication(error) == .authentication(.invalidCredentials))
@@ -98,6 +103,11 @@ private func mapApi(_ kind: ErrorKind, code: String = "M_UNKNOWN") -> MatrixErro
     let network = ClientError.MatrixApi(kind: .connectionFailed, code: "M_UNKNOWN", msg: "offline", details: nil)
     #expect(ErrorMapper.mapAuthentication(network) == .network(.offline))
 
-    let rateLimited = ClientError.MatrixApi(kind: .limitExceeded(retryAfterMs: 500), code: "M_LIMIT_EXCEEDED", msg: "slow down", details: nil)
+    let rateLimited = ClientError.MatrixApi(
+        kind: .limitExceeded(retryAfterMs: 500),
+        code: "M_LIMIT_EXCEEDED",
+        msg: "slow down",
+        details: nil
+    )
     #expect(ErrorMapper.mapAuthentication(rateLimited) == .rateLimited(retryAfter: .milliseconds(500)))
 }
