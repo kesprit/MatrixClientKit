@@ -67,24 +67,28 @@ private final class ListenerBox: @unchecked Sendable {
     #expect(received == [1, 2])
 }
 
-@Test func leavingTheLoopCancelsTheUpstreamHandle() async {
+@Test func leavingTheLoopReleasesTheStreamAndCancelsTheUpstreamHandle() async {
     let handle = FakeTaskHandle()
     let box = ListenerBox()
 
-    let stream = ffiStream(
+    for await _ in ffiStream(
         bufferingPolicy: .unbounded,
         makeListener: { emit in
             let listener = FakeListener(emit: emit)
             box.store(listener)
+            // Émission synchrone, avant toute consommation : `makeListener` s'exécute pendant
+            // la construction du flux, donc cette valeur est déjà bufferisée quand la boucle
+            // appelle `next()` pour la première fois — sans quoi la boucle attendrait
+            // indéfiniment un élément qui n'arrive jamais.
+            emit(42)
             return listener
         },
         subscribe: { _ in handle }
-    )
+    ) {
+        break
+    }
 
-    box.emit(42)
-    for await _ in stream { break }
-
-    // La terminaison est asynchrone : on laisse un tour de boucle s'écouler.
+    // La terminaison suit la libération du flux : on laisse un tour de boucle s'écouler.
     try? await Task.sleep(for: .milliseconds(50))
     #expect(handle.wasCancelled)
 }
