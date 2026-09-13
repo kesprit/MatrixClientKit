@@ -38,9 +38,12 @@ enum RoomMapper {
             avatarURL: info?.avatarUrl.flatMap(URL.init(string:)),
             isDirect: info?.isDirect ?? false,
             isEncrypted: info.map { $0.encryptionState == .encrypted },
-            joinedMemberCount: Int(info?.joinedMembersCount ?? room.joinedMembersCount()),
-            notificationCount: Int(info?.notificationCount ?? 0),
-            highlightCount: Int(info?.highlightCount ?? 0),
+            // Compteurs `UInt64` venant du homeserver : bornés plutôt que convertis sèchement.
+            // Une valeur aberrante — serveur hostile ou bogué — ferait sinon planter
+            // l'application appelante à la traduction d'un simple résumé de room.
+            joinedMemberCount: Int(clamping: info?.joinedMembersCount ?? room.joinedMembersCount()),
+            notificationCount: Int(clamping: info?.notificationCount ?? 0),
+            highlightCount: Int(clamping: info?.highlightCount ?? 0),
             membership: info.map { membership(from: $0.membership) } ?? .unknown
         )
     }

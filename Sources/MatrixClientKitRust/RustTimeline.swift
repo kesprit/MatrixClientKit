@@ -49,10 +49,13 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
         return snapshotStream(from: diffs)
     }
 
+    /// - Note: `count` est ramené dans les bornes de `UInt16` attendues par l'amont plutôt que
+    ///   converti sèchement : une valeur négative ou supérieure à 65 535 ferait autrement planter
+    ///   l'application appelante au lieu de lui rendre une erreur.
     @discardableResult
     public func paginateBackwards(count: Int) async throws -> Bool {
         do {
-            return try await timeline.paginateBackwards(numEvents: UInt16(count))
+            return try await timeline.paginateBackwards(numEvents: UInt16(clamping: count))
         } catch {
             throw ErrorMapper.map(error)
         }
