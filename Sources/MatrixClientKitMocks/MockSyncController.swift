@@ -4,6 +4,9 @@ import MatrixClientKitCore
 /// Contrôleur de synchronisation pilotable pour les tests : compte les appels à ``start()`` et
 /// ``stop()``, et permet de pousser des états arbitraires dans ``state``.
 ///
+/// ``emit(_:)`` pousse un état, ``finish()`` termine le flux — même paire que ``MockTimeline`` et
+/// ``MockRoomService``.
+///
 /// - Note: ``state`` expose un flux unique, mono-consommateur.
 /// - Note: ``start()`` et ``stop()`` imitent la séquence d'états produite par le contrôleur réel
 ///   (`.running` puis `.terminated`) pour qu'un `switch` testé contre ce mock reste valide face
@@ -41,6 +44,14 @@ public final class MockSyncController: SyncController, @unchecked Sendable {
     /// Pousse un nouvel état dans ``state``.
     public func emit(_ state: SyncState) {
         continuation.yield(state)
+    }
+
+    /// Termine le flux ``state``.
+    ///
+    /// - Important: sans cela, une boucle `for await` sur ``state`` ne rend jamais la main face à
+    ///   ce mock.
+    public func finish() {
+        continuation.finish()
     }
 
     /// Incrémente ``startCallCount`` et pousse ``SyncState/running`` dans ``state``.

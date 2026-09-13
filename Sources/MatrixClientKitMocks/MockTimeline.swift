@@ -4,6 +4,9 @@ import MatrixClientKitCore
 /// Timeline pilotable pour les tests : pousse des instantanés à la demande et permet
 /// d'observer les messages envoyés ou de simuler un échec d'envoi.
 ///
+/// ``emit(_:)`` pousse un instantané, ``finish()`` termine le flux — même paire que
+/// ``MockRoomService`` et ``MockSyncController``.
+///
 /// - Note: ``items`` expose un flux unique, mono-consommateur. N'itérer dessus qu'une seule
 ///   fois par instance.
 public final class MockTimeline: Timeline, @unchecked Sendable {
@@ -50,6 +53,9 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
     }
 
     /// Termine le flux ``items``.
+    ///
+    /// - Important: sans cela, une boucle `for await` sur ``items`` ne rend jamais la main face à
+    ///   ce mock.
     public func finish() {
         continuation.finish()
     }
