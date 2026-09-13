@@ -53,7 +53,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
                 localStore: localStore
             )
         } catch {
-            throw ErrorMapper.map(error)
+            throw ErrorMapper.mapAuthentication(error)
         }
     }
 
@@ -70,7 +70,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
                 localStore: localStore
             )
         } catch {
-            let mapped = ErrorMapper.map(error)
+            let mapped = ErrorMapper.mapAuthentication(error)
 
             // Une authentification refusée signifie que la session persistée est morte : la
             // conserver ferait échouer chaque lancement à l'identique, sans qu'aucune API

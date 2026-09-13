@@ -74,6 +74,26 @@ enum ErrorMapper {
         }
     }
 
+    /// Traduit une erreur survenue pendant une authentification — connexion ou restauration de
+    /// session.
+    ///
+    /// - Important: le protocole Matrix répond `M_FORBIDDEN` aussi bien à « vous n'avez pas le
+    ///   droit de faire cela » qu'à « ces identifiants sont refusés ». Seul le contexte de
+    ///   l'appel permet de trancher. Hors authentification, ``MatrixError/permission(_:)`` est la
+    ///   lecture juste ; pendant une authentification, c'est ``MatrixError/authentication(_:)``,
+    ///   et la différence est tout sauf cosmétique : une application qui reçoit une erreur de
+    ///   permission ne sait pas qu'elle doit redemander un mot de passe, et une session morte ne
+    ///   serait jamais effacée puisque la purge ne se déclenche que sur la famille
+    ///   `.authentication`.
+    ///
+    ///   Constaté contre un homeserver réel : un mot de passe erroné produit
+    ///   `M_FORBIDDEN: Wrong username or password.`
+    static func mapAuthentication(_ error: any Error) -> MatrixError {
+        let mapped = map(error)
+        guard case .permission(.forbidden) = mapped else { return mapped }
+        return .authentication(.invalidCredentials)
+    }
+
     private static func detailsIncludingCode(_ code: String, _ details: String?) -> String {
         guard let details, !details.isEmpty else { return code }
         return "\(code): \(details)"
