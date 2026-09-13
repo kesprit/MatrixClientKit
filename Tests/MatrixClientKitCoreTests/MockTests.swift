@@ -47,3 +47,14 @@ import MatrixClientKitMocks
     await session.sync.start()
     #expect((session.sync as? MockSyncController)?.startCallCount == 1)
 }
+
+@Test func mockSyncControllerEmitsRunningThenTerminated() async {
+    let sync = MockSyncController()
+    var iterator = sync.state.makeAsyncIterator()
+
+    await sync.start()
+    #expect(await iterator.next() == .running)
+
+    await sync.stop()
+    #expect(await iterator.next() == .terminated)
+}
