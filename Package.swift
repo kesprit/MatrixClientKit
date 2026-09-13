@@ -26,7 +26,10 @@ let package = Package(
         ),
         .target(name: "MatrixClientKitMocks", dependencies: ["MatrixClientKitCore"]),
         .target(name: "MatrixClientKit", dependencies: ["MatrixClientKitCore", "MatrixClientKitRust"]),
-        .testTarget(name: "MatrixClientKitCoreTests", dependencies: ["MatrixClientKitCore"]),
+        .testTarget(
+            name: "MatrixClientKitCoreTests",
+            dependencies: ["MatrixClientKitCore", "MatrixClientKitMocks"]
+        ),
         .testTarget(name: "MatrixClientKitRustTests", dependencies: ["MatrixClientKitRust"]),
     ],
     swiftLanguageModes: [.v6]
