@@ -19,7 +19,8 @@ import Testing
 }
 
 @Test func softLogoutIsDistinguishableFromHardLogout() {
-    #expect(MatrixError.authentication(.unknownToken(soft: true))
+    #expect(
+        MatrixError.authentication(.unknownToken(soft: true))
             != MatrixError.authentication(.unknownToken(soft: false)))
 }
 
@@ -50,6 +51,7 @@ import Testing
 }
 
 @Test func captchaRequiredIsDistinctFromCaptchaInvalid() {
-    #expect(MatrixError.authentication(.captchaRequired)
+    #expect(
+        MatrixError.authentication(.captchaRequired)
             != MatrixError.authentication(.captchaInvalid))
 }

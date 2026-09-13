@@ -17,7 +17,8 @@ private func mapApi(_ kind: ErrorKind, code: String = "M_UNKNOWN") -> MatrixErro
 }
 
 @Test func limitExceededClampsRetryDelayInsteadOfTrapping() {
-    #expect(mapApi(.limitExceeded(retryAfterMs: UInt64.max))
+    #expect(
+        mapApi(.limitExceeded(retryAfterMs: UInt64.max))
             == .rateLimited(retryAfter: .milliseconds(Int64.max)))
 }
 
@@ -27,7 +28,8 @@ private func mapApi(_ kind: ErrorKind, code: String = "M_UNKNOWN") -> MatrixErro
 }
 
 @Test func resourceLimitExceededCarriesAdminContact() {
-    #expect(mapApi(.resourceLimitExceeded(adminContact: "mailto:admin@example.com"))
+    #expect(
+        mapApi(.resourceLimitExceeded(adminContact: "mailto:admin@example.com"))
             == .server(.resourceLimitExceeded(adminContact: "mailto:admin@example.com")))
 }
 

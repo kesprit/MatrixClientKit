@@ -3,3 +3,7 @@
 *.xcodeproj
 *.xcworkspace
 .DS_Store
+Package.resolved
+docs-build/
+.xcode-spm/
+.xcode-derived/

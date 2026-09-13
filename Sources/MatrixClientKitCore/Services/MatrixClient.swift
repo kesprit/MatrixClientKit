@@ -11,7 +11,8 @@ extension Credentials: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         switch self {
         case let .password(username, _, deviceName):
-            return "Credentials.password(username: \(username), password: <redacted>, deviceName: \(deviceName ?? "nil"))"
+            let device = deviceName ?? "nil"
+            return "Credentials.password(username: \(username), password: <redacted>, deviceName: \(device))"
         }
     }
 

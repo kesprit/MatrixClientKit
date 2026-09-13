@@ -20,9 +20,15 @@ import MatrixClientKitCore
     #expect(TimelineMapper.sendState(from: .notSentYet(progress: nil)) == .sending)
     #expect(TimelineMapper.sendState(from: .sent(eventId: "$abc")) == .sent)
 
-    let failed = TimelineMapper.sendState(from: .sendingFailed(
-        error: .crossVerificationRequired,
-        isRecoverable: true
-    ))
+    let failed = TimelineMapper.sendState(
+        from: .sendingFailed(
+            error: .crossVerificationRequired,
+            isRecoverable: true
+        ))
     #expect(failed.isFailed)
+
+    // `reason` finit dans une interface : il doit être lisible, pas un nom de cas Swift amont.
+    guard case let .failed(reason) = failed else { return }
+    #expect(!reason.contains("crossVerificationRequired"))
+    #expect(reason.contains("vérifiée"))
 }
