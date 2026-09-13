@@ -1,6 +1,6 @@
 import Testing
 @testable import MatrixClientKitRust
 
-@Test func placeholder() {
-    #expect(true)
+@Test func upstreamRustSDKIsLinked() {
+    #expect(UpstreamLinkCheck.canReferenceUpstreamTypes())
 }
