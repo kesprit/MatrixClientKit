@@ -1,4 +1,4 @@
-/// Identifiant d'utilisateur Matrix, de la forme `@localpart:serveur`.
+/// A Matrix user identifier, of the form `@localpart:server`.
 public struct UserID: Sendable, Hashable, RawRepresentable, CustomStringConvertible {
     public let rawValue: String
 
@@ -11,14 +11,14 @@ public struct UserID: Sendable, Hashable, RawRepresentable, CustomStringConverti
         self.rawValue = rawValue
     }
 
-    /// Partie locale de l'identifiant, sans le `@` ni le nom de serveur.
+    /// The local part of the identifier, without the `@` or the server name.
     public var localpart: String {
         let body = rawValue.dropFirst()
         guard let separator = body.firstIndex(of: ":") else { return String(body) }
         return String(body[body.startIndex..<separator])
     }
 
-    /// Nom du serveur, port inclus s'il est présent.
+    /// The server name, including the port when one is present.
     public var serverName: String {
         let body = rawValue.dropFirst()
         guard let separator = body.firstIndex(of: ":") else { return "" }

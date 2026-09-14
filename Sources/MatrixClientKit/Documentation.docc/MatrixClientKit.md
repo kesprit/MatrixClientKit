@@ -1,58 +1,57 @@
 # ``MatrixClientKit``
 
-Construire un client Matrix en Swift, sans manipuler l'API FFI du SDK Rust.
+Build a Matrix client in Swift, without touching the Rust SDK's FFI.
 
 ## Overview
 
-MatrixClientKit enveloppe le Matrix Rust SDK officiel derrière une API Swift moderne :
-`async`/`await`, `AsyncStream`, types `Sendable` et erreurs typées. Les listes de rooms et les
-timelines sont exposées sous forme d'**instantanés** — vous recevez l'état complet et à jour,
-sans jamais appliquer un diff vous-même.
+MatrixClientKit wraps the official Matrix Rust SDK behind a modern Swift API: `async`/`await`,
+`AsyncStream`, `Sendable` types and typed errors. Room lists and timelines are exposed as
+**snapshots** — you receive the complete, current state and never apply a diff yourself.
 
-Voir <doc:GettingStarted> pour un premier flux complet, et <doc:TestingWithMocks> pour tester une
-application qui en dépend.
+See <doc:GettingStarted> for a first end-to-end flow, and <doc:TestingWithMocks> to test an
+application that depends on the package.
 
-## Ce que couvre la v0.1
+## What v0.1 covers
 
-Cette page peut être lue seule — le Swift Package Index l'affiche sans le README du dépôt — donc
-les limites du palier sont rappelées ici.
+This page can be read on its own — the Swift Package Index renders it without the repository's
+README — so the limits of this milestone are restated here.
 
-La v0.1 couvre l'authentification par mot de passe, la session persistée, la synchronisation, la
-liste de rooms, la timeline et l'envoi de messages texte.
+v0.1 covers password authentication, persisted sessions, syncing, the room list, timelines and
+sending text messages.
 
-Le chiffrement de bout en bout est **actif** dès aujourd'hui : il est assuré directement par le
-SDK Rust, sans opt-in. En revanche, la v0.1 **n'expose pas** :
+End-to-end encryption is **active** today: the Rust SDK handles it, with no opt-in. What v0.1 does
+**not** expose:
 
-- la vérification d'appareils (cross-signing, SAS, QR) ;
-- la récupération et la sauvegarde de clés ;
-- les notifications push et l'extension de service associée ;
-- les médias, les accusés de lecture, les indicateurs de frappe, la présence et le profil ;
-- OAuth / OIDC, et `MatrixClient.loginDetails()`.
+- device verification (cross-signing, SAS, QR);
+- key backup and recovery;
+- push notifications and the associated service extension;
+- media, read receipts, typing indicators, presence and profiles;
+- OAuth / OIDC, and `MatrixClient.loginDetails()`.
 
-Deux points de comportement à connaître avant de dépendre de cette version :
+Two behaviours to know before depending on this version:
 
-- ``RoomService/list(filter:)`` et ``Timeline/items`` sont des `AsyncStream`, donc sans canal
-  d'erreur : un abonnement qui échoue termine le flux **sans aucune valeur**. Un consommateur qui
-  n'a reçu aucun instantané doit y lire un échec, pas un compte vide.
-- Les cas de premier niveau de ``MatrixError`` sont figés pour la durée d'une version majeure :
-  toute erreur nouvellement distinguable par le SDK amont atterrit dans
-  ``MatrixError/unexpected(message:details:)`` jusqu'à la majeure suivante.
+- ``RoomService/list(filter:)`` and ``Timeline/items`` are `AsyncStream`s, so they have no error
+  channel: a subscription that fails ends the stream **with no values at all**. A consumer that
+  received no snapshot should read that as a failure, not as an empty account.
+- ``MatrixError``'s top-level cases are frozen for the lifetime of a major version: any error the
+  upstream SDK newly lets us distinguish is reported through
+  ``MatrixError/unexpected(message:details:)`` until the next major.
 
 ## Topics
 
-### Prise en main
+### Getting started
 
 - <doc:GettingStarted>
 - <doc:TestingWithMocks>
 
-### Point d'entrée
+### Entry point
 
 - ``Matrix``
 - ``MatrixClient``
 - ``Credentials``
 - ``MatrixSession``
 
-### Rooms et messages
+### Rooms and messages
 
 - ``RoomService``
 - ``RoomFilter``
@@ -65,22 +64,22 @@ Deux points de comportement à connaître avant de dépendre de cette version :
 - ``SendState``
 - ``MessageContent``
 
-### Synchronisation
+### Syncing
 
 - ``SyncController``
 - ``SyncState``
 
-### Stockage
+### Storage
 
 - ``MatrixStorage``
 
-### Identifiants
+### Identifiers
 
 - ``UserID``
 - ``RoomID``
 - ``EventID``
 - ``DeviceID``
 
-### Erreurs
+### Errors
 
 - ``MatrixError``

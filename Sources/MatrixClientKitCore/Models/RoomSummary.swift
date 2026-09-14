@@ -1,43 +1,43 @@
 import Foundation
 
-/// État d'appartenance de l'utilisateur courant à une room.
+/// The current user's membership state in a room.
 public enum Membership: Sendable, Hashable {
-    /// L'utilisateur courant est membre de la room.
+    /// The current user has joined the room.
     case joined
-    /// L'utilisateur courant a été invité mais n'a pas encore rejoint la room.
+    /// The current user was invited but has not joined yet.
     case invited
-    /// L'utilisateur courant a quitté la room.
+    /// The current user has left the room.
     case left
-    /// L'utilisateur courant a demandé à rejoindre une room qui l'exige (knock).
+    /// The current user knocked on a room that requires it.
     case knocked
-    /// L'utilisateur courant a été banni de la room.
+    /// The current user is banned from the room.
     case banned
-    /// L'état d'appartenance n'a pas pu être déterminé.
+    /// The membership state could not be determined.
     case unknown
 }
 
-/// Vue résumée d'une room, telle qu'affichée dans une liste.
+/// A room as it appears in a list.
 public struct RoomSummary: Sendable, Hashable, Identifiable {
-    /// Identifiant de la room.
+    /// The room's identifier.
     public let id: RoomID
-    /// Nom d'affichage calculé de la room, s'il est disponible.
+    /// The room's computed display name, when one is available.
     public let displayName: String?
-    /// Sujet de la room, s'il est défini.
+    /// The room's topic, when one is set.
     public let topic: String?
-    /// URL de l'avatar de la room, s'il est défini.
+    /// The room's avatar URL, when one is set.
     public let avatarURL: URL?
-    /// Vrai s'il s'agit d'une conversation directe (DM) plutôt que d'une room de groupe.
+    /// True for a direct message rather than a group room.
     public let isDirect: Bool
-    /// Vrai si la room est chiffrée de bout en bout ; `nil` lorsque l'état de chiffrement n'a pas
-    /// pu être déterminé — ne jamais l'afficher comme non chiffré dans ce cas.
+    /// True when the room is end-to-end encrypted; `nil` when the encryption state could not be
+    /// determined — never present that case as unencrypted.
     public let isEncrypted: Bool?
-    /// Nombre de membres ayant rejoint la room.
+    /// How many members have joined the room.
     public let joinedMemberCount: Int
-    /// Nombre total d'événements non lus générant une notification.
+    /// How many unread events produce a notification.
     public let notificationCount: Int
-    /// Sous-ensemble de `notificationCount` correspondant à une mention ou un mot-clé surligné.
+    /// The subset of `notificationCount` that is a mention or a highlighted keyword.
     public let highlightCount: Int
-    /// État d'appartenance de l'utilisateur courant à cette room.
+    /// The current user's membership state in this room.
     public let membership: Membership
 
     public init(
@@ -64,6 +64,6 @@ public struct RoomSummary: Sendable, Hashable, Identifiable {
         self.membership = membership
     }
 
-    /// Vrai si la room comporte des notifications ou des mentions non lues.
+    /// True when the room has unread notifications or mentions.
     public var hasUnread: Bool { notificationCount > 0 || highlightCount > 0 }
 }

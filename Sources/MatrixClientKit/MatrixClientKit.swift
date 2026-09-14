@@ -2,12 +2,12 @@ import Foundation
 @_exported import MatrixClientKitCore
 import MatrixClientKitRust
 
-/// Point d'entrée de MatrixClientKit.
+/// MatrixClientKit's entry point.
 ///
 /// ```swift
 /// let client = Matrix.client(
 ///     homeserver: URL(string: "https://matrix.org")!,
-///     storage: .appGroup("group.com.exemple.app")
+///     storage: .appGroup("group.com.example.app")
 /// )
 /// let session = try await client.login(.password(username: "alice", password: "…", deviceName: "iPhone"))
 /// await session.sync.start()
@@ -18,13 +18,13 @@ import MatrixClientKitRust
 /// ```
 public enum Matrix: Sendable {
 
-    /// Crée un client rattaché à un homeserver.
+    /// Creates a client for a homeserver.
     ///
     /// - Parameters:
-    ///   - homeserver: adresse du homeserver, par exemple `https://matrix.org`.
-    ///   - storage: emplacement des données persistées. Utiliser
-    ///     ``MatrixStorage/appGroup(_:keychainAccessGroup:accessibility:)`` dès lors qu'une
-    ///     extension de notification doit accéder à la même session.
+    ///   - homeserver: the homeserver's address, for instance `https://matrix.org`.
+    ///   - storage: where persisted data lives. Use
+    ///     ``MatrixStorage/appGroup(_:keychainAccessGroup:accessibility:)`` as soon as a
+    ///     notification service extension needs to reach the same session.
     public static func client(
         homeserver: URL,
         storage: MatrixStorage

@@ -1,4 +1,4 @@
-/// Identifiant d'appareil, opaque et propre au homeserver.
+/// A device identifier: opaque, and specific to the homeserver that issued it.
 public struct DeviceID: Sendable, Hashable, RawRepresentable, CustomStringConvertible {
     public let rawValue: String
 

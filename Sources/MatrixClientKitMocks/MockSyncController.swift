@@ -1,17 +1,17 @@
 import Foundation
 import MatrixClientKitCore
 
-/// Contrôleur de synchronisation pilotable pour les tests : compte les appels à ``start()`` et
-/// ``stop()``, et permet de pousser des états arbitraires dans ``state``.
+/// A drivable sync controller for tests: counts calls to ``start()`` and ``stop()``, and lets you
+/// push arbitrary states into ``state``.
 ///
-/// ``emit(_:)`` pousse un état, ``finish()`` termine le flux — même paire que ``MockTimeline`` et
-/// ``MockRoomService``.
+/// ``emit(_:)`` pushes a state, ``finish()`` ends the stream — the same pair as ``MockTimeline``
+/// and ``MockRoomService``.
 ///
-/// - Note: ``state`` expose un flux unique, mono-consommateur.
-/// - Note: ``start()`` et ``stop()`` imitent la séquence d'états produite par le contrôleur réel
-///   (`.running` puis `.terminated`) pour qu'un `switch` testé contre ce mock reste valide face
-///   au vrai homeserver. C'est une commodité pour les tests, pas une garantie du protocole : rien
-///   n'empêche d'``emit(_:)`` n'importe quel autre ``SyncState`` pour couvrir un cas particulier.
+/// - Note: ``state`` exposes a single, single-consumer stream.
+/// - Note: ``start()`` and ``stop()`` imitate the state sequence the real controller produces
+///   (`.running` then `.terminated`) so that a `switch` tested against this mock still holds
+///   against a real homeserver. That is a testing convenience, not a guarantee of the protocol:
+///   nothing stops you from ``emit(_:)``-ing any other ``SyncState`` to cover a specific case.
 public final class MockSyncController: SyncController, @unchecked Sendable {
     private let lock = NSLock()
     private let stream: AsyncStream<SyncState>
@@ -26,41 +26,41 @@ public final class MockSyncController: SyncController, @unchecked Sendable {
         )
     }
 
-    /// Flux de l'état de synchronisation. Mono-consommateur : voir la note de type.
+    /// The stream of sync states. Single-consumer: see the note on the type.
     public var state: AsyncStream<SyncState> { stream }
 
-    /// Nombre d'appels à ``start()`` depuis la création du mock.
+    /// How many times ``start()`` was called since the mock was created.
     public var startCallCount: Int {
         lock.lock(); defer { lock.unlock() }
         return _startCallCount
     }
 
-    /// Nombre d'appels à ``stop()`` depuis la création du mock.
+    /// How many times ``stop()`` was called since the mock was created.
     public var stopCallCount: Int {
         lock.lock(); defer { lock.unlock() }
         return _stopCallCount
     }
 
-    /// Pousse un nouvel état dans ``state``.
+    /// Pushes a new state into ``state``.
     public func emit(_ state: SyncState) {
         continuation.yield(state)
     }
 
-    /// Termine le flux ``state``.
+    /// Ends the ``state`` stream.
     ///
-    /// - Important: sans cela, une boucle `for await` sur ``state`` ne rend jamais la main face à
-    ///   ce mock.
+    /// - Important: without this, a `for await` loop over ``state`` never returns when driven by
+    ///   this mock.
     public func finish() {
         continuation.finish()
     }
 
-    /// Incrémente ``startCallCount`` et pousse ``SyncState/running`` dans ``state``.
+    /// Increments ``startCallCount`` and pushes ``SyncState/running`` into ``state``.
     public func start() async {
         lock.withLock { _startCallCount += 1 }
         emit(.running)
     }
 
-    /// Incrémente ``stopCallCount`` et pousse ``SyncState/terminated`` dans ``state``.
+    /// Increments ``stopCallCount`` and pushes ``SyncState/terminated`` into ``state``.
     public func stop() async {
         lock.withLock { _stopCallCount += 1 }
         emit(.terminated)

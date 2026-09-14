@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Faille de sécurité
+  - name: Security vulnerability
     url: https://github.com/kesprit/MatrixClientKit/security/policy
-    about: Ne pas ouvrir d'issue publique — suivre la procédure de divulgation responsable.
-  - name: Bug du protocole ou du chiffrement Matrix
+    about: Do not open a public issue — follow the responsible disclosure process.
+  - name: Matrix protocol or encryption bug
     url: https://github.com/matrix-org/matrix-rust-sdk/issues
-    about: Ce package enveloppe le SDK Rust ; un défaut du SDK lui-même se signale en amont.
+    about: This package wraps the Rust SDK; a defect in the SDK itself belongs upstream.

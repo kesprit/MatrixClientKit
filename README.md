@@ -1,107 +1,105 @@
 # MatrixClientKit
 
-Un package Swift pour construire des clients [Matrix](https://matrix.org) sur iOS et macOS,
-adossé au [Matrix Rust SDK](https://github.com/matrix-org/matrix-rust-sdk) officiel.
+A Swift package for building [Matrix](https://matrix.org) clients on iOS and macOS, built on the
+official [Matrix Rust SDK](https://github.com/matrix-org/matrix-rust-sdk).
 
 ```swift
 let client = Matrix.client(
     homeserver: URL(string: "https://matrix.org")!,
-    storage: .appGroup("group.com.exemple.app")
+    storage: .appGroup("group.com.example.app")
 )
 let session = try await client.login(.password(username: "alice", password: "…", deviceName: "iPhone"))
 await session.sync.start()
 
 for await rooms in session.rooms.list(filter: .joined) {
-    self.rooms = rooms          // liste complète et à jour, aucun diff à appliquer
+    self.rooms = rooms          // the complete, current list — no diffs to apply
 }
 ```
 
-## Ce que le package apporte
+## What the package gives you
 
-- **Flux asynchrones.** Les abonnements à listeners du SDK Rust deviennent des `AsyncStream`
-  dont le cycle de vie est géré automatiquement : sortir d'une boucle annule l'abonnement amont
-  (à condition de ne pas conserver le flux dans une propriété).
-- **Instantanés, pas de diffs.** Listes de rooms et timelines arrivent sous forme d'état complet
-  et à jour : pas de diff à appliquer vous-même.
-- **Erreurs typées.** `MatrixError` avec `isRetryable` et `retryAfter`.
-- **Stockage prêt pour les extensions.** App Group, Keychain et protection de fichiers
-  configurés pour qu'une extension de notification fonctionne appareil verrouillé.
-- **Testable.** Toute l'API publique repose sur des protocoles, et le produit
-  `MatrixClientKitMocks` fournit des doubles pilotables qui ne lient aucun binaire du SDK Rust.
+- **Async streams.** The Rust SDK's listener subscriptions become `AsyncStream`s whose lifetime is
+  managed for you: leaving a loop cancels the upstream subscription (as long as you don't hold the
+  stream in a property).
+- **Snapshots, not diffs.** Room lists and timelines arrive as the complete, current state. There
+  is no diff machinery for you to write.
+- **Typed errors.** `MatrixError`, with `isRetryable` and `retryAfter`.
+- **Storage ready for extensions.** App Group, Keychain and file protection configured so that a
+  notification service extension works while the device is locked.
+- **Testable.** The whole public API is protocol-based, and the `MatrixClientKitMocks` product
+  ships drivable doubles that link none of the Rust SDK binary.
 
-## Périmètre
+## Scope
 
-La v0.1 couvre l'authentification par mot de passe, la session persistée, la synchronisation, la
-liste de rooms, la timeline et l'envoi de messages texte.
+v0.1 covers password authentication, persisted sessions, syncing, the room list, timelines and
+sending text messages.
 
-Le chiffrement de bout en bout est **actif** dès aujourd'hui — il est assuré directement par le
-SDK Rust, sans opt-in de votre part. En revanche, la v0.1 **n'expose pas** :
+End-to-end encryption is **active** today — the Rust SDK handles it, with no opt-in on your part.
+What v0.1 does **not** expose:
 
-- la vérification d'appareils (cross-signing, SAS) ;
-- la récupération et la sauvegarde de clés ;
-- les notifications push et l'extension de service associée.
+- device verification (cross-signing, SAS);
+- key backup and recovery;
+- push notifications and the associated service extension.
 
-Si votre application a besoin de l'un de ces trois points dès maintenant, cette version ne
-convient pas encore. Voir la feuille de route ci-dessous.
+If your application needs any of those three right now, this version is not for you yet. See the
+roadmap below.
 
-`MatrixClient.loginDetails()` — qui décrit les modes de connexion acceptés par un homeserver — est
-prévu mais **non implémenté** en v0.1 : une application qui doit interroger le homeserver avant de
-présenter un écran de connexion devra attendre. Son absence est un choix, pas un oubli.
+`MatrixClient.loginDetails()` — which reports the login methods a homeserver accepts — is planned
+but **not implemented** in v0.1: an application that needs to query the homeserver before showing
+a sign-in screen will have to wait. Its absence is a decision, not an oversight.
 
-| Version | Contenu |
+| Version | Contents |
 | --- | --- |
-| 0.1 | Socle : auth, session, sync, rooms, timeline, envoi texte |
-| 0.2 | Vérification d'appareils, récupération et sauvegarde de clés |
-| 0.3 | Notifications push et extension de service |
-| 0.4 | Médias, accusés de lecture, frappe, présence, compte, OAuth, `loginDetails()` |
-| 1.0 | Gel de l'API |
+| 0.1 | Foundation: auth, session, sync, rooms, timeline, sending text |
+| 0.2 | Device verification, key backup and recovery |
+| 0.3 | Push notifications and the service extension |
+| 0.4 | Media, read receipts, typing, presence, account, OAuth, `loginDetails()` |
+| 1.0 | API freeze |
 
 ## Installation
 
 ```swift
-.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.1.0")
+.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.1.1")
 ```
 
-## Compatibilité
+## Compatibility
 
-| MatrixClientKit | Matrix Rust SDK embarqué | iOS | macOS | Swift |
+| MatrixClientKit | Bundled Matrix Rust SDK | iOS | macOS | Swift |
 | --- | --- | --- | --- | --- |
 | 0.1.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 
-## Erreurs : règle d'évolution
+## Errors: the evolution rule
 
-Toutes les erreurs du package sont des `MatrixError`, un enum public. Dans un package SPM, un enum
-public est exhaustif côté consommateur : **ajouter un cas casserait la compilation de votre
-application**, ce qui imposerait une version majeure à chaque release du SDK amont.
+Every error this package throws is a `MatrixError`, a public enum. In a SwiftPM package a public
+enum is exhaustive for consumers, so **adding a case would break your application's build** — which
+would force a major version on every upstream SDK release.
 
-La règle retenue, pour la durée d'une version majeure :
+The rule, for the lifetime of a major version:
 
-> Les cas de premier niveau de `MatrixError` sont **figés**. Toute erreur que le SDK amont
-> permettrait nouvellement de distinguer atterrit dans `.unexpected(message:details:)` jusqu'à la
-> prochaine version majeure.
+> `MatrixError`'s top-level cases are **frozen**. Any error the upstream SDK newly lets us
+> distinguish is reported through `.unexpected(message:details:)` until the next major version.
 
-Concrètement : votre `switch` sur `MatrixError` reste exhaustif sans `default` d'une version
-mineure à l'autre, mais un cas traité aujourd'hui par `.unexpected` peut le rester longtemps —
-n'écrivez pas de logique métier qui dépende du contenu textuel de `.unexpected`. Les enums
-imbriqués (`MatrixError.Authentication`, `.Network`, …) suivent la même règle.
+In practice: your `switch` over `MatrixError` stays exhaustive without a `default` from one minor
+version to the next, but a condition handled today by `.unexpected` may stay there for a long time
+— so don't write business logic that depends on the text inside `.unexpected`. The nested enums
+(`MatrixError.Authentication`, `.Network`, …) follow the same rule.
 
-## Note sur l'API
+## A note on the API
 
-`MatrixClientKit` n'expose ni ne renvoie jamais un type du SDK Rust dans une signature publique.
-Cela dit, SPM ne permet pas de masquer un module transitif : `MatrixRustSDK` reste techniquement
-importable depuis votre application, qui dépend elle-même de `matrix-rust-components-swift` de
-façon transitive. Vous n'avez pas besoin de l'importer, et l'API de ce package ne vous y oblige
-jamais — mais l'affirmation porte sur les signatures de MatrixClientKit, pas sur une invisibilité
-du module lui-même.
+`MatrixClientKit` never exposes or returns a Rust SDK type in a public signature.
+
+That said, SwiftPM cannot hide a transitive module: `MatrixRustSDK` remains technically importable
+from your application, which depends on `matrix-rust-components-swift` transitively. You never need
+to import it, and this package's API never forces you to — but the claim is about MatrixClientKit's
+signatures, not about the module being invisible.
 
 ## Documentation
 
-La documentation de référence (DocC) est générée depuis
-`Sources/MatrixClientKit/Documentation.docc`. Voir aussi
-[`CONTRIBUTING.md`](CONTRIBUTING.md) pour contribuer et
-[`CHANGELOG.md`](CHANGELOG.md) pour l'historique des versions.
+The reference documentation (DocC) is generated from
+`Sources/MatrixClientKit/Documentation.docc`. See also [`CONTRIBUTING.md`](CONTRIBUTING.md) to
+contribute and [`CHANGELOG.md`](CHANGELOG.md) for the version history.
 
 ## Licence
 
-Apache-2.0. Ce projet embarque le Matrix Rust SDK, également sous Apache-2.0. Voir
+Apache-2.0. This project bundles the Matrix Rust SDK, also under Apache-2.0. See
 [`NOTICE`](NOTICE).

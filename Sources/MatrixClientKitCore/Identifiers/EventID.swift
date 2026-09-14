@@ -1,4 +1,4 @@
-/// Identifiant d'événement Matrix, préfixé par `$`.
+/// A Matrix event identifier, prefixed with `$`.
 public struct EventID: Sendable, Hashable, RawRepresentable, CustomStringConvertible {
     public let rawValue: String
 

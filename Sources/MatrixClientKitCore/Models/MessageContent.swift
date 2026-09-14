@@ -1,11 +1,11 @@
-/// Contenu d'un message à envoyer. La v0.1 couvre le texte ; les médias arrivent en v0.4.
+/// The content of a message to send. v0.1 covers text; media arrives in v0.4.
 public enum MessageContent: Sendable, Hashable {
-    /// Texte brut, sans mise en forme.
+    /// Plain text, with no formatting.
     case text(String)
-    /// Texte au format Markdown, à rendre côté affichage.
+    /// Markdown text, to be rendered by the display layer.
     case markdown(String)
 
-    /// Corps textuel brut, utilisable comme repli d'affichage.
+    /// The raw text body, usable as a display fallback.
     public var plainBody: String {
         switch self {
         case let .text(body): return body

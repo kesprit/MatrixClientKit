@@ -1,7 +1,7 @@
-/// Métadonnées de version du package.
+/// Version metadata for the package.
 public enum PackageInfo: Sendable {
-    /// Version de MatrixClientKit.
+    /// The MatrixClientKit version.
     public static let version = "0.1.1"
-    /// Version de `matrix-rust-components-swift` embarquée, épinglée dans le manifeste.
+    /// The bundled `matrix-rust-components-swift` version, pinned in the manifest.
     public static let upstreamVersion = "26.09.07"
 }

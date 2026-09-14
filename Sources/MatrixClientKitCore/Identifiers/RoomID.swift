@@ -1,5 +1,5 @@
-/// Identifiant de room Matrix. La partie serveur est optionnelle : les rooms en version 12
-/// et ultérieures peuvent en être dépourvues.
+/// A Matrix room identifier. The server part is optional: rooms in version 12 and later may
+/// have none.
 public struct RoomID: Sendable, Hashable, RawRepresentable, CustomStringConvertible {
     public let rawValue: String
 

@@ -1,35 +1,35 @@
-name: Demande de fonctionnalité
-description: Proposer une API ou un domaine à couvrir.
+name: Feature request
+description: Propose an API or an area to cover.
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        La feuille de route du README indique ce qui est déjà prévu et à quel palier. Vérifiez-la
-        avant d'ouvrir : si votre besoin y figure, un commentaire sur l'issue existante — ou une
-        nouvelle issue disant pourquoi il vous faut ce palier plus tôt — est plus utile.
+        The README's roadmap says what is already planned and for which milestone. Please check it
+        first: if your need is already there, a comment on the existing issue — or a new issue
+        explaining why you need that milestone sooner — is more useful.
   - type: textarea
     id: problem
     attributes:
-      label: Le problème
-      description: Que cherchez-vous à faire, et qu'est-ce qui bloque aujourd'hui ?
+      label: The problem
+      description: What are you trying to do, and what blocks you today?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: L'API souhaitée
-      description: Esquisse de signature, même approximative.
+      label: The API you have in mind
+      description: A sketch of the signature, however rough.
       render: swift
     validations:
       required: false
   - type: dropdown
     id: upstream
     attributes:
-      label: Le SDK Rust amont couvre-t-il déjà ce besoin ?
+      label: Does the upstream Rust SDK already cover this?
       options:
-        - Oui, c'est une question d'exposition dans la façade
-        - Non, il faudrait d'abord que l'amont le fasse
-        - Je ne sais pas
+        - Yes, it is a matter of exposing it in the façade
+        - No, upstream would have to do it first
+        - I don't know
     validations:
       required: true

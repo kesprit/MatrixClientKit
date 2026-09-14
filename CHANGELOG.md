@@ -1,38 +1,36 @@
 # Changelog
 
-Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage suit
-[SemVer](https://semver.org/lang/fr/).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
+follows [SemVer](https://semver.org/).
 
 ## [0.1.1] - 2026-09-13
 
-### Corrigé
+### Fixed
 
-- Les sessions rafraîchies par le SDK sont désormais persistées. Le rafraîchissement automatique
-  des jetons est actif par défaut : sans delegate de session, un jeton rafraîchi ne vivait qu'en
-  mémoire, la session enregistrée se périmait en silence, et l'utilisateur se retrouvait
-  déconnecté au lancement suivant sans qu'aucune erreur n'ait été signalée.
-- Le delegate refuse de servir une session appartenant à un autre utilisateur que celui demandé.
+- Sessions refreshed by the SDK are now persisted. Automatic token refresh is on by default:
+  without a session delegate a refreshed token lived only in memory, the stored session went stale
+  in silence, and the user was signed out on the next launch without a single error being reported.
+- The delegate refuses to hand back a session belonging to a user other than the one requested.
 
-### Modifié
+### Changed
 
-- `SessionPersistence` devient un type synchrone. Le stockage sous-jacent est déjà sûr en
-  concurrence, et le delegate de session du SDK est appelé de façon synchrone. Aucune API publique
-  n'est affectée.
+- `SessionPersistence` is now a synchronous type. The underlying storage is already concurrency-safe,
+  and the SDK calls its session delegate synchronously. No public API is affected.
 
 ## [0.1.0] - 2026-09-13
 
-### Ajouté
+### Added
 
-- Authentification par mot de passe et restauration de session persistée.
-- Stockage App Group et Keychain, configuré pour les extensions.
-- Contrôle de la synchronisation et flux d'état.
-- Liste de rooms observable, livrée en instantanés.
-- Timeline observable, pagination arrière et envoi de messages texte.
-- `MatrixError`, erreurs typées avec `isRetryable` et `retryAfter`.
-- Produit `MatrixClientKitMocks` pour les tests des applications.
-- Matrix Rust SDK embarqué : 26.09.07.
+- Password authentication and restoration of a persisted session.
+- App Group and Keychain storage, configured for extensions.
+- Sync control and a sync-state stream.
+- Observable room list, delivered as snapshots.
+- Observable timeline, backward pagination and sending text messages.
+- `MatrixError`, typed errors with `isRetryable` and `retryAfter`.
+- The `MatrixClientKitMocks` product, for applications' own tests.
+- Bundled Matrix Rust SDK: 26.09.07.
 
-### Validé
+### Verified
 
-- Chemin complet éprouvé contre un homeserver réel (Tuwunel 1.8.1) : connexion, synchronisation,
-  liste de rooms, envoi de message et écho local.
+- Full path exercised against a real homeserver (Tuwunel 1.8.1): login, sync, room list, sending a
+  message and its local echo.

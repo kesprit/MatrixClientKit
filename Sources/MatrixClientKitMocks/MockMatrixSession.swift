@@ -1,8 +1,8 @@
 import Foundation
 import MatrixClientKitCore
 
-/// Session authentifiée pilotable pour les tests : expose un ``MockRoomService`` et un
-/// ``MockSyncController`` prêts à l'emploi, et enregistre les appels à ``logout()``.
+/// A drivable authenticated session for tests: exposes a ready-made ``MockRoomService`` and
+/// ``MockSyncController``, and records calls to ``logout()``.
 public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
     private let lock = NSLock()
 
@@ -13,7 +13,7 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
 
     private var _didLogout = false
 
-    /// Vrai si ``logout()`` a été appelé.
+    /// True once ``logout()`` has been called.
     public var didLogout: Bool {
         lock.lock(); defer { lock.unlock() }
         return _didLogout

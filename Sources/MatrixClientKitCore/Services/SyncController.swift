@@ -1,11 +1,11 @@
-/// Pilote la synchronisation avec le homeserver.
+/// Drives syncing with the homeserver.
 public protocol SyncController: Sendable {
-    /// Flux de l'état de synchronisation. Chaque appel ouvre un abonnement indépendant.
+    /// A stream of the sync state. Every access opens an independent subscription.
     var state: AsyncStream<SyncState> { get }
 
-    /// Démarre la synchronisation avec le homeserver.
+    /// Starts syncing with the homeserver.
     func start() async
 
-    /// Arrête la synchronisation.
+    /// Stops syncing.
     func stop() async
 }

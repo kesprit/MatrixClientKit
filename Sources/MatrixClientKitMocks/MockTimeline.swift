@@ -1,14 +1,14 @@
 import Foundation
 import MatrixClientKitCore
 
-/// Timeline pilotable pour les tests : pousse des instantanés à la demande et permet
-/// d'observer les messages envoyés ou de simuler un échec d'envoi.
+/// A drivable timeline for tests: push snapshots on demand, observe what was sent, or simulate a
+/// failed send.
 ///
-/// ``emit(_:)`` pousse un instantané, ``finish()`` termine le flux — même paire que
-/// ``MockRoomService`` et ``MockSyncController``.
+/// ``emit(_:)`` pushes a snapshot, ``finish()`` ends the stream — the same pair as
+/// ``MockRoomService`` and ``MockSyncController``.
 ///
-/// - Note: ``items`` expose un flux unique, mono-consommateur. N'itérer dessus qu'une seule
-///   fois par instance.
+/// - Note: ``items`` exposes a single, single-consumer stream. Iterate over it once per
+///   instance.
 public final class MockTimeline: Timeline, @unchecked Sendable {
     private let lock = NSLock()
     private let stream: AsyncStream<[TimelineItem]>
@@ -24,38 +24,38 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
         )
     }
 
-    /// Flux d'instantanés de la timeline. Mono-consommateur : voir la note de type.
+    /// The stream of timeline snapshots. Single-consumer: see the note on the type.
     public var items: AsyncStream<[TimelineItem]> { stream }
 
-    /// Messages passés à ``send(_:)``, dans l'ordre d'envoi.
+    /// The messages passed to ``send(_:)``, in the order they were sent.
     public var sentMessages: [MessageContent] {
         lock.lock(); defer { lock.unlock() }
         return _sentMessages
     }
 
-    /// Erreur à lever au prochain appel à ``send(_:)`` ou ``paginateBackwards(count:)``.
-    /// `nil` par défaut : les appels réussissent.
+    /// The error to throw from the next ``send(_:)`` or ``paginateBackwards(count:)``.
+    /// `nil` by default, meaning those calls succeed.
     public var sendError: MatrixError? {
         get { lock.lock(); defer { lock.unlock() }; return _sendError }
         set { lock.lock(); _sendError = newValue; lock.unlock() }
     }
 
-    /// Valeur renvoyée par ``paginateBackwards(count:)`` en l'absence de ``sendError``.
-    /// `true` par défaut.
+    /// What ``paginateBackwards(count:)`` returns when ``sendError`` is not set. `true` by
+    /// default.
     public var paginateResult: Bool {
         get { lock.lock(); defer { lock.unlock() }; return _paginateResult }
         set { lock.lock(); _paginateResult = newValue; lock.unlock() }
     }
 
-    /// Pousse un nouvel instantané dans ``items``.
+    /// Pushes a new snapshot into ``items``.
     public func emit(_ items: [TimelineItem]) {
         continuation.yield(items)
     }
 
-    /// Termine le flux ``items``.
+    /// Ends the ``items`` stream.
     ///
-    /// - Important: sans cela, une boucle `for await` sur ``items`` ne rend jamais la main face à
-    ///   ce mock.
+    /// - Important: without this, a `for await` loop over ``items`` never returns when driven by
+    ///   this mock.
     public func finish() {
         continuation.finish()
     }

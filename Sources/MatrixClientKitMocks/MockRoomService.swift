@@ -1,14 +1,14 @@
 import Foundation
 import MatrixClientKitCore
 
-/// Service de rooms pilotable pour les tests.
+/// A drivable room service for tests.
 ///
-/// ``list(filter:)`` émet immédiatement la liste courante, filtrée comme le ferait le vrai
-/// service, puis chaque liste poussée par ``emit(_:)``. ``finish()`` termine les flux ouverts.
-/// ``room(_:)`` renvoie une poignée partageant toutes la même ``MockTimeline``.
+/// ``list(filter:)`` immediately emits the current list, filtered the way the real service would,
+/// then every list pushed through ``emit(_:)``. ``finish()`` ends the open streams. ``room(_:)``
+/// returns handles that all share the same ``MockTimeline``.
 ///
-/// - Note: chaque appel à ``list(filter:)`` ouvre son propre flux, mono-consommateur, avec son
-///   propre filtre — comme le vrai service.
+/// - Note: every call to ``list(filter:)`` opens its own single-consumer stream, with its own
+///   filter — just like the real service.
 public final class MockRoomService: RoomService, @unchecked Sendable {
     private struct Observer {
         let filter: RoomFilter
@@ -20,18 +20,17 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
     private var observers: [Int: Observer] = [:]
     private var nextObserverID = 0
 
-    /// Timeline renvoyée par toutes les rooms de ce mock.
+    /// The timeline every room of this mock returns.
     public let timeline = MockTimeline()
 
     public init(rooms: [RoomSummary] = SampleData.roomSummaries(count: 3)) {
         self.rooms = rooms
     }
 
-    /// Renvoie un flux qui émet la liste courante filtrée, puis chaque liste poussée ensuite.
+    /// Returns a stream that emits the current filtered list, then every list pushed afterwards.
     ///
-    /// - Important: le filtre est réellement appliqué. Un mock qui l'ignorerait ferait passer au
-    ///   vert un test du type « les rooms en invitation sont masquées » écrit contre du code qui
-    ///   ne les masque pas.
+    /// - Important: the filter is genuinely applied. A mock that ignored it would turn a test
+    ///   like "invited rooms are hidden" green against code that does not hide them.
     public func list(filter: RoomFilter) -> AsyncStream<[RoomSummary]> {
         AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             let current = lock.withLock { () -> [RoomSummary] in
@@ -47,7 +46,7 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
         }
     }
 
-    /// Remplace la liste courante et la pousse, filtrée, dans chaque flux ouvert.
+    /// Replaces the current list and pushes it, filtered, into every open stream.
     public func emit(_ rooms: [RoomSummary]) {
         let observers = lock.withLock { () -> [Observer] in
             self.rooms = rooms
@@ -58,10 +57,10 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
         }
     }
 
-    /// Termine tous les flux ouverts par ``list(filter:)``.
+    /// Ends every stream opened by ``list(filter:)``.
     ///
-    /// - Important: sans cela, la boucle `for await` enseignée par le README et la DocC ne rend
-    ///   jamais la main face à ce mock.
+    /// - Important: without this, the `for await` loop the README and the DocC teach never
+    ///   returns when driven by this mock.
     public func finish() {
         let observers = lock.withLock { () -> [Observer] in
             let current = Array(self.observers.values)
@@ -90,8 +89,8 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
     }
 }
 
-/// Poignée de room pilotable pour les tests : renvoie toujours la ``MockTimeline`` qu'on lui a
-/// donnée à l'initialisation.
+/// A drivable room handle for tests: always returns the ``MockTimeline`` it was given at
+/// initialisation.
 public struct MockRoomHandle: RoomHandle {
     public let id: RoomID
     private let mockTimeline: MockTimeline

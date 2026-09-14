@@ -1,45 +1,44 @@
-/// Filtre appliqué à la liste de rooms.
+/// A filter applied to the room list.
 public enum RoomFilter: Sendable, Hashable {
-    /// Toutes les rooms, quelle que soit l'appartenance.
+    /// Every room, whatever the membership.
     case all
-    /// Uniquement les rooms rejointes.
+    /// Joined rooms only.
     case joined
-    /// Uniquement les rooms auxquelles l'utilisateur courant est invité.
+    /// Only rooms the current user is invited to.
     case invited
 }
 
-/// Accès aux rooms et à la liste observable.
+/// Access to rooms and to the observable list.
 public protocol RoomService: Sendable {
-    /// Flux d'instantanés de la liste de rooms : chaque valeur est la liste complète et à jour.
+    /// A stream of room-list snapshots: every value is the complete, current list.
     ///
-    /// Chaque appel ouvre un abonnement indépendant, avec son propre cycle de vie.
+    /// Every call opens an independent subscription, with its own lifetime.
     ///
-    /// - Important: ce flux n'a pas de canal d'erreur. Si l'abonnement amont échoue, ou si le
-    ///   filtre demandé ne peut pas être appliqué, le flux **se termine sans avoir produit une
-    ///   seule valeur** — délivrer une liste non filtrée répondrait à une autre question que
-    ///   celle posée. Un consommateur qui n'a reçu aucun instantané doit donc traiter la
-    ///   situation comme un échec, et non comme un compte sans rooms : les deux se distinguent
-    ///   par la présence d'au moins une valeur, jamais par son contenu.
+    /// - Important: this stream has no error channel. If the upstream subscription fails, or if
+    ///   the requested filter cannot be applied, the stream **ends without producing a single
+    ///   value** — delivering an unfiltered list would answer a different question from the one
+    ///   asked. A consumer that received no snapshot should therefore treat it as a failure, not
+    ///   as an account with no rooms: the two differ by whether any value arrived, never by its
+    ///   contents.
     ///
-    /// - Note: une variante lançante, capable de dire *pourquoi* l'abonnement a échoué, est
-    ///   prévue après la v0.1 ; la signature fixée par la conception de cette version est
-    ///   `AsyncStream`.
+    /// - Note: a throwing variant, able to say *why* a subscription failed, is planned after
+    ///   v0.1; the signature this version's design settled on is `AsyncStream`.
     func list(filter: RoomFilter) -> AsyncStream<[RoomSummary]>
 
-    /// Récupère une room par identifiant.
+    /// Looks a room up by identifier.
     ///
-    /// - Important: la résolution se fait sur la liste synchronisée, pas sur le serveur. Tant que
-    ///   la synchronisation n'a pas fait apparaître la room, cet appel échoue avec
-    ///   ``MatrixError/notFound(_:)`` alors même que la room existe côté serveur. Après une
-    ///   connexion, attendez que la room figure dans ``list(filter:)`` avant de la demander.
+    /// - Important: resolution happens against the synced room list, not against the server.
+    ///   Until sync has surfaced the room, this call fails with ``MatrixError/notFound(_:)`` even
+    ///   though the room exists server-side. After signing in, wait for the room to appear in
+    ///   ``list(filter:)`` before asking for it.
     func room(_ id: RoomID) async throws -> any RoomHandle
 }
 
-/// Poignée sur une room donnée.
+/// A handle on one room.
 public protocol RoomHandle: Sendable {
-    /// Identifiant de la room.
+    /// The room's identifier.
     var id: RoomID { get }
 
-    /// Ouvre la timeline de la room.
+    /// Opens the room's timeline.
     func timeline() async throws -> any Timeline
 }

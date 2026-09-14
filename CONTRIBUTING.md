@@ -1,30 +1,30 @@
-# Contribuer
+# Contributing
 
-## Avant d'ouvrir une pull request
+## Before opening a pull request
 
     swift build
     swift test --skip MatrixClientKitIntegrationTests
 
-Les tests d'intégration ne s'exécutent pas par défaut : voir
+The integration tests do not run by default: see
 `Tests/MatrixClientKitIntegrationTests/README.md`.
 
-## Règles d'architecture
+## Architecture rules
 
-- `MatrixClientKitCore` ne doit **jamais** importer `MatrixRustSDK`. C'est ce qui garantit
-  qu'aucun type amont ne fuite dans l'API publique.
-- Aucun type du SDK Rust ne doit apparaître dans une signature `public`.
-- Pas de `@MainActor` dans `Core` ni dans `Rust`.
-- Les flux de diffs utilisent `.unbounded`, les flux d'instantanés `.bufferingNewest(1)`.
+- `MatrixClientKitCore` must **never** import `MatrixRustSDK`. That is what guarantees no upstream
+  type leaks into the public API.
+- No Rust SDK type may appear in a `public` signature.
+- No `@MainActor` in `Core` or in `Rust`.
+- Diff streams use `.unbounded`; snapshot streams use `.bufferingNewest(1)`.
 
-## Ajout d'un cas à `MatrixError`
+## Adding a case to `MatrixError`
 
-Les cas de premier niveau sont figés pour la durée d'une version majeure. Une erreur
-nouvellement distinguable doit être rapportée dans `.unexpected` jusqu'à la prochaine majeure :
-ajouter un cas casserait la compilation des applications.
+Top-level cases are frozen for the lifetime of a major version. A newly distinguishable error must
+be reported through `.unexpected` until the next major: adding a case would break the build of
+every application depending on the package.
 
-## Montée de version du SDK Rust
+## Bumping the Rust SDK
 
-1. Mettre à jour la version épinglée dans `Package.swift`.
-2. Lancer la suite d'intégration contre un homeserver réel (voir
+1. Update the pinned version in `Package.swift`.
+2. Run the integration suite against a real homeserver (see
    `Tests/MatrixClientKitIntegrationTests/README.md`).
-3. Mettre à jour le tableau de compatibilité du README et le CHANGELOG.
+3. Update the README compatibility table and the CHANGELOG.

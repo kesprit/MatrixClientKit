@@ -12,25 +12,24 @@ concurrency:
 jobs:
   verify:
     name: Build, test, lint & docs
-    # Runner standard : gratuit et non plafonné sur dépôt public. Aucun larger runner.
+    # Standard runner: free and unmetered on a public repository. Never a larger runner.
     runs-on: macos-15
-    # La suite comporte une dizaine de points de suspension non bornés : une régression qui
-    # empêcherait une valeur d'arriver ferait pendre le runner au lieu d'échouer.
+    # The suite has around a dozen unbounded suspension points: a regression that stopped a
+    # value from arriving would hang the runner instead of failing.
     timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
 
-      # Le manifeste est en swift-tools-version 6.2 : laisser le Xcode par défaut de l'image
-      # décider de la version du toolchain reviendrait à faire dépendre la compilation du
-      # calendrier de rotation des images. Le pin porte sur la majeure, qui détermine la version
-      # de Swift ; le point release reste celui de l'image.
+      # The manifest is swift-tools-version 6.2: letting the image's default Xcode pick the
+      # toolchain would make the build depend on the image rotation schedule. The pin is on the
+      # major version, which determines the Swift version; the point release stays the image's.
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26'
 
-      # Le XCFramework amont est volumineux : on met en cache le dossier SwiftPM ET celui que
-      # xcodebuild utilise pour ses propres copies de paquets, sans quoi il retélécharge tout.
+      # The upstream XCFramework is large: cache both the SwiftPM directory and the one
+      # xcodebuild uses for its own package copies, or it re-downloads everything.
       - name: Cache SPM
         uses: actions/cache@v4
         with:
@@ -43,13 +42,13 @@ jobs:
       - name: Build (macOS)
         run: swift build --build-tests
 
-      # La suite d'intégration exige un homeserver et des identifiants réels : elle ne s'exécute
-      # jamais en CI, par conception (voir Tests/MatrixClientKitIntegrationTests/README.md).
+      # The integration suite needs a real homeserver and real credentials: it never runs in CI,
+      # by design (see Tests/MatrixClientKitIntegrationTests/README.md).
       - name: Test (unitaires)
         run: swift test --skip MatrixClientKitIntegrationTests
 
-      # Le paquet déclare .iOS(.v18) : sans cette étape, rien ne garantit qu'il compile pour la
-      # plateforme qui est sa cible principale.
+      # The package declares .iOS(.v18): without this step, nothing guarantees it compiles for
+      # the platform that is its main target.
       - name: Build (iOS)
         run: |
           xcodebuild build -quiet \
@@ -61,13 +60,13 @@ jobs:
       - name: Lint (swift-format)
         run: swift format lint --recursive --strict Sources Tests
 
-      # Pipeline manuel plutôt que `swift-docc-plugin` : une dépendance de résolution que chaque
-      # application consommatrice paierait, pour une commande de mainteneur.
+      # A manual pipeline rather than `swift-docc-plugin`: that would be a resolution dependency
+      # every consuming application pays for, to serve a maintainer-only command.
       - name: Build DocC
         run: |
-          # `.build/docc-symbols` n'est volontairement pas effacé : le cache SPM peut rendre la
-          # compilation « à jour », auquel cas rien ne serait réémis et l'étape échouerait sur un
-          # répertoire vide. Un module qui change est recompilé, donc son graphe est réécrit.
+          # `.build/docc-symbols` is deliberately not cleared: the SPM cache can leave the build
+          # "up to date", in which case nothing would be re-emitted and the step would fail on an
+          # empty directory. A module that changed is recompiled, so its graph is rewritten.
           rm -rf .build/docc-symbols-final docs-build
           swift build --target MatrixClientKit \
             -Xswiftc -emit-symbol-graph \

@@ -1,16 +1,16 @@
-# Politique de sécurité
+# Security policy
 
-## Signaler une faille
+## Reporting a vulnerability
 
-**Toute vulnérabilité affectant le protocole Matrix, le chiffrement de bout en bout ou le
-Matrix Rust SDK doit être signalée à l'équipe matrix.org**, selon leur procédure de divulgation
-responsable : https://matrix.org/security-disclosure-policy/
+**Any vulnerability affecting the Matrix protocol, end-to-end encryption or the Matrix Rust SDK
+must be reported to the matrix.org team**, following their responsible disclosure process:
+https://matrix.org/security-disclosure-policy/
 
-Pour une faille propre à MatrixClientKit — la couche Swift de ce dépôt, par exemple le stockage
-des jetons ou la configuration du Keychain — ouvrez un avis de sécurité privé via l'onglet
-Security de ce dépôt. N'ouvrez pas d'issue publique.
+For a vulnerability specific to MatrixClientKit — the Swift layer in this repository, for instance
+token storage or Keychain configuration — open a private security advisory through this
+repository's Security tab. Please do not open a public issue.
 
-## Portée
+## Scope
 
-Ce package n'implémente aucune primitive cryptographique. Le chiffrement est intégralement assuré
-par le Matrix Rust SDK.
+This package implements no cryptographic primitive. Encryption is handled entirely by the Matrix
+Rust SDK.

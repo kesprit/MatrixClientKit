@@ -1,11 +1,11 @@
 import Foundation
 
-/// Toutes les erreurs émises par MatrixClientKit.
+/// Every error MatrixClientKit throws.
 ///
-/// - Important: les cas de premier niveau sont figés pour la durée d'une version majeure.
-///   Une erreur nouvellement distinguable par le SDK sous-jacent est rapportée dans
-///   ``MatrixError/unexpected(message:details:)`` jusqu'à la majeure suivante, afin qu'ajouter
-///   de la précision ne casse jamais la compilation des applications.
+/// - Important: the top-level cases are frozen for the lifetime of a major version. An error the
+///   underlying SDK newly lets us distinguish is reported through
+///   ``MatrixError/unexpected(message:details:)`` until the next major, so that adding precision
+///   never breaks an application's build.
 public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
 
     public enum Authentication: Sendable, Hashable {
@@ -13,12 +13,12 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
         case unknownToken(soft: Bool)
         case userDeactivated
         case missingToken
-        /// Le serveur exige la résolution d'un captcha, pas encore fournie.
+        /// The server requires a captcha that has not been solved yet.
         case captchaRequired
-        /// Un captcha a été fourni mais refusé par le serveur.
+        /// A captcha was provided and the server rejected it.
         ///
-        /// Distinct de ``captchaRequired`` : l'un demande à l'utilisateur de faire quelque chose
-        /// qu'il n'a pas fait, l'autre de refaire ce qu'il a raté.
+        /// Distinct from ``captchaRequired``: one asks the user to do something they have not
+        /// done, the other to redo something they got wrong.
         case captchaInvalid
         case unsupportedLoginType
     }
@@ -40,7 +40,7 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
         case event
         case user
         case media
-        /// Le serveur n'a pas précisé quelle ressource est introuvable.
+        /// The server did not say which resource was missing.
         case unspecified
     }
 
@@ -73,7 +73,7 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
     case storage(Storage)
     case unexpected(message: String, details: String?)
 
-    /// Indique si réessayer la même opération a une chance d'aboutir sans action de l'utilisateur.
+    /// Whether retrying the same operation could succeed without the user doing anything.
     public var isRetryable: Bool {
         switch self {
         case .rateLimited:
@@ -93,19 +93,19 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
         }
     }
 
-    /// Délai indiqué par le serveur avant un nouvel essai, le cas échéant.
+    /// The delay the server asked for before retrying, when it gave one.
     public var retryAfter: Duration? {
         guard case let .rateLimited(delay) = self else { return nil }
         return delay
     }
 
-    /// Description **de diagnostic**, en français, destinée aux journaux et aux rapports de bug.
+    /// A **diagnostic** description, meant for logs and bug reports.
     ///
-    /// - Important: ce n'est pas de la copy d'interface. Ces chaînes mêlent une phrase rédigée et
-    ///   le nom du cas Swift imbriqué, ne sont pas localisées, et leur formulation peut changer
-    ///   d'une version à l'autre sans que ce soit un changement cassant. Une application doit
-    ///   faire correspondre les cas de ``MatrixError`` à ses propres textes localisés plutôt que
-    ///   d'afficher cette valeur telle quelle. La localisation du package est hors périmètre v0.1.
+    /// - Important: this is not interface copy. These strings splice a written sentence onto the
+    ///   name of the nested Swift case, are not localised, and their wording may change between
+    ///   versions without that being a breaking change. An application should map ``MatrixError``
+    ///   cases to its own localised copy rather than displaying this value. Localising the
+    ///   package is out of scope for v0.1.
     public var errorDescription: String? {
         switch self {
         case let .authentication(value): return "Erreur d'authentification : \(value)"

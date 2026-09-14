@@ -1,13 +1,13 @@
 import Foundation
 
-/// Identifiants de connexion. La v0.1 couvre le mot de passe ; OAuth arrive en v0.4.
+/// Sign-in credentials. v0.1 covers passwords; OAuth arrives in v0.4.
 public enum Credentials: Sendable, Hashable {
-    /// Connexion par nom d'utilisateur et mot de passe, avec un nom d'appareil optionnel.
+    /// Username-and-password sign-in, with an optional device name.
     case password(username: String, password: String, deviceName: String?)
 }
 
 extension Credentials: CustomStringConvertible, CustomDebugStringConvertible {
-    /// Description expurgée : n'expose jamais le mot de passe.
+    /// Redacted description: never exposes the password.
     public var description: String {
         switch self {
         case let .password(username, _, deviceName):
@@ -19,14 +19,14 @@ extension Credentials: CustomStringConvertible, CustomDebugStringConvertible {
     public var debugDescription: String { description }
 }
 
-/// Client non authentifié : point d'entrée avant l'ouverture d'une session.
+/// An unauthenticated client: the entry point before a session exists.
 public protocol MatrixClient: Sendable {
-    /// Adresse du homeserver auquel ce client est rattaché.
+    /// The homeserver this client talks to.
     var homeserver: URL { get }
 
-    /// Ouvre une session et persiste les informations nécessaires à sa restauration.
+    /// Opens a session and persists what is needed to restore it later.
     func login(_ credentials: Credentials) async throws -> any MatrixSession
 
-    /// Restaure une session précédemment persistée, ou renvoie `nil` s'il n'y en a pas.
+    /// Restores a previously persisted session, or returns `nil` when there is none.
     func restoreSession() async throws -> (any MatrixSession)?
 }

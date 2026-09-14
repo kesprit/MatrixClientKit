@@ -1,14 +1,14 @@
-/// État du service de synchronisation.
+/// The state of the sync service.
 public enum SyncState: Sendable, Hashable {
-    /// La synchronisation n'a pas encore démarré.
+    /// Syncing has not started yet.
     case idle
-    /// La synchronisation est active et à jour.
+    /// Syncing is running and up to date.
     case running
-    /// La synchronisation a été arrêtée volontairement (``SyncController/stop()``) et ne
-    /// reprendra pas sans un nouvel appel à ``SyncController/start()``.
+    /// Syncing was stopped deliberately (``SyncController/stop()``) and will not resume without
+    /// another call to ``SyncController/start()``.
     case terminated
-    /// La synchronisation est interrompue faute de connexion réseau ; elle reprendra d'elle-même.
+    /// Syncing is paused for lack of network connectivity; it resumes on its own.
     case offline
-    /// La synchronisation a rencontré une erreur non récupérable automatiquement.
+    /// Syncing hit an error it cannot recover from on its own.
     case error
 }

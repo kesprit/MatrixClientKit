@@ -1,50 +1,50 @@
-name: Rapport de bug
-description: Signaler un comportement incorrect de MatrixClientKit.
+name: Bug report
+description: Report incorrect behaviour in MatrixClientKit.
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Merci de prendre le temps de remplir ce rapport.
+        Thanks for taking the time to fill this in.
 
-        **Si le problème concerne une faille de sécurité**, n'ouvrez pas d'issue publique :
-        suivez [`SECURITY.md`](../blob/main/SECURITY.md).
+        **If this is a security vulnerability**, please don't open a public issue: follow
+        [`SECURITY.md`](../blob/main/SECURITY.md).
 
-        **Si le problème vient du protocole ou du chiffrement eux-mêmes** plutôt que de cette
-        façade Swift, il relève probablement de
+        **If the problem is in the protocol or the encryption itself** rather than in this Swift
+        façade, it most likely belongs upstream in
         [`matrix-rust-sdk`](https://github.com/matrix-org/matrix-rust-sdk).
   - type: input
     id: version
     attributes:
-      label: Version de MatrixClientKit
-      placeholder: "0.1.0"
+      label: MatrixClientKit version
+      placeholder: "0.1.1"
     validations:
       required: true
   - type: input
     id: platform
     attributes:
-      label: Plateforme et version d'OS
-      placeholder: "iOS 18.2, simulateur iPhone 16"
+      label: Platform and OS version
+      placeholder: "iOS 18.2, iPhone 16 simulator"
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Comportement attendu
+      label: Expected behaviour
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: Comportement observé
-      description: Erreur complète et trace si disponible. Retirez jetons, identifiants et adresses de homeserver privées.
+      label: Actual behaviour
+      description: The full error and a stack trace if you have one. Please strip tokens, credentials and private homeserver addresses.
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
-      label: Étapes de reproduction
-      description: Un extrait de code minimal vaut mieux qu'une description.
+      label: Steps to reproduce
+      description: A minimal code snippet beats a description.
       render: swift
     validations:
       required: true

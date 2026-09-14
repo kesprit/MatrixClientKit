@@ -1,13 +1,13 @@
 import Foundation
 
-/// Emplacement et protection des données persistées par le SDK.
+/// Where the SDK's data lives, and how it is protected.
 public struct MatrixStorage: Sendable, Hashable {
 
-    /// Moment à partir duquel les secrets sont lisibles.
+    /// From when secrets become readable.
     ///
-    /// - Important: une extension de notification s'exécute appareil verrouillé. Avec
-    ///   ``whenUnlocked``, elle ne peut pas lire le jeton et la notification arrive vide.
-    ///   ``afterFirstUnlock`` est le défaut pour cette raison.
+    /// - Important: a notification service extension runs while the device is locked. With
+    ///   ``whenUnlocked`` it cannot read the access token and the notification arrives empty.
+    ///   That is why ``afterFirstUnlock`` is the default.
     public enum KeychainAccessibility: Sendable, Hashable {
         case afterFirstUnlock
         case whenUnlocked
@@ -22,7 +22,7 @@ public struct MatrixStorage: Sendable, Hashable {
     public let keychainAccessGroup: String?
     public let accessibility: KeychainAccessibility
 
-    /// Stockage partagé entre l'application et ses extensions.
+    /// Storage shared between the application and its extensions.
     public static func appGroup(
         _ identifier: String,
         keychainAccessGroup: String? = nil,
@@ -35,7 +35,7 @@ public struct MatrixStorage: Sendable, Hashable {
         )
     }
 
-    /// Stockage propre au processus courant, sans partage avec une extension.
+    /// Storage private to the current process, shared with no extension.
     public static func local(
         directory: URL,
         accessibility: KeychainAccessibility = .afterFirstUnlock

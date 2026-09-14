@@ -1,18 +1,18 @@
-/// Timeline d'une room : historique observable et envoi de messages.
+/// A room's timeline: observable history, and sending messages.
 public protocol Timeline: Sendable {
-    /// Flux d'instantanés : chaque valeur est la liste complète et à jour des éléments.
+    /// A stream of snapshots: every value is the complete, current list of items.
     ///
-    /// - Important: chaque **accès** à cette propriété ouvre un abonnement indépendant, avec son
-    ///   propre cycle de vie. Étant une propriété calculée, elle est la plus facile à lire deux
-    ///   fois sans le vouloir : `for await x in timeline.items` puis, ailleurs,
-    ///   `for await y in timeline.items` observent deux abonnements distincts, pas deux vues du
-    ///   même. Conserver le flux dans une variable pour le partager au sein d'une même boucle.
+    /// - Important: every **access** to this property opens an independent subscription with its
+    ///   own lifetime. Being a computed property, it is the easiest one to read twice by
+    ///   accident: `for await x in timeline.items` and, elsewhere,
+    ///   `for await y in timeline.items` observe two distinct subscriptions, not two views of the
+    ///   same one. Hold the stream in a variable to share it.
     var items: AsyncStream<[TimelineItem]> { get }
 
-    /// Charge des éléments plus anciens. Renvoie `true` s'il reste de l'historique à charger.
+    /// Loads older items. Returns `true` when more history remains to load.
     @discardableResult
     func paginateBackwards(count: Int) async throws -> Bool
 
-    /// Envoie un message. L'écho local apparaît dans ``items`` sans action supplémentaire.
+    /// Sends a message. Its local echo appears in ``items`` with no further action.
     func send(_ content: MessageContent) async throws
 }

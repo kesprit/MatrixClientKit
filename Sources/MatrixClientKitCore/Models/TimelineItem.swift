@@ -1,54 +1,53 @@
 import Foundation
 
-/// État d'acheminement d'un message envoyé localement.
+/// The delivery state of a message sent from this device.
 public enum SendState: Sendable, Hashable {
-    /// Le message est en cours d'envoi vers le homeserver.
+    /// The message is on its way to the homeserver.
     case sending
-    /// Le homeserver a accepté le message.
+    /// The homeserver accepted the message.
     case sent
-    /// L'envoi a échoué ; `reason` décrit la cause.
+    /// Sending failed; `reason` describes why.
     ///
     /// - Parameters:
-    ///   - reason: cause de l'échec, rédigée pour être lisible. Diagnostic : une application qui
-    ///     localise son interface doit produire son propre texte plutôt que d'afficher celui-ci.
-    ///   - isRecoverable: l'envoi peut être réessayé **tel quel**, typiquement une fois la
-    ///     connectivité revenue, par opposition à un échec que l'utilisateur doit d'abord
-    ///     résoudre (vérifier sa session, retirer un appareil non vérifié, choisir un autre
-    ///     média). C'est la distinction sur laquelle une interface décide d'offrir « réessayer »
-    ///     ou « abandonner l'envoi ».
+    ///   - reason: why it failed, written to be readable. Diagnostic: an application that
+    ///     localises its interface should produce its own copy rather than showing this string.
+    ///   - isRecoverable: the send can be retried **as is**, typically once connectivity comes
+    ///     back, as opposed to a failure the user must resolve first (verify their session,
+    ///     remove an unverified device, pick another attachment). This is the distinction an
+    ///     interface uses to decide between offering "retry" and "discard".
     case failed(reason: String, isRecoverable: Bool)
 
-    /// Vrai si l'envoi a échoué.
+    /// True when sending failed.
     public var isFailed: Bool {
         if case .failed = self { return true }
         return false
     }
 
-    /// Vrai si l'envoi a échoué et peut être réessayé tel quel ; `false` dans tous les autres cas,
-    /// y compris lorsque l'envoi n'a pas échoué.
+    /// True when sending failed and can be retried as is; `false` in every other case, including
+    /// when sending did not fail.
     public var isRecoverableFailure: Bool {
         if case let .failed(_, isRecoverable) = self { return isRecoverable }
         return false
     }
 }
 
-/// Message affichable dans une timeline.
+/// A message that can be displayed in a timeline.
 public struct Message: Sendable, Hashable {
-    /// Identifiant de l'événement une fois acheminé par le homeserver, `nil` tant qu'il est local.
+    /// The event identifier once the homeserver accepted it; `nil` while the message is local.
     public let eventID: EventID?
-    /// Identifiant de l'expéditeur.
+    /// The sender's identifier.
     public let sender: UserID
-    /// Nom d'affichage de l'expéditeur au moment de l'envoi, s'il est connu.
+    /// The sender's display name at the time of sending, when known.
     public let senderDisplayName: String?
-    /// Corps textuel du message.
+    /// The message's text body.
     public let body: String
-    /// Horodatage du message.
+    /// When the message was sent.
     public let timestamp: Date
-    /// Vrai si le message a été envoyé par l'utilisateur courant.
+    /// True when the current user sent the message.
     public let isOwn: Bool
-    /// Vrai si le message a été modifié depuis son envoi initial.
+    /// True when the message was edited after it was first sent.
     public let isEdited: Bool
-    /// État d'acheminement du message.
+    /// The message's delivery state.
     public let sendState: SendState
 
     public init(
@@ -72,28 +71,28 @@ public struct Message: Sendable, Hashable {
     }
 }
 
-/// Élément d'une timeline : message, marqueur ou événement non pris en charge en v0.1.
+/// An item in a timeline: a message, a marker, or an event v0.1 does not handle.
 public struct TimelineItem: Sendable, Hashable, Identifiable {
     public enum Kind: Sendable, Hashable {
-        /// Un message affichable.
+        /// A message to display.
         case message(Message)
-        /// Un événement dont le contenu a été supprimé (modération, retrait par son auteur).
+        /// An event whose content was removed, by moderation or by its author.
         case redacted
-        /// Un événement chiffré que le client n'a pas pu déchiffrer ; `reason` en donne la cause.
+        /// An encrypted event the client could not decrypt; `reason` says why.
         case unableToDecrypt(reason: String)
-        /// Un séparateur visuel marquant un changement de jour.
+        /// A visual separator marking a change of day.
         case dateSeparator(Date)
-        /// Le marqueur de la dernière lecture de la room par l'utilisateur courant.
+        /// The current user's read marker for this room.
         case readMarker
-        /// Un événement d'un type reconnu mais non pris en charge par l'affichage en v0.1.
+        /// An event of a recognised type that v0.1 does not render.
         case unsupported(description: String)
     }
 
-    /// Identité stable de l'élément au sein de la timeline, utilisée pour le diffing d'une
-    /// liste affichée. Ce n'est pas un identifiant d'événement Matrix : un élément sans
-    /// événement associé (séparateur, marqueur de lecture) en a un tout de même.
+    /// The item's stable identity within the timeline, used to diff a displayed list. This is
+    /// not a Matrix event identifier: an item with no associated event — a separator, a read
+    /// marker — still has one.
     public let id: String
-    /// Contenu de l'élément.
+    /// What the item holds.
     public let kind: Kind
 
     public init(id: String, kind: Kind) {
@@ -101,7 +100,7 @@ public struct TimelineItem: Sendable, Hashable, Identifiable {
         self.kind = kind
     }
 
-    /// Le message porté par cet élément, s'il s'agit d'un message.
+    /// The message this item carries, when it is a message.
     public var message: Message? {
         if case let .message(message) = kind { return message }
         return nil
