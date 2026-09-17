@@ -2,58 +2,6 @@ import Testing
 import Foundation
 import MatrixClientKit
 
-/// Configuration lue dans l'environnement. Absente, la suite entière est ignorée.
-private struct IntegrationConfiguration {
-    let homeserver: URL
-    let username: String
-    let password: String
-
-    static var current: IntegrationConfiguration? {
-        let environment = ProcessInfo.processInfo.environment
-        guard
-            let homeserver = environment["MATRIX_TEST_HOMESERVER"].flatMap(URL.init(string:)),
-            let username = environment["MATRIX_TEST_USERNAME"],
-            let password = environment["MATRIX_TEST_PASSWORD"]
-        else { return nil }
-
-        return IntegrationConfiguration(homeserver: homeserver, username: username, password: password)
-    }
-
-    static var isAvailable: Bool { current != nil }
-}
-
-/// Client d'intégration et répertoire qui l'héberge.
-///
-/// Le répertoire est rendu à l'appelant : sans cela, chaque exécution laisse sous le répertoire
-/// temporaire un store SQLite contenant une vraie session — jetons compris.
-private struct IntegrationClient {
-    let client: any MatrixClient
-    let directory: URL
-}
-
-private func makeClient(_ configuration: IntegrationConfiguration) -> IntegrationClient {
-    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("mck-integration-\(UUID().uuidString)", isDirectory: true)
-    return IntegrationClient(
-        client: Matrix.client(homeserver: configuration.homeserver, storage: .local(directory: directory)),
-        directory: directory
-    )
-}
-
-/// Exécute un nettoyage même lorsque la tâche de test a été annulée — par exemple par
-/// `.timeLimit` lorsqu'un flux attendu ne produit jamais la valeur cherchée. Une tâche détachée
-/// n'hérite pas de l'annulation de son appelant, donc `session.logout()` a une vraie chance
-/// d'atteindre le serveur au lieu d'échouer immédiatement sur un contexte déjà annulé.
-private func cleaningUp(_ body: @escaping @Sendable () async -> Void) async {
-    await Task.detached(operation: body).value
-}
-
-/// Supprime le répertoire de travail d'une exécution. L'échec est ignoré : le nettoyage ne doit
-/// jamais masquer le résultat du test qu'il suit.
-private func removeDirectory(_ directory: URL) {
-    try? FileManager.default.removeItem(at: directory)
-}
-
 // Sérialisée : les trois cas se connectent au même compte et partagent donc le même store et les
 // mêmes entrées Keychain. Les laisser tourner en parallèle ferait échouer des cas pour une raison
 // qui ne concerne pas le chemin testé, et masquerait les vraies régressions.

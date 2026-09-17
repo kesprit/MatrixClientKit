@@ -9,9 +9,20 @@ homeserver and must be run **manually before every bump of the Rust SDK**.
     MATRIX_TEST_USERNAME=username \
     MATRIX_TEST_PASSWORD=secret \
     MATRIX_TEST_ROOM_ID='!room:your-homeserver' \
+    MATRIX_TEST_RECOVERY_KEY='EsTc …' \
     swift test --filter MatrixClientKitIntegrationTests
 
-Without those variables the suite is skipped, which is the expected behaviour in CI.
+Without the first three variables the suite is skipped, which is the expected behaviour in CI.
+
+Optional variables:
+
+- `MATRIX_TEST_RECOVERY_KEY` enables the verification and recovery cases. Set up recovery **once**
+  on the test account — for instance by signing in with Element — and keep its key. The tests never
+  change it, so it stays valid from one run to the next.
+- `MATRIX_TEST_FRESH_USERNAME` and `MATRIX_TEST_FRESH_PASSWORD` name an account that has **never
+  signed in anywhere**. They enable the case checking that signing in creates a cross-signing
+  identity. It is meaningful only on the account's first run: register a new account each time you
+  want to check it.
 
 ## Requirements on the test account
 
@@ -25,3 +36,8 @@ Use an account **dedicated** to testing, for two reasons:
   task to maximise its chances of reaching the server even after cancellation, but nothing
   guarantees the homeserver processed it before the process exits. So don't reuse this account for
   anything else, and prune its devices from time to time if you run the suite often.
+- `aServerSideLogoutSignsTheSessionOutAndErasesItsStore` signs **every** session of the account out,
+  as "sign out of all devices" would. Anything else signed in to that account is signed out too.
+- The Keychain holds one persisted session per service, so the verification case — which signs the
+  same account in twice in one process — overwrites the first session's entry with the second's.
+  The case never restores a session, so this does not affect it.
