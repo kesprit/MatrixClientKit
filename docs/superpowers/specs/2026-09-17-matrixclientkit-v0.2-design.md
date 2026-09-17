@@ -234,7 +234,7 @@ public enum SASData: Sendable, Hashable {
 public struct SASEmoji: Sendable, Hashable {
     public let symbol: String
     public let description: String        // anglais, fourni par l'amont
-    public let index: Int                 // indice dans la table SAS de la spec Matrix (0–63)
+    public let index: Int?                // indice dans la table SAS de la spec Matrix (0–63) ; nil si l'amont ne l'a pas fourni
 }
 ```
 
@@ -273,13 +273,14 @@ Fonction pure `package` dans Core : `reduce(_ state: SessionVerificationState, _
 | `didAcceptVerificationRequest` | `ready` depuis `waitingForOtherDevice` ou `incomingRequest` |
 | `didStartSasVerification` | `startingSAS` depuis `ready` ou `startingSAS` (l'autre appareil peut démarrer SAS) |
 | `didReceiveVerificationData` | `comparing(data)` |
-| `didFinish` | `verified` |
-| `didCancel` | `cancelled`, depuis tout état |
-| `didFail` | `failed`, depuis tout état |
+| `didFinish` | `verified` depuis `comparing` ou `confirming` |
+| `didCancel` | `cancelled`, depuis tout état non terminal hors `idle` |
+| `didFail` | `failed`, depuis tout état non terminal hors `idle` |
 
 Une commande appelée hors de son état valide lève `MatrixError.unexpected(message:details:)` avec
 un message nommant la commande et l'état, sans aucun appel amont. Un callback incohérent avec
-l'état courant, hors `didCancel`/`didFail`, laisse l'état inchangé.
+l'état courant laisse l'état inchangé. Les états terminaux (`verified`, `cancelled`, `failed`) ne se
+quittent que par une nouvelle demande, sortante ou entrante.
 
 ### 6.2 Implémentation
 
@@ -290,9 +291,11 @@ l'état courant, hors `didCancel`/`didFail`, laisse l'état inchangé.
   les changements.
 - **Obtention du contrôleur.** Le delegate doit être posé avant qu'une demande n'arrive.
   `getSessionVerificationController()` exige l'identité de l'utilisateur dans le store local (§2.8) :
-  il est tenté à la création de la session, sans bloquer ni faire échouer celle-ci, puis retenté à
-  chaque passage de la sync à `.running` et à chaque commande tant qu'il n'a pas réussi. Une
-  commande dont la tentative échoue lève l'erreur mappée. Le contrôleur et son delegate sont retenus par
+  il est tenté à chaque valeur de `verificationStatus` — qui commence par la valeur courante et
+  change quand l'identité devient connue — et à chaque commande, tant qu'il n'a pas réussi, sans
+  bloquer ni faire échouer la création de la session. L'état de la sync n'est pas un signal
+  utilisable : elle atteint `.running` avant le chargement de l'identité et y reste. Une commande
+  dont la tentative échoue lève l'erreur mappée. Le contrôleur et son delegate sont retenus par
   `RustSessionVerification` pour la durée de la session.
 
 ## 7. Récupération et sauvegarde
@@ -408,7 +411,7 @@ par une tâche préalable :
 
 | Question | Test d'intégration | Conséquence si la réponse est non |
 | --- | --- | --- |
-| L'amorçage automatique du cross-signing réussit-il sans UIAA sur le homeserver de test ? | Vérification croisée (§12, cas 1) sur un compte neuf | Documenter la limite ; l'API explicite d'amorçage devient un candidat du palier suivant |
+| L'amorçage automatique du cross-signing réussit-il sans UIAA sur le homeserver de test ? | Amorçage sur compte neuf (§12, cas 6) | Documenter la limite ; l'API explicite d'amorçage devient un candidat du palier suivant |
 | Le message d'une mauvaise clé correspond-il bien à §2.10 ? | Récupération (§12, cas 2) | Corriger le mappage de §7.1 |
 
 ## 12. Tests
@@ -424,11 +427,17 @@ TDD, Swift Testing uniquement.
   **avant** `.signedOut` et traitement unique du hard logout ; `logout()` après soft logout et
   après `.signedOut` ; relance de l'obtention du contrôleur ; restauration avec l'URL persistée ;
   chaînes de `TimelineMapper`.
-- **Intégration** (homeserver réel, désactivée par défaut) :
-  1. deux sessions du même utilisateur dans des répertoires distincts — B demande, A accepte, SAS,
-     approbations croisées, `verificationStatus == .verified` des deux côtés ;
-  2. A active la récupération ; B récupère avec la clé et devient vérifié ; une mauvaise clé lève
-     `.encryption(.invalidRecoveryKey)` ;
+- **Intégration** (homeserver réel, désactivée par défaut). Les cas chiffrés exigent
+  `MATRIX_TEST_RECOVERY_KEY`, la clé de récupération du compte de test, configurée une fois (par
+  exemple avec Element) ; ils ne modifient jamais cette clé, pour qu'elle reste valide d'une
+  exécution à l'autre. `enableRecovery`, `resetRecoveryKey` et `disableRecovery` ne sont donc
+  couverts que par les tests unitaires.
+  1. A se connecte et récupère avec la clé (vérifié) ; B se connecte, demande la vérification, A
+     accepte, SAS, approbations croisées, B devient `.verified` ;
+  2. une mauvaise clé lève `.encryption(.invalidRecoveryKey)` ; la bonne rend l'appareil vérifié et
+     `recoveryState == .enabled` ;
+  6. amorçage du cross-signing : sur un compte **jamais utilisé** (`MATRIX_TEST_FRESH_USERNAME`,
+     `MATRIX_TEST_FRESH_PASSWORD`, cas ignoré sinon), la connexion rend l'appareil `.verified` ;
   3. `POST /_matrix/client/v3/logout/all` brut via `URLSession`, avec un jeton obtenu par une
      connexion brute séparée — la session observée passe à `.signedOut` et son store a disparu ;
   4. `Matrix.restoreSession(storage:)` restaure sans URL ;
@@ -472,7 +481,7 @@ n'est jamais un `docs:`.
 
 | Risque | Parade |
 | --- | --- |
-| Contrôleur de vérification indisponible avant la sync : demandes entrantes perdues | Relance à chaque passage `.running` et à chaque commande |
+| Contrôleur de vérification indisponible avant la sync : demandes entrantes perdues | Relance à chaque changement de `verificationStatus` et à chaque commande |
 | Amorçage du cross-signing refusé par un serveur exigeant l'UIAA | Suite d'intégration sur compte neuf ; limite documentée |
 | Mappage de la mauvaise clé fondé sur un message amont | Épinglé par test unitaire et par la suite d'intégration |
 | Callbacks amont réordonnés | Réduction synchrone sous `Mutex`, jamais de `Task` par callback |
