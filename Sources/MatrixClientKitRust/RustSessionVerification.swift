@@ -120,13 +120,18 @@ public final class RustSessionVerification: SessionVerification {
     /// verrou : une commande qui arrive pendant qu'une autre est en vol est rejetée sans jamais
     /// lire l'état ni appeler l'amont, plutôt que de risquer de valider contre un état pas encore
     /// à jour.
+    ///
+    /// `cancel()` fait exception : il est validé contre l'état mais ne réserve ni ne consulte le
+    /// créneau. Une commande qui attend un amont injoignable ne doit jamais empêcher l'utilisateur
+    /// d'abandonner la vérification.
     private func perform(
         _ command: VerificationCommand,
         onSuccess event: VerificationEvent?,
         _ body: (any VerificationControllerDriving, SessionVerificationState) async throws -> Void
     ) async throws {
+        let claimsSlot = command != .cancel
         let current = try inFlight.withLock { flag -> SessionVerificationState in
-            guard !flag else {
+            guard !claimsSlot || !flag else {
                 throw MatrixError.unexpected(
                     message: "\(command.rawValue)() is not allowed while another verification command is in progress.",
                     details: nil
@@ -139,10 +144,12 @@ public final class RustSessionVerification: SessionVerification {
                     details: nil
                 )
             }
-            flag = true
+            if claimsSlot { flag = true }
             return current
         }
-        defer { inFlight.withLock { $0 = false } }
+        defer {
+            if claimsSlot { inFlight.withLock { $0 = false } }
+        }
 
         do {
             let controller = try await ensureController()

@@ -39,14 +39,20 @@ private final class FakeController: VerificationControllerDriving, @unchecked Se
     func cancelVerification() async throws { try record(.cancel) }
 }
 
-/// Contrôleur dont `requestDeviceVerification` suspend jusqu'à ce que le test appelle
-/// ``release()`` — permet de vérifier qu'une seconde commande concurrente est rejetée avant que
-/// la première n'ait obtenu de réponse de l'amont (fenêtre du double tap).
+/// Contrôleur dont l'appel `gated` (par défaut `requestDeviceVerification`) suspend jusqu'à ce
+/// que le test appelle ``release()`` — permet d'observer ce que fait une seconde commande
+/// concurrente avant que la première n'ait obtenu de réponse de l'amont (fenêtre du double tap,
+/// ou amont injoignable).
 private final class GatedController: VerificationControllerDriving, @unchecked Sendable {
     private let lock = NSLock()
+    private let gated: ControllerCall
     private var _calls: [ControllerCall] = []
     private var _delegate: (any SessionVerificationControllerDelegate)?
     private var continuation: CheckedContinuation<Void, Never>?
+
+    init(gating gated: ControllerCall = .request) {
+        self.gated = gated
+    }
 
     var calls: [ControllerCall] { lock.withLock { _calls } }
     var delegate: (any SessionVerificationControllerDelegate)? { lock.withLock { _delegate } }
@@ -54,11 +60,13 @@ private final class GatedController: VerificationControllerDriving, @unchecked S
 
     func setDelegate(delegate: (any SessionVerificationControllerDelegate)?) { lock.withLock { _delegate = delegate } }
 
-    func requestDeviceVerification() async throws {
-        await withCheckedContinuation { continuation in
-            lock.withLock { self.continuation = continuation }
+    private func record(_ call: ControllerCall) async {
+        if call == gated {
+            await withCheckedContinuation { continuation in
+                lock.withLock { self.continuation = continuation }
+            }
         }
-        lock.withLock { _calls.append(.request) }
+        lock.withLock { _calls.append(call) }
     }
 
     /// Débloque l'appel amont en cours.
@@ -70,14 +78,15 @@ private final class GatedController: VerificationControllerDriving, @unchecked S
         continuation?.resume()
     }
 
+    func requestDeviceVerification() async throws { await record(.request) }
     func acknowledgeVerificationRequest(senderId: String, flowId: String) async throws {
-        lock.withLock { _calls.append(.acknowledge(sender: senderId, flow: flowId)) }
+        await record(.acknowledge(sender: senderId, flow: flowId))
     }
-    func acceptVerificationRequest() async throws { lock.withLock { _calls.append(.accept) } }
-    func startSasVerification() async throws { lock.withLock { _calls.append(.startSAS) } }
-    func approveVerification() async throws { lock.withLock { _calls.append(.approve) } }
-    func declineVerification() async throws { lock.withLock { _calls.append(.decline) } }
-    func cancelVerification() async throws { lock.withLock { _calls.append(.cancel) } }
+    func acceptVerificationRequest() async throws { await record(.accept) }
+    func startSasVerification() async throws { await record(.startSAS) }
+    func approveVerification() async throws { await record(.approve) }
+    func declineVerification() async throws { await record(.decline) }
+    func cancelVerification() async throws { await record(.cancel) }
 }
 
 private final class FakeEmoji: SessionVerificationEmojiProtocol, @unchecked Sendable {
@@ -239,6 +248,36 @@ func aConcurrentCommandWhileOneIsInFlightIsRejected() async throws {
 
     #expect(controller.calls == [.request])
     #expect(await waitForState(verification) { $0 == .waitingForOtherDevice } != nil)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func cancelIsNotRejectedWhileAnotherCommandIsInFlight() async throws {
+    let controller = GatedController(gating: .startSAS)
+    let verification = try await makeVerification(controller)
+    try await verification.requestVerification()
+    controller.delegate?.didAcceptVerificationRequest()
+    #expect(await waitForState(verification) { $0 == .ready } != nil)
+
+    async let start: Void = verification.startSAS()
+
+    // `startSAS()` attend l'amont (hors ligne, par exemple) : l'utilisateur doit pouvoir annuler.
+    while !controller.isSuspended {
+        await Task.yield()
+    }
+
+    // L'erreur éventuelle est retenue le temps de débloquer l'amont : levée tout de suite, elle
+    // laisserait `startSAS()` suspendu pour toujours.
+    var cancelError: (any Error)?
+    do {
+        try await verification.cancel()
+    } catch {
+        cancelError = error
+    }
+    controller.release()
+    try await start
+
+    #expect(cancelError == nil)
+    #expect(controller.calls.contains(.cancel))
 }
 
 @Test func anUpstreamFailureIsMappedAndLeavesTheStateUnchanged() async throws {
