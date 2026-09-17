@@ -1,4 +1,5 @@
 import MatrixRustSDK
+import Synchronization
 
 /// Convertit un abonnement à listener du SDK Rust en `AsyncStream`.
 ///
@@ -33,6 +34,62 @@ func ffiStream<Element: Sendable, Listener>(
             }
         } catch {
             continuation.finish()
+        }
+    }
+}
+
+/// Variante de ``ffiStream`` pour un état dont l'amont expose aussi une lecture synchrone.
+///
+/// Le flux émet d'abord la valeur courante, puis chaque mise à jour du listener, en
+/// `.bufferingNewest(1)`. Sans cette première valeur, un écran ouvert après le dernier changement
+/// resterait vide indéfiniment.
+///
+/// L'abonnement est posé **avant** la lecture de la valeur courante, et celle-ci n'est émise que
+/// si le listener n'a encore rien livré. Lue avant l'abonnement, elle pourrait manquer un
+/// changement survenu entre les deux ; émise après une valeur du listener, elle remplacerait un
+/// état récent par un état périmé.
+func ffiStateStream<Element: Sendable, Listener>(
+    current: @escaping @Sendable () -> Element,
+    makeListener: @escaping @Sendable (@escaping @Sendable (Element) -> Void) -> Listener,
+    subscribe: @escaping @Sendable (Listener) throws -> any TaskHandleProtocol
+) -> AsyncStream<Element> {
+    AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+        let gate = FirstDeliveryGate()
+        let listener = makeListener { element in
+            gate.deliver { continuation.yield(element) }
+        }
+
+        do {
+            let handle = try subscribe(listener)
+            continuation.onTermination = { _ in
+                handle.cancel()
+            }
+        } catch {
+            continuation.finish()
+            return
+        }
+
+        let initial = current()
+        gate.deliverUnlessAlreadyDelivered { continuation.yield(initial) }
+    }
+}
+
+/// Sérialise les émissions d'un flux d'état et retient si le listener a déjà livré une valeur.
+private final class FirstDeliveryGate: Sendable {
+    private let hasDelivered = Mutex(false)
+
+    func deliver(_ body: () -> Void) {
+        hasDelivered.withLock { hasDelivered in
+            hasDelivered = true
+            body()
+        }
+    }
+
+    func deliverUnlessAlreadyDelivered(_ body: () -> Void) {
+        hasDelivered.withLock { hasDelivered in
+            guard !hasDelivered else { return }
+            hasDelivered = true
+            body()
         }
     }
 }

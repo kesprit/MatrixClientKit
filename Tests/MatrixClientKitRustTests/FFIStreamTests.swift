@@ -125,3 +125,62 @@ private final class ListenerBox: @unchecked Sendable {
     for await value in stream { received.append(value) }
     #expect(received.isEmpty)
 }
+
+@Test func stateStreamStartsWithTheCurrentValue() async {
+    let stream = ffiStateStream(
+        current: { 7 },
+        makeListener: { FakeListener(emit: $0) },
+        subscribe: { _ in FakeTaskHandle() }
+    )
+
+    var iterator = stream.makeAsyncIterator()
+    #expect(await iterator.next() == 7)
+}
+
+@Test func stateStreamNeverOverwritesAFresherListenerValueWithTheCurrentOne() async {
+    // Le listener livre 9 pendant l'abonnement, avant la lecture de la valeur courante, qui est
+    // périmée (1). Émise après coup, elle remplacerait 9 dans le tampon `.bufferingNewest(1)`.
+    let stream = ffiStateStream(
+        current: { 1 },
+        makeListener: { FakeListener(emit: $0) },
+        subscribe: { listener in
+            listener.emit(9)
+            return FakeTaskHandle()
+        }
+    )
+
+    var iterator = stream.makeAsyncIterator()
+    #expect(await iterator.next() == 9)
+}
+
+@Test func stateStreamDeliversListenerUpdatesAfterTheCurrentValue() async {
+    let box = ListenerBox()
+    let stream = ffiStateStream(
+        current: { 1 },
+        makeListener: { emit in
+            let listener = FakeListener(emit: emit)
+            box.store(listener)
+            return listener
+        },
+        subscribe: { _ in FakeTaskHandle() }
+    )
+
+    var iterator = stream.makeAsyncIterator()
+    #expect(await iterator.next() == 1)
+    box.emit(2)
+    #expect(await iterator.next() == 2)
+}
+
+@Test func failingStateSubscriptionFinishesWithoutValues() async {
+    struct SubscriptionFailure: Error {}
+
+    let stream = ffiStateStream(
+        current: { 1 },
+        makeListener: { FakeListener(emit: $0) },
+        subscribe: { (_: FakeListener) -> any TaskHandleProtocol in throw SubscriptionFailure() }
+    )
+
+    var received: [Int] = []
+    for await value in stream { received.append(value) }
+    #expect(received.isEmpty)
+}
