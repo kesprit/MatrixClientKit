@@ -39,6 +39,47 @@ private final class FakeController: VerificationControllerDriving, @unchecked Se
     func cancelVerification() async throws { try record(.cancel) }
 }
 
+/// Contrôleur dont `requestDeviceVerification` suspend jusqu'à ce que le test appelle
+/// ``release()`` — permet de vérifier qu'une seconde commande concurrente est rejetée avant que
+/// la première n'ait obtenu de réponse de l'amont (fenêtre du double tap).
+private final class GatedController: VerificationControllerDriving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _calls: [ControllerCall] = []
+    private var _delegate: (any SessionVerificationControllerDelegate)?
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    var calls: [ControllerCall] { lock.withLock { _calls } }
+    var delegate: (any SessionVerificationControllerDelegate)? { lock.withLock { _delegate } }
+    var isSuspended: Bool { lock.withLock { continuation != nil } }
+
+    func setDelegate(delegate: (any SessionVerificationControllerDelegate)?) { lock.withLock { _delegate = delegate } }
+
+    func requestDeviceVerification() async throws {
+        await withCheckedContinuation { continuation in
+            lock.withLock { self.continuation = continuation }
+        }
+        lock.withLock { _calls.append(.request) }
+    }
+
+    /// Débloque l'appel amont en cours.
+    func release() {
+        let continuation = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            defer { self.continuation = nil }
+            return self.continuation
+        }
+        continuation?.resume()
+    }
+
+    func acknowledgeVerificationRequest(senderId: String, flowId: String) async throws {
+        lock.withLock { _calls.append(.acknowledge(sender: senderId, flow: flowId)) }
+    }
+    func acceptVerificationRequest() async throws { lock.withLock { _calls.append(.accept) } }
+    func startSasVerification() async throws { lock.withLock { _calls.append(.startSAS) } }
+    func approveVerification() async throws { lock.withLock { _calls.append(.approve) } }
+    func declineVerification() async throws { lock.withLock { _calls.append(.decline) } }
+    func cancelVerification() async throws { lock.withLock { _calls.append(.cancel) } }
+}
+
 private final class FakeEmoji: SessionVerificationEmojiProtocol, @unchecked Sendable {
     let value: String
     let name: String
@@ -70,7 +111,7 @@ private func details(from userID: String = "@alice:matrix.org", flow: String = "
     )
 }
 
-private func makeVerification(_ controller: FakeController) async throws -> RustSessionVerification {
+private func makeVerification(_ controller: any VerificationControllerDriving) async throws -> RustSessionVerification {
     let verification = RustSessionVerification(ownUserID: ownUserID, loadController: { controller })
     try await verification.ensureController()
     return verification
@@ -170,6 +211,34 @@ func anIncomingRequestReachesALateSubscriber() async throws {
         return
     }
     #expect(controller.calls.isEmpty)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aConcurrentCommandWhileOneIsInFlightIsRejected() async throws {
+    let controller = GatedController()
+    let verification = try await makeVerification(controller)
+
+    async let first: Void = verification.requestVerification()
+
+    // Laisse la première commande atteindre son appel amont suspendu avant d'en tenter une
+    // seconde : c'est exactement la fenêtre qu'un double tap exploite.
+    while !controller.isSuspended {
+        await Task.yield()
+    }
+
+    let error = await #expect(throws: MatrixError.self) {
+        try await verification.requestVerification()
+    }
+    guard case .unexpected = error else {
+        Issue.record("attendu .unexpected, obtenu \(String(describing: error))")
+        return
+    }
+
+    controller.release()
+    try await first
+
+    #expect(controller.calls == [.request])
+    #expect(await waitForState(verification) { $0 == .waitingForOtherDevice } != nil)
 }
 
 @Test func anUpstreamFailureIsMappedAndLeavesTheStateUnchanged() async throws {

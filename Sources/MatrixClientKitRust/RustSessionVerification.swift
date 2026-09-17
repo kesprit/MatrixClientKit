@@ -10,6 +10,13 @@ public final class RustSessionVerification: SessionVerification {
     private let broadcaster: StateBroadcaster<SessionVerificationState>
     private let controller = Mutex<(any VerificationControllerDriving)?>(nil)
 
+    /// Verrouille la fenêtre entre la validation d'une commande et le retour de l'amont : sans
+    /// cela, un double tap (deux commandes concurrentes) lirait deux fois le même état — il ne
+    /// change qu'à la toute fin de `perform` — et passerait deux fois la validation, envoyant
+    /// deux fois la même requête amont (un double `requestDeviceVerification`, un double
+    /// `accept`, etc.).
+    private let inFlight = Mutex<Bool>(false)
+
     /// Retenu pour la durée de la session : le contrôleur amont ne documente pas qu'il garde son
     /// delegate en vie, et un delegate libéré ferait perdre en silence toute demande entrante.
     private let delegate: VerificationDelegateAdapter
@@ -108,18 +115,34 @@ public final class RustSessionVerification: SessionVerification {
     }
 
     /// Valide la commande contre l'état courant, l'exécute, puis applique l'événement de succès.
+    ///
+    /// La validation et la réservation du « créneau » de commande en cours ont lieu sous le même
+    /// verrou : une commande qui arrive pendant qu'une autre est en vol est rejetée sans jamais
+    /// lire l'état ni appeler l'amont, plutôt que de risquer de valider contre un état pas encore
+    /// à jour.
     private func perform(
         _ command: VerificationCommand,
         onSuccess event: VerificationEvent?,
         _ body: (any VerificationControllerDriving, SessionVerificationState) async throws -> Void
     ) async throws {
-        let current = broadcaster.value
-        guard SessionVerificationReducer.isAllowed(command, in: current) else {
-            throw MatrixError.unexpected(
-                message: "\(command.rawValue)() is not allowed while verification is \(current).",
-                details: nil
-            )
+        let current = try inFlight.withLock { flag -> SessionVerificationState in
+            guard !flag else {
+                throw MatrixError.unexpected(
+                    message: "\(command.rawValue)() is not allowed while another verification command is in progress.",
+                    details: nil
+                )
+            }
+            let current = broadcaster.value
+            guard SessionVerificationReducer.isAllowed(command, in: current) else {
+                throw MatrixError.unexpected(
+                    message: "\(command.rawValue)() is not allowed while verification is \(current).",
+                    details: nil
+                )
+            }
+            flag = true
+            return current
         }
+        defer { inFlight.withLock { $0 = false } }
 
         do {
             let controller = try await ensureController()
