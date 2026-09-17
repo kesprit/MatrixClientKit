@@ -194,3 +194,47 @@ func mockSyncControllerStreamCanBeFinished() async {
     // Comme la vraie session, la tentative compte : l'effacement local a lieu même en cas d'échec.
     #expect(session.didLogout)
 }
+
+@Test func paginationCanFailWhileSendingSucceeds() async throws {
+    let timeline = MockTimeline()
+    timeline.paginationError = .network(.timeout)
+
+    await #expect(throws: MatrixError.network(.timeout)) {
+        try await timeline.paginateBackwards(count: 20)
+    }
+    try await timeline.send(.text("toujours possible"))
+    #expect(timeline.sentMessages == [.text("toujours possible")])
+}
+
+@Test func aSendErrorNoLongerBreaksPagination() async throws {
+    let timeline = MockTimeline()
+    timeline.sendError = .network(.offline)
+
+    #expect(try await timeline.paginateBackwards(count: 20))
+}
+
+@Test func mockClientRecordsLoginAttemptsAndReturnsTheInjectedSession() async throws {
+    let session = MockMatrixSession(userID: "@bob:matrix.org")
+    let client = MockMatrixClient(loginResult: .success(session))
+
+    let opened = try await client.login(.password(username: "bob", password: "secret", deviceName: nil))
+
+    #expect(opened.userID.rawValue == "@bob:matrix.org")
+    #expect(client.loginAttempts == [.password(username: "bob", password: "secret", deviceName: nil)])
+}
+
+@Test func mockClientCanRejectALogin() async {
+    let client = MockMatrixClient(loginResult: .failure(.authentication(.invalidCredentials)))
+
+    await #expect(throws: MatrixError.authentication(.invalidCredentials)) {
+        _ = try await client.login(.password(username: "bob", password: "faux", deviceName: nil))
+    }
+}
+
+@Test func mockClientRestoresNothingByDefault() async throws {
+    let client = MockMatrixClient()
+    #expect(try await client.restoreSession() == nil)
+
+    client.restoreResult = .success(MockMatrixSession())
+    #expect(try await client.restoreSession() != nil)
+}

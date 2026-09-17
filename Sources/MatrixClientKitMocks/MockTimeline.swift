@@ -2,7 +2,7 @@ import Foundation
 import MatrixClientKitCore
 
 /// A drivable timeline for tests: push snapshots on demand, observe what was sent, or simulate a
-/// failed send.
+/// failed send or a failed pagination — independently.
 ///
 /// ``emit(_:)`` pushes a snapshot, ``finish()`` ends the stream — the same pair as
 /// ``MockRoomService`` and ``MockSyncController``.
@@ -16,6 +16,7 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
 
     private var _sentMessages: [MessageContent] = []
     private var _sendError: MatrixError?
+    private var _paginationError: MatrixError?
     private var _paginateResult = true
 
     public init() {
@@ -33,18 +34,24 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
         return _sentMessages
     }
 
-    /// The error to throw from the next ``send(_:)`` or ``paginateBackwards(count:)``.
-    /// `nil` by default, meaning those calls succeed.
+    /// The error to throw from ``send(_:)``. `nil` by default, meaning sends succeed.
     public var sendError: MatrixError? {
-        get { lock.lock(); defer { lock.unlock() }; return _sendError }
-        set { lock.lock(); _sendError = newValue; lock.unlock() }
+        get { lock.withLock { _sendError } }
+        set { lock.withLock { _sendError = newValue } }
     }
 
-    /// What ``paginateBackwards(count:)`` returns when ``sendError`` is not set. `true` by
+    /// The error to throw from ``paginateBackwards(count:)``. `nil` by default, meaning pagination
+    /// succeeds.
+    public var paginationError: MatrixError? {
+        get { lock.withLock { _paginationError } }
+        set { lock.withLock { _paginationError = newValue } }
+    }
+
+    /// What ``paginateBackwards(count:)`` returns when ``paginationError`` is not set. `true` by
     /// default.
     public var paginateResult: Bool {
-        get { lock.lock(); defer { lock.unlock() }; return _paginateResult }
-        set { lock.lock(); _paginateResult = newValue; lock.unlock() }
+        get { lock.withLock { _paginateResult } }
+        set { lock.withLock { _paginateResult = newValue } }
     }
 
     /// Pushes a new snapshot into ``items``.
@@ -62,7 +69,7 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
 
     @discardableResult
     public func paginateBackwards(count: Int) async throws -> Bool {
-        if let error = sendError { throw error }
+        if let error = paginationError { throw error }
         return paginateResult
     }
 
