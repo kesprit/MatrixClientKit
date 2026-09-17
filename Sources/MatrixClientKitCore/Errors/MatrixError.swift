@@ -105,7 +105,7 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
     ///   name of the nested Swift case, are not localised, and their wording may change between
     ///   versions without that being a breaking change. An application should map ``MatrixError``
     ///   cases to its own localised copy rather than displaying this value. Localising the
-    ///   package is out of scope for v0.1.
+    ///   package is out of scope for now.
     public var errorDescription: String? {
         switch self {
         case let .authentication(value): return "Authentication error: \(value)"

@@ -28,5 +28,8 @@ public protocol MatrixClient: Sendable {
     func login(_ credentials: Credentials) async throws -> any MatrixSession
 
     /// Restores a previously persisted session, or returns `nil` when there is none.
+    ///
+    /// The session is restored with the homeserver address stored with it, which takes precedence
+    /// over ``homeserver``.
     func restoreSession() async throws -> (any MatrixSession)?
 }

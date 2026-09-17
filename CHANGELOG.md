@@ -32,9 +32,13 @@ follows [SemVer](https://semver.org/).
 
 ### Changed
 
-- A cross-signing identity is created at sign-in for accounts that have none, so that the device
-  can be verified.
+- A cross-signing identity is created at sign-in, and on the first launch that restores a 0.1
+  session, for accounts that have none, so that the device can be verified.
 - `SyncController.start()` documents that calling it while syncing is running has no effect.
+- `logout()` does nothing after `.signedOut`, and no longer throws the expected token error after
+  `.softLoggedOut`. A `logout()` called while another is in progress waits for it.
+- `login` builds the persistent client with the homeserver address the session reports, as resolved
+  by the server, which every later restore also uses.
 
 ### Fixed
 
