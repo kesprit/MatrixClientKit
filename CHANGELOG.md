@@ -3,6 +3,51 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
 follows [SemVer](https://semver.org/).
 
+## [0.2.0] - 2026-09-17
+
+### Breaking
+
+- `MatrixSession` requires two new members, `encryption` and `authState`. An application that
+  implements the protocol itself — typically in a test double — must add them, or use
+  `MockMatrixSession`.
+- `MockTimeline.sendError` now makes only `send(_:)` fail. Pagination has its own
+  `paginationError`: a test that relied on `sendError` to fail pagination must switch to it.
+- `SampleData.roomSummary` gains a `membership:` parameter (defaulting to `.joined`), and its
+  fixtures are named "Lounge" instead of "Salon". This change shipped on `main` after 0.1.1 under a
+  commit wrongly labelled as documentation.
+
+### Added
+
+- `MatrixSession.encryption`, an `EncryptionService`: observable verification, recovery and backup
+  states; `isLastDevice()`, `hasDevicesToVerifyAgainst()`, `backupExistsOnServer()`.
+- Device verification by comparing emojis or numbers with another of the user's devices, published
+  as a state machine: `SessionVerification`, `SessionVerificationState`.
+- Recovery: `enableRecovery`, `recover(with:)`, `resetRecoveryKey()`, `disableRecovery()`, and
+  `enableBackups()`. `RecoveryKey` redacts its description.
+- `MatrixSession.authState`: learn that the homeserver ended the session while the application was
+  running. On a revoked session, local data is erased before `.signedOut` is reported.
+- `Matrix.restoreSession(storage:)`: restore a session without knowing the homeserver's address.
+- `MockMatrixClient`, `MockEncryptionService`, `MockSessionVerification`, and
+  `MockMatrixSession.logoutError`.
+
+### Changed
+
+- A cross-signing identity is created at sign-in for accounts that have none, so that the device
+  can be verified.
+- `SyncController.start()` documents that calling it while syncing is running has no effect.
+
+### Fixed
+
+- `MatrixClient.restoreSession()` used the client's homeserver address instead of the one stored
+  with the session.
+- Every string that reaches an application is in English — `MatrixError.errorDescription`, send
+  failure reasons, unsupported timeline items — and an undecryptable message now says why it could
+  not be decrypted.
+
+### Not included
+
+- QR-code verification: the bundled Matrix Rust SDK (26.09.07) does not expose it.
+
 ## [0.1.1] - 2026-09-13
 
 ### Fixed

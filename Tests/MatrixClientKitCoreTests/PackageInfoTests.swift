@@ -3,5 +3,5 @@ import Testing
 
 @Test func packageInfoDeclaresPinnedUpstreamVersion() {
     #expect(PackageInfo.upstreamVersion == "26.09.07")
-    #expect(PackageInfo.version == "0.1.1")
+    #expect(PackageInfo.version == "0.2.0")
 }
