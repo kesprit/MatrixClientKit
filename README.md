@@ -49,6 +49,9 @@ v0.2 does **not** expose:
 - verifying other users, and resetting a lost cryptographic identity;
 - push notifications and the associated service extension.
 
+Because a lost identity cannot be reset yet, set up recovery early: a user who never does and then
+loses or signs out of their last device cannot verify any device of that account again in v0.2.
+
 `MatrixClient.loginDetails()` — which reports the login methods a homeserver accepts — is planned
 but **not implemented** yet: an application that needs to query the homeserver before showing a
 sign-in screen will have to wait. Its absence is a decision, not an oversight.

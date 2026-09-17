@@ -20,6 +20,7 @@ Right after sign-in, read the state and pick one path:
 | ``VerificationStatus/unverified`` and ``EncryptionService/hasDevicesToVerifyAgainst()`` | "Verify with another device" first, "Use your recovery key" second |
 | ``RecoveryState/incomplete`` | "Enter your recovery key" |
 | ``RecoveryState/disabled`` and not ``EncryptionService/backupExistsOnServer()`` | "Set up recovery" |
+| Right after the first sign-in, ``EncryptionService/isLastDevice()`` and ``RecoveryState/disabled`` | "Set up recovery" — without it, losing this device can leave the account unverifiable (see below) |
 | Signing out, ``EncryptionService/isLastDevice()`` and recovery disabled | Warn that encrypted history will be lost |
 
 ```swift
@@ -42,35 +43,48 @@ another value before deciding.
 ``SessionVerification/state`` and call the command the current state allows:
 
 ```swift
-let verification = session.encryption.sessionVerification
-
-Task {
-    for await state in verification.state {
-        switch state {
-        case .incomingRequest(let request):
-            showIncomingRequest(from: request.deviceDisplayName ?? request.deviceID.rawValue)
-        case .ready:
-            try await verification.startSAS()
-        case .comparing(.emojis(let emojis)):
-            showEmojis(emojis)            // then approve() or decline()
-        case .comparing(.decimals(let numbers)):
-            showNumbers(numbers)
-        case .verified:
-            showSuccess()
-        case .cancelled, .failed:
-            showFailure()
-        case .idle, .waitingForOtherDevice, .startingSAS, .confirming:
-            showProgress()
+func observe(_ verification: any SessionVerification, isRequester: Bool) -> Task<Void, Never> {
+    Task {
+        for await state in verification.state {
+            do {
+                switch state {
+                case .incomingRequest(let request):
+                    showIncomingRequest(from: request.deviceDisplayName ?? request.deviceID.rawValue)
+                case .ready:
+                    // Only the device that asked for verification starts the comparison.
+                    if isRequester { try await verification.startSAS() } else { showProgress() }
+                case .comparing(.emojis(let emojis)):
+                    showEmojis(emojis)            // then approve() or decline()
+                case .comparing(.decimals(let numbers)):
+                    showNumbers(numbers)
+                case .verified:
+                    showSuccess()
+                case .cancelled, .failed:
+                    showFailure()
+                case .idle, .waitingForOtherDevice, .startingSAS, .confirming:
+                    showProgress()
+                }
+            } catch {
+                // A command that throws must not end the observation: keep observing.
+            }
         }
     }
 }
 
+// On the device that asks another of the user's devices to verify it:
+let verification = session.encryption.sessionVerification
+let observation = observe(verification, isRequester: true)
 try await verification.requestVerification()
+
+// On the device that receives the request, observe with `isRequester: false`
+// and call accept() or decline() from the incoming request screen.
 ```
 
 A command called in a state that does not allow it throws ``MatrixError/unexpected(message:details:)``
 without doing anything. Only one verification runs at a time: a request that arrives during a flow
-is ignored.
+is ignored. A command driven by a state that is already stale — the other device moved the flow on
+in the meantime — may throw ``MatrixError/unexpected(message:details:)`` too: this is harmless, keep
+observing.
 
 ``SASEmoji/description`` is the English name from the Matrix specification. To localise it, use
 ``SASEmoji/index`` against the specification's SAS emoji table.
@@ -115,8 +129,7 @@ for await state in session.authState {
     switch state {
     case .signedIn: continue
     case .softLoggedOut:
-        try? await session.logout()   // nothing was erased yet; sign in again afterwards
-        showSignIn()
+        try? await session.logout()   // nothing was erased yet: erases it, then reports .signedOut
     case .signedOut:
         showSignIn()                  // local data is already erased
     }
@@ -127,3 +140,9 @@ for await state in session.authState {
 
 Verifying other users, QR-code verification — which the bundled SDK does not expose — and resetting
 a lost cryptographic identity are not part of this version.
+
+Without an identity reset, recovery is the only safety net. For an account that has no cross-signing
+identity, one is created automatically; its private keys live only on this device until recovery is
+set up. If the user never sets up recovery and then loses or signs out of their last device, the
+next sign-in finds an identity whose keys are gone and no device to verify against: that account
+stays unverified in this version. Offer to set up recovery right after the first sign-in.
