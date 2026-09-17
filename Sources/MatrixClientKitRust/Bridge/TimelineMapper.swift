@@ -41,20 +41,50 @@ enum TimelineMapper {
     ///
     /// - Important: `reason` finit dans une interface. Y déverser `String(describing:)` d'un enum
     ///   amont y ferait apparaître des identifiants Swift.
-    private static func reason(from error: QueueWedgeError) -> String {
+    static func reason(from error: QueueWedgeError) -> String {
         switch error {
         case .insecureDevices:
-            "des appareils non vérifiés sont présents dans la room"
+            "The room contains unverified devices."
         case .identityViolations:
-            "l'identité d'un participant a changé et doit être vérifiée à nouveau"
+            "A participant's identity changed and must be verified again."
         case .crossVerificationRequired:
-            "cette session doit être vérifiée avant de pouvoir envoyer des messages"
+            "This session must be verified before it can send messages."
         case .missingMediaContent:
-            "le média à envoyer est introuvable dans le cache"
+            "The media to send is missing from the cache."
         case let .invalidMimeType(mimeType):
-            "type de contenu non pris en charge : \(mimeType)"
+            "Unsupported content type: \(mimeType)."
         case let .genericApiError(msg):
-            msg.isEmpty ? "l'envoi a échoué" : msg
+            msg.isEmpty ? "Sending failed." : msg
+        }
+    }
+
+    /// Explique pourquoi un message n'a pas pu être déchiffré, à partir de la cause amont.
+    ///
+    /// - Note: seule la variante Megolm porte une cause ; les autres reçoivent la phrase générique.
+    static func decryptionFailureReason(for message: EncryptedMessage) -> String {
+        guard case let .megolmV1AesSha2(_, cause) = message else {
+            return "The message could not be decrypted."
+        }
+
+        switch cause {
+        case .unknown:
+            return "The message could not be decrypted."
+        case .sentBeforeWeJoined:
+            return "Sent before you joined the room."
+        case .verificationViolation:
+            return "The sender's verified identity has changed."
+        case .unsignedDevice:
+            return "Sent from a device its owner has not verified."
+        case .unknownDevice:
+            return "Sent from an unknown device."
+        case .historicalMessageAndBackupIsDisabled:
+            return "Sent before this device signed in, and key backup is off."
+        case .historicalMessageAndDeviceIsUnverified:
+            return "Sent before this device signed in; verify this device to read it."
+        case .withheldForUnverifiedOrInsecureDevice:
+            return "The sender does not share keys with unverified devices."
+        case .withheldBySender:
+            return "The sender withheld the keys for this message."
         }
     }
 
@@ -77,7 +107,7 @@ enum TimelineMapper {
             case .timelineStart:
                 return MatrixClientKitCore.TimelineItem(
                     id: id,
-                    kind: .unsupported(description: "début de timeline")
+                    kind: .unsupported(description: "Start of the timeline")
                 )
             }
         }
@@ -92,13 +122,13 @@ enum TimelineMapper {
         from event: EventTimelineItem
     ) -> MatrixClientKitCore.TimelineItem.Kind {
         guard case let .msgLike(content) = event.content else {
-            return .unsupported(description: event.eventTypeRaw ?? "événement non pris en charge")
+            return .unsupported(description: event.eventTypeRaw ?? "Unsupported event")
         }
 
         switch content.kind {
         case let .message(message):
             guard let sender = UserID(rawValue: event.sender) else {
-                return .unsupported(description: "expéditeur invalide : \(event.sender)")
+                return .unsupported(description: "Invalid sender: \(event.sender)")
             }
 
             return .message(
@@ -115,8 +145,8 @@ enum TimelineMapper {
             )
         case .redacted:
             return .redacted
-        case .unableToDecrypt:
-            return .unableToDecrypt(reason: "message chiffré non déchiffrable")
+        case let .unableToDecrypt(msg):
+            return .unableToDecrypt(reason: decryptionFailureReason(for: msg))
         case .sticker, .poll, .other, .liveLocation:
             return .unsupported(description: String(describing: content.kind))
         }

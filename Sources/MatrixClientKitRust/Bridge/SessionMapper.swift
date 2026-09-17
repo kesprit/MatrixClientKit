@@ -8,19 +8,19 @@ enum SessionMapper {
     static func sessionData(from session: Session) throws -> MatrixSessionData {
         guard let userID = UserID(rawValue: session.userId) else {
             throw MatrixError.unexpected(
-                message: "Identifiant utilisateur invalide renvoyé par le serveur",
+                message: "The server returned an invalid user ID.",
                 details: session.userId
             )
         }
         guard let deviceID = DeviceID(rawValue: session.deviceId) else {
             throw MatrixError.unexpected(
-                message: "Identifiant d'appareil invalide renvoyé par le serveur",
+                message: "The server returned an invalid device ID.",
                 details: session.deviceId
             )
         }
         guard let homeserverURL = URL(string: session.homeserverUrl) else {
             throw MatrixError.unexpected(
-                message: "Adresse de homeserver invalide",
+                message: "The server returned an invalid homeserver URL.",
                 details: session.homeserverUrl
             )
         }

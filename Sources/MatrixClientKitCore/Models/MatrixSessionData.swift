@@ -62,7 +62,7 @@ extension UserID: Codable {
         let raw = try decoder.singleValueContainer().decode(String.self)
         guard let value = UserID(rawValue: raw) else {
             throw DecodingError.dataCorrupted(
-                .init(codingPath: decoder.codingPath, debugDescription: "identifiant utilisateur invalide : \(raw)")
+                .init(codingPath: decoder.codingPath, debugDescription: "Invalid user ID: \(raw)")
             )
         }
         self = value
@@ -79,7 +79,7 @@ extension DeviceID: Codable {
         let raw = try decoder.singleValueContainer().decode(String.self)
         guard let value = DeviceID(rawValue: raw) else {
             throw DecodingError.dataCorrupted(
-                .init(codingPath: decoder.codingPath, debugDescription: "identifiant d'appareil invalide : \(raw)")
+                .init(codingPath: decoder.codingPath, debugDescription: "Invalid device ID: \(raw)")
             )
         }
         self = value

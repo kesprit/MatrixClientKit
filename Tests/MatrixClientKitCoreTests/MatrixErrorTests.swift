@@ -55,3 +55,10 @@ import Testing
         MatrixError.authentication(.captchaRequired)
             != MatrixError.authentication(.captchaInvalid))
 }
+
+@Test func errorDescriptionsAreInEnglish() {
+    #expect(MatrixError.network(.offline).errorDescription == "Network error: offline")
+    #expect(MatrixError.rateLimited(retryAfter: nil).errorDescription == "Too many requests. Try again later.")
+    #expect(
+        MatrixError.unexpected(message: "", details: nil).errorDescription == "Unexpected Matrix SDK error.")
+}

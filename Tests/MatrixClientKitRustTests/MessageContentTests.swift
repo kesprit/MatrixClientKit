@@ -30,7 +30,7 @@ import MatrixClientKitCore
     // `reason` finit dans une interface : il doit être lisible, pas un nom de cas Swift amont.
     guard case let .failed(reason, isRecoverable) = failed else { return }
     #expect(!reason.contains("crossVerificationRequired"))
-    #expect(reason.contains("vérifiée"))
+    #expect(reason.contains("verified"))
     // Relayé depuis l'amont, pas reconstruit : c'est la seule information sur laquelle une
     // interface décide d'offrir « réessayer ».
     #expect(isRecoverable)
@@ -45,7 +45,7 @@ func recoverabilityIsRelayedFromUpstream(isRecoverable: Bool) {
         from: .sendingFailed(error: .missingMediaContent, isRecoverable: isRecoverable))
 
     let expected = SendState.failed(
-        reason: "le média à envoyer est introuvable dans le cache",
+        reason: "The media to send is missing from the cache.",
         isRecoverable: isRecoverable
     )
     #expect(state == expected)

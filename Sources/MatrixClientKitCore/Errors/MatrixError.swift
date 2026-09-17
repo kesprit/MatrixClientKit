@@ -108,21 +108,21 @@ public enum MatrixError: Error, Sendable, Hashable, LocalizedError {
     ///   package is out of scope for v0.1.
     public var errorDescription: String? {
         switch self {
-        case let .authentication(value): return "Erreur d'authentification : \(value)"
-        case let .network(value): return "Erreur réseau : \(value)"
+        case let .authentication(value): return "Authentication error: \(value)"
+        case let .network(value): return "Network error: \(value)"
         case let .rateLimited(delay):
-            guard let delay else { return "Trop de requêtes. Réessayez plus tard." }
-            return "Trop de requêtes. Réessayez dans \(delay)."
-        case let .permission(value): return "Permission refusée : \(value)"
-        case let .notFound(resource): return "Ressource introuvable : \(resource)"
-        case let .encryption(value): return "Erreur de chiffrement : \(value)"
-        case let .server(value): return "Erreur du serveur : \(value)"
-        case let .storage(value): return "Erreur de stockage : \(value)"
+            guard let delay else { return "Too many requests. Try again later." }
+            return "Too many requests. Try again in \(delay)."
+        case let .permission(value): return "Permission denied: \(value)"
+        case let .notFound(resource): return "Not found: \(resource)"
+        case let .encryption(value): return "Encryption error: \(value)"
+        case let .server(value): return "Server error: \(value)"
+        case let .storage(value): return "Storage error: \(value)"
         case let .unexpected(message, details):
             // Toute erreur amont non encore distinguée atterrit ici (règle d'évolution du type),
             // y compris celles dont le SDK ne fournit aucun message. Rendre la chaîne vide
             // laisserait une interface afficher un cadre d'erreur sans une ligne de texte.
-            let text = message.isEmpty ? "Erreur inattendue du SDK Matrix." : message
+            let text = message.isEmpty ? "Unexpected Matrix SDK error." : message
             guard let details, !details.isEmpty else { return text }
             return "\(text) (\(details))"
         }
