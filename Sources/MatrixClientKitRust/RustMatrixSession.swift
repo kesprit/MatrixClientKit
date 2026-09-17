@@ -21,7 +21,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     private let authDelegateHandle: TaskHandle?
 
     /// Obtient le contrôleur de vérification dès que l'amont le permet (voir
-    /// ``watchForVerificationController(verification:sync:)``).
+    /// ``watchForVerificationController(verification:encryption:)``).
     private let controllerWatcher: Task<Void, Never>
 
     private init(
@@ -128,14 +128,25 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     /// avant ce chargement et y reste — s'y fier laisserait le contrôleur jamais obtenu.
     ///
     /// Tentative à chaque valeur du flux, qui commence par la valeur courante, jusqu'au premier
-    /// succès.
+    /// succès (voir ``retryUntilSuccess(on:attempt:)``).
     private static func watchForVerificationController(
         verification: RustSessionVerification,
         encryption: RustEncryptionService
     ) -> Task<Void, Never> {
+        retryUntilSuccess(on: encryption.verificationStatus) {
+            (try? await verification.ensureController()) != nil
+        }
+    }
+
+    /// Appelle `attempt` à chaque valeur de `values`, et s'arrête au premier appel qui réussit —
+    /// les valeurs suivantes ne déclenchent plus rien.
+    static func retryUntilSuccess(
+        on values: AsyncStream<VerificationStatus>,
+        attempt: @escaping @Sendable () async -> Bool
+    ) -> Task<Void, Never> {
         Task {
-            for await _ in encryption.verificationStatus {
-                if (try? await verification.ensureController()) != nil { return }
+            for await _ in values {
+                if await attempt() { return }
             }
         }
     }
