@@ -94,13 +94,14 @@ final class SessionLifecycle: Sendable {
 
         defer { continuation.finish() }
 
-        let wasSoftLoggedOut = current == .softLoggedOut
-
         await stopSync()
 
         do {
             try await server()
         } catch {
+            // Lu ici, avant la publication de `.signedOut` : un soft logout survenu pendant
+            // l'appel serveur rend lui aussi `unknownToken` attendu.
+            let wasSoftLoggedOut = current == .softLoggedOut
             try? erase()
             broadcaster.update { _ in .signedOut }
 

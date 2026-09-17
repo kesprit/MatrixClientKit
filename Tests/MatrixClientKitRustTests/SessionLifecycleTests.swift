@@ -118,6 +118,19 @@ private let unknownToken = ClientError.MatrixApi(
     #expect(lifecycle.current == .signedOut)
 }
 
+@Test func aSoftLogoutArrivingDuringTheServerCallStillSwallowsTheTokenError() async throws {
+    let journal = Journal()
+    let lifecycle = makeLifecycle(journal: journal)
+
+    // Le soft logout arrive pendant l'appel serveur, après le début de `logout()`.
+    try await lifecycle.logout {
+        lifecycle.handleAuthError(isSoftLogout: true)
+        throw unknownToken
+    }
+
+    #expect(lifecycle.current == .signedOut)
+}
+
 @Test func logoutStillErasesThenRethrowsAnyOtherServerError() async {
     let journal = Journal()
     let lifecycle = makeLifecycle(journal: journal)
