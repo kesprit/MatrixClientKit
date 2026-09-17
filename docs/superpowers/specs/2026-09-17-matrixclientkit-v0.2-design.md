@@ -21,9 +21,9 @@ session et de testabilité relevés à l'usage de la 0.1.
 | Récupération : activer, récupérer, régénérer la clé, désactiver ; activer la sauvegarde | Reset d'identité / cross-signing (ultérieur) |
 | `Matrix.restoreSession(storage:)` sans URL | Passphrase de récupération, `recoverAndFixBackup`, `recoverAndReset` |
 | `authState` : déconnexion côté serveur | Reconnexion sur le même appareil après soft logout (0.4) |
-| Idempotence documentée de `SyncController.start()` | Push et extension (0.3) ; médias, OAuth, `loginDetails()` (0.4) |
+| Amorçage automatique du cross-signing ; idempotence documentée de `SyncController.start()` | Push et extension (0.3) ; médias, OAuth, `loginDetails()` (0.4) |
 | Mocks : client, chiffrement, vérification ; corrections de `MockTimeline` et `MockMatrixSession` | `AsyncThrowingStream` |
-| Correction du motif UTD en dur (français) dans la timeline | Typage de la cause UTD (cassant) |
+| Chaînes visibles de la timeline en anglais (motif UTD dérivé de la cause) | Typage de la cause UTD (cassant) |
 
 ## 2. Constats amont (release `26.09.07`)
 
@@ -47,7 +47,20 @@ session et de testabilité relevés à l'usage de la 0.1.
 7. **Défauts 0.1 relevés** : `RustMatrixClient.restoreSession()` construit le client avec l'URL
    passée au client et ignore `MatrixSessionData.homeserverURL` ; `TimelineMapper` renvoie
    `.unableToDecrypt(reason: "message chiffré non déchiffrable")`, chaîne française en dur et sans
-   cause.
+   cause. Les autres chaînes visibles du même mappeur (motifs d'échec d'envoi, descriptions
+   `.unsupported`) sont elles aussi en français.
+8. **Cross-signing jamais amorcé.** `ClientBuilder` a `auto_enable_cross_signing: false` par
+   défaut, et `RustMatrixClient` ne le change pas : un compte qui ne s'est connecté que via
+   MatrixClientKit n'a pas d'identité. Or `get_session_verification_controller` lit l'identité de
+   l'utilisateur dans le store local et échoue (« Failed retrieving user identity ») si elle est
+   absente — donc aussi avant que la première sync ne l'ait chargée.
+9. **`SyncService::start` est idempotent** (source au commit `48e07662`, référencé par la release
+   `26.09.07`) : verrou, aucun effet si l'état est `Running`, redémarrage depuis `Offline`, démarrage
+   depuis `Idle`/`Terminated`/`Error`.
+10. **Mauvaise clé de récupération** : `recover` renvoie `RecoveryError.SecretStorage(errorMessage:)`
+    dont le message provient d'un `DecodeError` (préfixe, parité, Base58, longueur) ou d'un échec
+    MAC (« The MAC check for the secret storage key failed »). Une récupération jamais configurée
+    produit la même variante, avec « could not have been found in the account data ».
 
 ## 3. Décisions actées
 
@@ -63,6 +76,7 @@ session et de testabilité relevés à l'usage de la 0.1.
 | Motif UTD | Texte anglais dérivé de la cause amont ; `reason: String` inchangé |
 | Clé de récupération | Type `RecoveryKey` à description masquée |
 | Progression de `enableRecovery` | Closure `@Sendable`, pas de flux séparé |
+| Identité cross-signing | `ClientBuilder.autoEnableCrossSigning(true)` sur le client persistant ; aucune API publique |
 
 Toutes les contraintes du brief s'appliquent : Core n'importe jamais `MatrixRustSDK`, aucun type
 amont en signature publique, aucun `@MainActor` dans Core ni Rust, types publics `Sendable`,
@@ -275,9 +289,10 @@ l'état courant, hors `didCancel`/`didFail`, laisse l'état inchangé.
   sont faites de façon synchrone dans le callback. Chaque nouvel abonné reçoit l'état courant, puis
   les changements.
 - **Obtention du contrôleur.** Le delegate doit être posé avant qu'une demande n'arrive.
-  `getSessionVerificationController()` est appelé à la création de la session, sans bloquer ni
-  faire échouer celle-ci. En cas d'échec, l'appel est retenté à la prochaine commande et au premier
-  passage de la sync à `.running`. Le contrôleur et son delegate sont retenus par
+  `getSessionVerificationController()` exige l'identité de l'utilisateur dans le store local (§2.8) :
+  il est tenté à la création de la session, sans bloquer ni faire échouer celle-ci, puis retenté à
+  chaque passage de la sync à `.running` et à chaque commande tant qu'il n'a pas réussi. Une
+  commande dont la tentative échoue lève l'erreur mappée. Le contrôleur et son delegate sont retenus par
   `RustSessionVerification` pour la durée de la session.
 
 ## 7. Récupération et sauvegarde
@@ -291,9 +306,10 @@ l'état courant, hors `didCancel`/`didFail`, laisse l'état inchangé.
 
 | Amont | Public |
 | --- | --- |
-| Clé de récupération refusée (variante exacte à établir, §11) | `.encryption(.invalidRecoveryKey)` |
+| `SecretStorage` pendant `recover(with:)`, sauf message « could not have been found » | `.encryption(.invalidRecoveryKey)` |
+| `SecretStorage` « could not have been found » (récupération non configurée) | `.unexpected(message:details:)` |
 | `BackupExistsOnServer` | `.unexpected(message:details:)` |
-| `Import`, `SecretStorage` (hors clé invalide) | `.unexpected(message:details:)` |
+| `Import`, `SecretStorage` hors `recover(with:)` | `.unexpected(message:details:)` |
 | `Client(source:)` | mappage existant d'`ErrorMapper` |
 
 « Une sauvegarde existe déjà » se lit avant d'agir : `recoveryState == .incomplete` ou
@@ -340,17 +356,12 @@ l'URL du client : correction (`fix:`), sans changement de signature.
 
 ### 8.4 Idempotence de `SyncController.start()`
 
-1. Lire `SyncService::start` dans `matrix-rust-sdk` au tag correspondant à `26.09.07`.
-2. Si l'amont ne fait rien quand le service tourne déjà : épingler le contrat par un test et le
-   documenter.
-3. Sinon : `RustSyncController` sérialise `start()`/`stop()` sous `Mutex` ; `start()` ne fait rien
-   si un démarrage est en cours ou si le dernier état observé est `.running`, et redémarre après
-   `.error`, `.terminated` ou `.offline`.
+L'amont est idempotent (§2.9) : aucune garde n'est ajoutée. Le contrat est documenté sur
+``SyncController/start()`` — « Calling `start()` while syncing is already running has no effect;
+after `.offline`, `.error` or `.terminated` it starts syncing again. » — et épinglé par un test
+d'intégration (deux `start()` successifs, l'état reste `.running` sans repasser par `.idle`).
 
-Commentaire de doc dans les deux cas : « Calling `start()` while syncing is already running has no
-effect. »
-
-## 9. Timeline : motif d'échec de déchiffrement
+## 9. Timeline : chaînes visibles en anglais
 
 `TimelineMapper` dérive `reason` de `EncryptedMessage.megolmV1AesSha2(…, cause: UtdCause)`
 (module `matrix_sdk_crypto`), en anglais, une phrase par cause. Les autres variantes
@@ -369,6 +380,10 @@ change pas ; le texte exact est fixé par les tests.
 | `withheldForUnverifiedOrInsecureDevice` | The sender does not share keys with unverified devices. |
 | `withheldBySender` | The sender withheld the keys for this message. |
 
+Même défaut, même correction pour les autres chaînes visibles de `TimelineMapper` : motifs
+`SendState.failed(reason:)` tirés de `QueueWedgeError`, et descriptions `.unsupported` (« début de
+timeline », « événement non pris en charge », « expéditeur invalide »).
+
 ## 10. Mocks
 
 Style identique à l'existant : classes `@unchecked Sendable` protégées par `NSLock`, flux créés par
@@ -385,16 +400,16 @@ Style identique à l'existant : classes `@unchecked Sendable` protégées par `N
 `Matrix.restoreSession(storage:)` étant statique, `TestingWithMocks.md` montre comment l'injecter
 sous forme de closure `() async throws -> (any MatrixSession)?`. Pas de protocole dédié.
 
-## 11. Vérifications amont préalables
+## 11. Vérifications amont
 
-Première tâche du plan, avant tout code de production. Chaque réponse est consignée dans cette
-spec si elle la contredit.
+Trois questions ont été tranchées par lecture du source amont (§2.8 à §2.10). Restent deux points
+qui ne se vérifient que contre un vrai serveur ; ils sont couverts par la suite d'intégration, pas
+par une tâche préalable :
 
-| Question | Méthode | Conséquence |
+| Question | Test d'intégration | Conséquence si la réponse est non |
 | --- | --- | --- |
-| `getSessionVerificationController()` réussit-il avant la première sync ? | Essai contre le homeserver d'intégration | Confirme ou simplifie la stratégie de relance de §6.2 |
-| Quelle erreur amont produit une mauvaise clé de récupération ? | Essai contre le homeserver d'intégration | Fixe le mappage vers `.invalidRecoveryKey` (§7.1) |
-| `SyncService::start` ne fait-il rien quand le service tourne ? | Lecture du source amont au tag | Choisit la branche 2 ou 3 de §8.4 |
+| L'amorçage automatique du cross-signing réussit-il sans UIAA sur le homeserver de test ? | Vérification croisée (§12, cas 1) sur un compte neuf | Documenter la limite ; l'API explicite d'amorçage devient un candidat du palier suivant |
+| Le message d'une mauvaise clé correspond-il bien à §2.10 ? | Récupération (§12, cas 2) | Corriger le mappage de §7.1 |
 
 ## 12. Tests
 
@@ -407,7 +422,8 @@ TDD, Swift Testing uniquement.
   mappers d'état, de progression et d'erreur ; valeur courante émise en premier ; ordre des
   callbacks et abonnés multiples ; retenue du contrôleur et relance de son obtention ; purge
   **avant** `.signedOut` et traitement unique du hard logout ; `logout()` après soft logout et
-  après `.signedOut` ; idempotence de `start()` ; restauration avec l'URL persistée ; motifs UTD.
+  après `.signedOut` ; relance de l'obtention du contrôleur ; restauration avec l'URL persistée ;
+  chaînes de `TimelineMapper`.
 - **Intégration** (homeserver réel, désactivée par défaut) :
   1. deux sessions du même utilisateur dans des répertoires distincts — B demande, A accepte, SAS,
      approbations croisées, `verificationStatus == .verified` des deux côtés ;
@@ -415,7 +431,8 @@ TDD, Swift Testing uniquement.
      `.encryption(.invalidRecoveryKey)` ;
   3. `POST /_matrix/client/v3/logout/all` brut via `URLSession`, avec un jeton obtenu par une
      connexion brute séparée — la session observée passe à `.signedOut` et son store a disparu ;
-  4. `Matrix.restoreSession(storage:)` restaure sans URL.
+  4. `Matrix.restoreSession(storage:)` restaure sans URL ;
+  5. deux `start()` successifs laissent la sync `.running`.
 
 Critères : `swift test --skip MatrixClientKitIntegrationTests` vert,
 `swift format lint --recursive --strict Sources Tests` propre, CI verte (build iOS compris), suite
@@ -443,8 +460,9 @@ d'intégration verte avant publication.
   `authState`, `Matrix.restoreSession(storage:)`, `MockMatrixClient`, `MockEncryptionService`,
   `MockSessionVerification`, `MockMatrixSession.logoutError`.
 - *Fixed* : la restauration utilise l'URL persistée ; motif UTD en anglais et explicite.
-- *Changed* : idempotence de `SyncController.start()` documentée (et garantie si l'amont ne la
-  fournit pas).
+- *Changed* : le cross-signing est amorcé automatiquement à la connexion ; idempotence de
+  `SyncController.start()` documentée.
+- *Fixed* (suite) : toutes les chaînes visibles de la timeline sont en anglais.
 
 **Étapes** : `PackageInfo.version = "0.2.0"`, suite d'intégration verte, tag `0.2.0` poussé,
 release GitHub publiée. Type de commit fidèle au contenu : un commit qui change une API publique
@@ -454,8 +472,9 @@ n'est jamais un `docs:`.
 
 | Risque | Parade |
 | --- | --- |
-| Contrôleur de vérification indisponible avant la sync : demandes entrantes perdues | Vérification préalable (§11) ; relance au passage `.running` |
-| Mappage de la mauvaise clé supposé et faux | Épinglé par la suite d'intégration, pas par hypothèse |
+| Contrôleur de vérification indisponible avant la sync : demandes entrantes perdues | Relance à chaque passage `.running` et à chaque commande |
+| Amorçage du cross-signing refusé par un serveur exigeant l'UIAA | Suite d'intégration sur compte neuf ; limite documentée |
+| Mappage de la mauvaise clé fondé sur un message amont | Épinglé par test unitaire et par la suite d'intégration |
 | Callbacks amont réordonnés | Réduction synchrone sous `Mutex`, jamais de `Task` par callback |
 | Purge concurrente d'un store encore ouvert par le client | Arrêt de la sync avant purge, comme `logout()` en 0.1 |
 | Changements cassants mal signalés | Rubrique *Breaking* du CHANGELOG, vérifiée dans la tâche de publication |
