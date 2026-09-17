@@ -44,25 +44,46 @@ struct EncryptionAndSessionTests {
     @Test(.timeLimit(.minutes(1)))
     func startingSyncTwiceKeepsItRunning() async throws {
         let configuration = try #require(IntegrationConfiguration.current)
-        let (session, directory) = try await signIn(configuration, deviceName: "MatrixClientKit Integration (sync)")
+        let integration = makeClient(configuration)
+        let directory = integration.directory
+        let session = try await integration.client.login(
+            .password(
+                username: configuration.username,
+                password: configuration.password,
+                deviceName: "MatrixClientKit Integration (sync)"
+            )
+        )
 
+        // Deux abonnements posés avant le premier `start()` : le flux de sync ne rejoue pas
+        // l'état courant, donc les ouvrir après aurait manqué la transition vers `.running` que
+        // ce test doit justement observer.
+        let states = session.sync.state
+        let untilRunning = session.sync.state
         let observed = Task {
-            var states: [SyncState] = []
-            for await state in session.sync.state {
-                states.append(state)
+            var collected: [SyncState] = []
+            for await state in states {
+                collected.append(state)
             }
-            return states
+            return collected
         }
-        try await Task.sleep(for: .milliseconds(200))
 
+        await session.sync.start()
+        _ = await firstValue(of: untilRunning) { $0 == .running }
+
+        // Second démarrage pendant que la sync tourne déjà : sans effet d'après le contrat
+        // documenté sur `SyncController.start()`.
         await session.sync.start()
         try await Task.sleep(for: .seconds(3))
         observed.cancel()
-        let states = await observed.value
+        let collected = await observed.value
 
-        // Un second démarrage qui relancerait la sync repasserait par un état d'arrêt.
-        #expect(!states.contains(.idle))
-        #expect(!states.contains(.terminated))
+        #expect(collected.contains(.running))
+        let runningIndex = try #require(collected.firstIndex(of: .running))
+        // Un second démarrage qui relancerait la sync repasserait par un état d'arrêt après le
+        // premier `.running`.
+        let afterRunning = collected[runningIndex...]
+        #expect(!afterRunning.contains(.idle))
+        #expect(!afterRunning.contains(.terminated))
 
         await cleaningUp {
             await session.sync.stop()
