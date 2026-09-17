@@ -8,7 +8,11 @@ import MatrixClientKitCore
 /// `.signedOut` peut compter sur un disque déjà propre.
 final class SessionLifecycle: Sendable {
     private let broadcaster = StateBroadcaster<AuthState>(.signedIn)
-    private let terminationClaimed = Mutex(false)
+    /// La tâche qui termine la session, une fois revendiquée par le premier appelant (hard
+    /// logout ou `logout()`). Sert de rendez-vous : un appelant qui arrive pendant qu'une
+    /// terminaison est déjà en cours l'attend au lieu de rejouer le travail, et la retrouve déjà
+    /// terminée si la session est déjà `.signedOut`.
+    private let termination = Mutex<Task<Void, Never>?>(nil)
     private let stopSync: @Sendable () async -> Void
     private let erase: @Sendable () throws -> Void
 
@@ -33,7 +37,8 @@ final class SessionLifecycle: Sendable {
     /// Le callback amont est synchrone alors que l'arrêt de la sync est asynchrone : la
     /// terminaison part dans un `Task`, renvoyé pour que les tests puissent l'attendre. La
     /// revendication de terminaison, elle, est synchrone : un callback répété ne lance jamais une
-    /// seconde purge.
+    /// seconde purge, et ne reçoit jamais la tâche de quelqu'un d'autre — seul le revendicateur la
+    /// récupère, les autres reçoivent `nil` comme avant.
     @discardableResult
     func handleAuthError(isSoftLogout: Bool) -> Task<Void, Never>? {
         if isSoftLogout {
@@ -41,14 +46,16 @@ final class SessionLifecycle: Sendable {
             return nil
         }
 
-        guard claimTermination() else { return nil }
-        return Task {
-            await self.stopSync()
-            // Un effacement en échec est avalé : la session est morte côté serveur quoi qu'il
-            // arrive, et la laisser en `.signedIn` promettrait une session qui n'existe plus.
-            try? self.erase()
-            self.broadcaster.update { _ in .signedOut }
+        let (isClaimant, task) = claimOrJoinTermination {
+            Task {
+                await self.stopSync()
+                // Un effacement en échec est avalé : la session est morte côté serveur quoi qu'il
+                // arrive, et la laisser en `.signedIn` promettrait une session qui n'existe plus.
+                try? self.erase()
+                self.broadcaster.update { _ in .signedOut }
+            }
         }
+        return isClaimant ? task : nil
     }
 
     /// Déconnexion demandée par l'application.
@@ -57,8 +64,36 @@ final class SessionLifecycle: Sendable {
     ///   se déconnecte hors ligne ne doit pas rester connecté localement. L'erreur serveur remonte
     ///   ensuite, sauf `unknownToken` après un soft logout : le serveur a déjà refusé ce jeton, la
     ///   déconnexion a donc abouti.
+    ///
+    /// - Note: si une terminaison est déjà en cours — un hard logout, ou un autre appel à
+    ///   `logout()` — cet appel ne rejoue rien : il attend la fin de celle-ci puis ressort sans
+    ///   erreur ni appel serveur. Rejouer le travail doublerait l'effacement, et rendre la main
+    ///   avant la fin de l'autre terminaison exposerait un état encore périmé (`current` pas
+    ///   encore `.signedOut`) à un appelant qui croirait la déconnexion terminée.
     func logout(server: @Sendable () async throws -> Void) async throws {
-        guard claimTermination() else { return }
+        // Un simple relais : `stream` ne porte aucune valeur, sa seule fin (`continuation.finish`
+        // ci-dessous) signale que le travail réel — fait par le revendicateur, plus bas — est
+        // terminé, qu'il ait réussi ou levé une erreur. Ce relais n'est jamais construit ni gardé
+        // si quelqu'un d'autre a déjà revendiqué la terminaison.
+        let (stream, continuation) = AsyncStream<Void>.makeStream()
+        let (isClaimant, relay) = claimOrJoinTermination {
+            Task {
+                var iterator = stream.makeAsyncIterator()
+                _ = await iterator.next()
+            }
+        }
+
+        guard isClaimant else {
+            // Perdant : la déconnexion a de toute façon abouti (ou est en train d'aboutir)
+            // ailleurs, donc pas d'erreur à lever ici — seulement attendre qu'elle le soit
+            // réellement avant de ressortir, pour ne jamais laisser croire à un appelant que
+            // `current` reflète déjà `.signedOut` alors que l'effacement est encore en vol.
+            await relay.value
+            return
+        }
+
+        defer { continuation.finish() }
+
         let wasSoftLoggedOut = current == .softLoggedOut
 
         await stopSync()
@@ -84,11 +119,21 @@ final class SessionLifecycle: Sendable {
         }
     }
 
-    private func claimTermination() -> Bool {
-        terminationClaimed.withLock { claimed in
-            guard !claimed else { return false }
-            claimed = true
-            return true
+    /// Revendique la terminaison si elle ne l'est pas déjà, sous le même verrou que la lecture —
+    /// pas de fenêtre où deux appelants se croient tous deux revendicateurs. Le premier à passer
+    /// ici construit `task` (le travail réel pour le hard logout, un simple relais de fin pour
+    /// `logout()`) et le stocke ; les suivants reçoivent ce même `task` sans jamais exécuter
+    /// `makeTask`, donc sans jamais rejouer le travail.
+    private func claimOrJoinTermination(
+        makingTask makeTask: () -> Task<Void, Never>
+    ) -> (isClaimant: Bool, task: Task<Void, Never>) {
+        termination.withLock { stored in
+            if let stored {
+                return (false, stored)
+            }
+            let task = makeTask()
+            stored = task
+            return (true, task)
         }
     }
 }

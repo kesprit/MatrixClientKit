@@ -152,3 +152,76 @@ private let unknownToken = ClientError.MatrixApi(
 
     #expect(lifecycle.current == .softLoggedOut)
 }
+
+/// Porte franchie par `stopSync`, pour figer une terminaison en plein vol le temps que le test
+/// vérifie qu'un `logout()` concurrent attend plutôt que de rendre la main en avance.
+private final class Gate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    var isSuspended: Bool { lock.withLock { continuation != nil } }
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            lock.withLock { self.continuation = continuation }
+        }
+    }
+
+    func release() {
+        let continuation = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            defer { self.continuation = nil }
+            return self.continuation
+        }
+        continuation?.resume()
+    }
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aLogoutConcurrentWithAnInFlightHardLogoutWaitsForItInsteadOfReturningEarly() async throws {
+    let journal = Journal()
+    let gate = Gate()
+    let ref = LifecycleRef()
+    let lifecycle = SessionLifecycle(
+        stopSync: {
+            journal.append("stopSync")
+            await gate.wait()
+        },
+        erase: {
+            journal.append("erase while \(ref.lifecycle.map { "\($0.current)" } ?? "?")")
+        }
+    )
+    ref.lifecycle = lifecycle
+
+    let hardLogout = lifecycle.handleAuthError(isSoftLogout: false)
+
+    // Laisse le hard logout atteindre son arrêt de sync suspendu avant de tenter un logout()
+    // concurrent : c'est exactement la fenêtre où l'ancien code rendait la main trop tôt.
+    while !gate.isSuspended {
+        await Task.yield()
+    }
+
+    let logout = Task {
+        try await lifecycle.logout { journal.append("server") }
+        journal.append("logoutReturned")
+    }
+
+    // Cède la main un grand nombre de fois : un `logout()` bogué qui rendrait la main tout de
+    // suite (sans `await` avant son `return` anticipé) aurait largement eu l'occasion de finir
+    // et d'ajouter "logoutReturned" pendant cette boucle.
+    for _ in 0..<50 {
+        await Task.yield()
+    }
+
+    // Tant que le hard logout n'a pas fini d'effacer et de publier .signedOut, le logout()
+    // perdant doit rester suspendu au lieu de rendre la main avec un état encore périmé.
+    #expect(!journal.all.contains("logoutReturned"))
+    #expect(lifecycle.current != .signedOut)
+
+    gate.release()
+    await hardLogout?.value
+    try await logout.value
+
+    #expect(!journal.all.contains("server"))
+    #expect(journal.all.filter { $0.hasPrefix("erase") }.count == 1)
+    #expect(lifecycle.current == .signedOut)
+}
