@@ -77,7 +77,8 @@ let observation = observe(verification, isRequester: true)
 try await verification.requestVerification()
 
 // On the device that receives the request, observe with `isRequester: false`
-// and call accept() or decline() from the incoming request screen.
+// and call accept() or cancel() from the incoming request screen — cancel()
+// is what refuses a request; decline() only rejects emojis that don't match.
 ```
 
 A command called in a state that does not allow it throws ``MatrixError/unexpected(message:details:)``
