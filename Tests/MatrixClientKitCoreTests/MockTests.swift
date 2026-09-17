@@ -164,3 +164,33 @@ func mockSyncControllerStreamCanBeFinished() async {
 
     #expect(states == [.running])
 }
+
+@Test func mockSessionExposesADrivableEncryptionService() async {
+    let encryption = MockEncryptionService()
+    let session = MockMatrixSession(encryption: encryption)
+    var iterator = session.encryption.verificationStatus.makeAsyncIterator()
+
+    encryption.emitVerificationStatus(.verified)
+
+    #expect(await iterator.next() == .verified)
+}
+
+@Test func mockSessionDeliversEmittedAuthStates() async {
+    let session = MockMatrixSession()
+    var iterator = session.authState.makeAsyncIterator()
+
+    session.emitAuthState(.signedOut)
+
+    #expect(await iterator.next() == .signedOut)
+}
+
+@Test func mockSessionLogoutCanFail() async {
+    let session = MockMatrixSession()
+    session.logoutError = .network(.offline)
+
+    await #expect(throws: MatrixError.network(.offline)) {
+        try await session.logout()
+    }
+    // Comme la vraie session, la tentative compte : l'effacement local a lieu même en cas d'échec.
+    #expect(session.didLogout)
+}
