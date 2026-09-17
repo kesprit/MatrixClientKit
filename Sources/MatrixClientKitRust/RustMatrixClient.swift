@@ -6,22 +6,16 @@ import MatrixClientKitCore
 public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
     public let homeserver: URL
 
-    private let storage: MatrixStorage
-    private let secureStore: any SecureStore
-    private let persistence: SessionPersistence
-
-    /// Retenu ici pour la durée de vie du client : le SDK s'en sert à chaque rafraîchissement de
-    /// jeton, et un delegate libéré ne persisterait plus rien.
-    private let sessionDelegate: SessionDelegate
+    private let restorer: SessionRestorer
 
     public init(homeserver: URL, storage: MatrixStorage) {
         self.homeserver = homeserver
-        self.storage = storage
-        let secureStore = KeychainSecureStore(storage: storage)
-        self.secureStore = secureStore
-        let persistence = SessionPersistence(store: secureStore)
-        self.persistence = persistence
-        self.sessionDelegate = SessionDelegate(persistence: persistence)
+        self.restorer = SessionRestorer(storage: storage)
+    }
+
+    /// Restaure la session persistée sans connaître l'adresse du homeserver, enregistrée avec elle.
+    public static func restoreSession(storage: MatrixStorage) async throws -> (any MatrixClientKitCore.MatrixSession)? {
+        try await SessionRestorer(storage: storage).restore()
     }
 
     /// Ouvre une session.
@@ -33,6 +27,9 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
     /// n'écrit rien sur disque ; l'identifiant obtenu détermine le chemin et la clé du vrai
     /// client, dans lequel la session est ensuite restaurée. Aucun store n'est jamais créé sous
     /// un chemin provisoire qu'il faudrait déplacer ensuite.
+    ///
+    /// Le vrai client est construit avec l'adresse que la session rapporte, comme à chaque
+    /// restauration ultérieure : une seule source de vérité pour l'adresse d'une session.
     public func login(_ credentials: Credentials) async throws -> any MatrixClientKitCore.MatrixSession {
         do {
             let handshake = try await makeHandshakeClient()
@@ -48,56 +45,19 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
             }
 
             let data = try SessionMapper.sessionData(from: handshake.session())
-            let localStore = makeLocalStore(for: data.userID)
-            let client = try await makeClient(localStore: localStore)
+            let localStore = restorer.makeLocalStore(for: data.userID)
+            let client = try await restorer.makeClient(homeserver: data.homeserverURL, localStore: localStore)
             try await client.restoreSession(session: SessionMapper.session(from: data))
 
-            try persistence.save(data)
-            return try await RustMatrixSession.make(
-                client: client,
-                persistence: persistence,
-                localStore: localStore
-            )
+            try restorer.persistence.save(data)
+            return try await RustMatrixSession.make(client: client, restorer: restorer, localStore: localStore)
         } catch {
             throw ErrorMapper.mapAuthentication(error)
         }
     }
 
     public func restoreSession() async throws -> (any MatrixClientKitCore.MatrixSession)? {
-        guard let data = try persistence.load() else { return nil }
-
-        let localStore = makeLocalStore(for: data.userID)
-        let client = try await makeClient(localStore: localStore)
-        do {
-            try await client.restoreSession(session: SessionMapper.session(from: data))
-            return try await RustMatrixSession.make(
-                client: client,
-                persistence: persistence,
-                localStore: localStore
-            )
-        } catch {
-            let mapped = ErrorMapper.mapAuthentication(error)
-
-            // Une authentification refusée signifie que la session persistée est morte : la
-            // conserver ferait échouer chaque lancement à l'identique, sans qu'aucune API
-            // publique ne permette de l'effacer avant une nouvelle connexion réussie. Une panne
-            // réseau, de stockage ou serveur, elle, ne dit rien sur la validité de la session —
-            // l'effacer déconnecterait l'utilisateur à chaque démarrage hors ligne.
-            //
-            // Le store local part avec elle : rattaché à une session morte, il ne sera plus
-            // jamais rouvert, et laisser sur disque un store crypto inutilisable est exactement
-            // ce que la purge au logout existe pour éviter.
-            if case .authentication = mapped {
-                try? persistence.clear()
-                try? localStore.purge()
-            }
-
-            throw mapped
-        }
-    }
-
-    private func makeLocalStore(for userID: UserID) -> LocalStore {
-        LocalStore(storage: storage, userID: userID, secureStore: secureStore)
+        try await restorer.restore()
     }
 
     /// Client éphémère servant uniquement à la poignée de main de connexion.
@@ -109,30 +69,8 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
             return try await ClientBuilder()
                 .homeserverUrl(url: homeserver.absoluteString)
                 .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
-                .setSessionDelegate(sessionDelegate: sessionDelegate)
+                .setSessionDelegate(sessionDelegate: restorer.sessionDelegate)
                 .inMemoryStore()
-                .build()
-        } catch {
-            throw ErrorMapper.map(error)
-        }
-    }
-
-    private func makeClient(localStore: LocalStore) async throws -> Client {
-        do {
-            let paths = try localStore.paths()
-            try paths.createDirectoriesIfNeeded()
-
-            return try await ClientBuilder()
-                .homeserverUrl(url: homeserver.absoluteString)
-                .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
-                .setSessionDelegate(sessionDelegate: sessionDelegate)
-                .sqliteStore(
-                    config: SqliteStoreBuilder(
-                        dataPath: paths.dataDirectory.path,
-                        cachePath: paths.cacheDirectory.path
-                    )
-                    .key(key: try localStore.encryptionKey())
-                )
                 .build()
         } catch {
             throw ErrorMapper.map(error)

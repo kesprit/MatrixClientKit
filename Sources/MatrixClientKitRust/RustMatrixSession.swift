@@ -10,6 +10,9 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     public let encryption: any EncryptionService
 
     private let client: Client
+    /// Retenu pour la durée de la session : il porte le `SessionDelegate` dont le SDK se sert à
+    /// chaque rafraîchissement de jeton.
+    private let restorer: SessionRestorer
     private let lifecycle: SessionLifecycle
 
     /// Retenus pour la durée de la session : un delegate libéré ne signalerait plus aucune
@@ -28,6 +31,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         sync: any SyncController,
         encryption: any EncryptionService,
         client: Client,
+        restorer: SessionRestorer,
         lifecycle: SessionLifecycle,
         authDelegate: AuthDelegate,
         authDelegateHandle: TaskHandle?,
@@ -39,6 +43,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         self.sync = sync
         self.encryption = encryption
         self.client = client
+        self.restorer = restorer
         self.lifecycle = lifecycle
         self.authDelegate = authDelegate
         self.authDelegateHandle = authDelegateHandle
@@ -56,10 +61,11 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
 
     static func make(
         client: Client,
-        persistence: SessionPersistence,
+        restorer: SessionRestorer,
         localStore: LocalStore
     ) async throws -> RustMatrixSession {
         do {
+            let persistence = restorer.persistence
             let session = try client.session()
             let data = try SessionMapper.sessionData(from: session)
             let syncService = try await client.syncService().finish()
@@ -88,6 +94,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
                 sync: sync,
                 encryption: encryption,
                 client: client,
+                restorer: restorer,
                 lifecycle: lifecycle,
                 authDelegate: authDelegate,
                 authDelegateHandle: authDelegateHandle,
