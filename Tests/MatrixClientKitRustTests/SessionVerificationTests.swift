@@ -156,7 +156,8 @@ func anIncomingRequestReachesALateSubscriber() async throws {
     #expect(request.firstSeen == Date(timeIntervalSince1970: 1))
 }
 
-@Test func aRequestFromAnotherUserIsIgnored() async throws {
+@Test(.timeLimit(.minutes(1)))
+func aRequestFromAnotherUserIsIgnored() async throws {
     let controller = FakeController()
     let verification = try await makeVerification(controller)
 
@@ -166,7 +167,8 @@ func anIncomingRequestReachesALateSubscriber() async throws {
     #expect(await iterator.next() == .idle)
 }
 
-@Test func theOutgoingFlowRunsToVerified() async throws {
+@Test(.timeLimit(.minutes(1)))
+func theOutgoingFlowRunsToVerified() async throws {
     let controller = FakeController()
     let verification = try await makeVerification(controller)
 
@@ -187,7 +189,8 @@ func anIncomingRequestReachesALateSubscriber() async throws {
     #expect(controller.calls == [.request, .startSAS, .approve])
 }
 
-@Test func acceptingAcknowledgesTheRequestFirst() async throws {
+@Test(.timeLimit(.minutes(1)))
+func acceptingAcknowledgesTheRequestFirst() async throws {
     let controller = FakeController()
     let verification = try await makeVerification(controller)
     controller.delegate?.didReceiveVerificationRequest(details: details(flow: "flow-9"))
@@ -197,7 +200,8 @@ func anIncomingRequestReachesALateSubscriber() async throws {
     #expect(controller.calls == [.acknowledge(sender: "@alice:matrix.org", flow: "flow-9"), .accept])
 }
 
-@Test func cancellingAnIncomingRequestAcknowledgesItFirst() async throws {
+@Test(.timeLimit(.minutes(1)))
+func cancellingAnIncomingRequestAcknowledgesItFirst() async throws {
     let controller = FakeController()
     let verification = try await makeVerification(controller)
     controller.delegate?.didReceiveVerificationRequest(details: details(flow: "flow-3"))
@@ -208,7 +212,8 @@ func anIncomingRequestReachesALateSubscriber() async throws {
     #expect(await waitForState(verification) { $0 == .cancelled } != nil)
 }
 
-@Test func aCommandOutsideItsStateThrowsWithoutCallingUpstream() async throws {
+@Test(.timeLimit(.minutes(1)))
+func aCommandOutsideItsStateThrowsWithoutCallingUpstream() async throws {
     let controller = FakeController()
     let verification = try await makeVerification(controller)
 
@@ -280,7 +285,8 @@ func cancelIsNotRejectedWhileAnotherCommandIsInFlight() async throws {
     #expect(controller.calls.contains(.cancel))
 }
 
-@Test func anUpstreamFailureIsMappedAndLeavesTheStateUnchanged() async throws {
+@Test(.timeLimit(.minutes(1)))
+func anUpstreamFailureIsMappedAndLeavesTheStateUnchanged() async throws {
     let controller = FakeController()
     controller.failure = ClientError.MatrixApi(kind: .connectionFailed, code: "", msg: "", details: nil)
     let verification = try await makeVerification(controller)
@@ -292,7 +298,8 @@ func cancelIsNotRejectedWhileAnotherCommandIsInFlight() async throws {
     #expect(await iterator.next() == .idle)
 }
 
-@Test func loadingTheControllerIsRetriedByTheNextCommand() async throws {
+@Test(.timeLimit(.minutes(1)))
+func loadingTheControllerIsRetriedByTheNextCommand() async throws {
     let controller = FakeController()
     let attempts = LoadCounter()
     let verification = RustSessionVerification(
@@ -316,7 +323,8 @@ func cancelIsNotRejectedWhileAnotherCommandIsInFlight() async throws {
     #expect(controller.delegate != nil)
 }
 
-@Test func theControllerIsLoadedOnlyOnce() async throws {
+@Test(.timeLimit(.minutes(1)))
+func theControllerIsLoadedOnlyOnce() async throws {
     let controller = FakeController()
     let attempts = LoadCounter()
     let verification = RustSessionVerification(
