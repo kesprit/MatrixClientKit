@@ -4,11 +4,15 @@ A Swift package for building [Matrix](https://matrix.org) clients on iOS and mac
 official [Matrix Rust SDK](https://github.com/matrix-org/matrix-rust-sdk).
 
 ```swift
-let client = Matrix.client(
-    homeserver: URL(string: "https://matrix.org")!,
-    storage: .appGroup("group.com.example.app")
-)
-let session = try await client.login(.password(username: "alice", password: "…", deviceName: "iPhone"))
+let storage = MatrixStorage.appGroup("group.com.example.app")
+let session: any MatrixSession
+
+if let restored = try await Matrix.restoreSession(storage: storage) {
+    session = restored
+} else {
+    let client = Matrix.client(homeserver: URL(string: "https://matrix.org")!, storage: storage)
+    session = try await client.login(.password(username: "alice", password: "…", deviceName: "iPhone"))
+}
 await session.sync.start()
 
 for await rooms in session.rooms.list(filter: .joined) {
@@ -24,6 +28,8 @@ for await rooms in session.rooms.list(filter: .joined) {
 - **Snapshots, not diffs.** Room lists and timelines arrive as the complete, current state. There
   is no diff machinery for you to write.
 - **Typed errors.** `MatrixError`, with `isRetryable` and `retryAfter`.
+- **Retry decisions made for you.** Rely on `MatrixError.isRetryable` rather than writing your own
+  mapping: it is what keeps you from offering "try again" after a TLS failure or an exceeded quota.
 - **Storage ready for extensions.** App Group, Keychain and file protection configured so that a
   notification service extension works while the device is locked.
 - **Testable.** The whole public API is protocol-based, and the `MatrixClientKitMocks` product
@@ -31,41 +37,42 @@ for await rooms in session.rooms.list(filter: .joined) {
 
 ## Scope
 
-v0.1 covers password authentication, persisted sessions, syncing, the room list, timelines and
-sending text messages.
+v0.2 covers password authentication, persisted sessions, syncing, the room list, timelines, sending
+text messages, device verification, recovery and key backup.
 
-End-to-end encryption is **active** today — the Rust SDK handles it, with no opt-in on your part.
-What v0.1 does **not** expose:
+End-to-end encryption is **active** — the Rust SDK handles it, with no opt-in on your part. An
+application can verify a new device by comparing emojis with another of the user's devices, set up
+recovery, restore keys with the recovery key, and learn that the server ended the session. What
+v0.2 does **not** expose:
 
-- device verification (cross-signing, SAS);
-- key backup and recovery;
+- QR-code verification — the bundled Rust SDK does not expose it;
+- verifying other users, and resetting a lost cryptographic identity;
 - push notifications and the associated service extension.
 
-If your application needs any of those three right now, this version is not for you yet. See the
-roadmap below.
-
 `MatrixClient.loginDetails()` — which reports the login methods a homeserver accepts — is planned
-but **not implemented** in v0.1: an application that needs to query the homeserver before showing
-a sign-in screen will have to wait. Its absence is a decision, not an oversight.
+but **not implemented** yet: an application that needs to query the homeserver before showing a
+sign-in screen will have to wait. Its absence is a decision, not an oversight.
 
 | Version | Contents |
 | --- | --- |
 | 0.1 | Foundation: auth, session, sync, rooms, timeline, sending text |
-| 0.2 | Device verification, key backup and recovery |
+| 0.2 | Device verification (emoji), recovery and key backup, server sign-out, restore from storage |
 | 0.3 | Push notifications and the service extension |
 | 0.4 | Media, read receipts, typing, presence, account, OAuth, `loginDetails()` |
+| Later | Verifying other users, identity reset, QR-code verification once the SDK exposes it |
 | 1.0 | API freeze |
 
 ## Installation
 
 ```swift
-.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.1.1")
+.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.2.0")
 ```
 
 ## Compatibility
 
 | MatrixClientKit | Bundled Matrix Rust SDK | iOS | macOS | Swift |
 | --- | --- | --- | --- | --- |
+| 0.2.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 | 0.1.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 
 ## Errors: the evolution rule

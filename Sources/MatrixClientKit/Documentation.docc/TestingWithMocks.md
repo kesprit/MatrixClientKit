@@ -23,16 +23,19 @@ test suite runs without pulling in the Rust binary, and starts at its usual spee
 )
 ```
 
-## The four doubles
+## The doubles
 
 | Double | Stands in for | Driven with |
 | --- | --- | --- |
-| `MockMatrixSession` | ``MatrixSession`` | `didLogout` |
+| `MockMatrixClient` | ``MatrixClient`` | `loginResult`, `restoreResult`, `loginAttempts` |
+| `MockMatrixSession` | ``MatrixSession`` | `emitAuthState(_:)`, `logoutError`, `didLogout` |
 | `MockRoomService` | ``RoomService`` | `emit(_:)`, `finish()` |
 | `MockSyncController` | ``SyncController`` | `emit(_:)`, `finish()`, `startCallCount` |
-| `MockTimeline` | ``Timeline`` | `emit(_:)`, `finish()`, `sentMessages`, `sendError` |
+| `MockTimeline` | ``Timeline`` | `emit(_:)`, `finish()`, `sentMessages`, `sendError`, `paginationError` |
+| `MockEncryptionService` | ``EncryptionService`` | `emitVerificationStatus(_:)`, `emitRecoveryState(_:)`, `emitBackupState(_:)`, `finish()`, injected results and errors |
+| `MockSessionVerification` | ``SessionVerification`` | `emit(_:)`, `finish()`, `setError(_:for:)`, `calls` |
 
-The three stream-bearing doubles expose the **same pair**: `emit(_:)` pushes a value, `finish()`
+The stream-bearing doubles expose the **same pair**: an `emit` method pushes a value, `finish()`
 ends the stream.
 
 ## Driving a stream
@@ -101,8 +104,9 @@ that a view updates when a room arrives.
 
 ## Simulating a failure
 
-`MockTimeline.sendError` makes the next send (and the next pagination) fail with the error of your
-choice. That is how you test the error path without causing a real network outage:
+`MockTimeline.sendError` makes sends fail, and `MockTimeline.paginationError` makes pagination fail,
+independently — so "pagination fails while sending still works" is testable. That is how you test
+the error path without causing a real network outage:
 
 ```swift
 @Test func anOfflineSendReachesTheUI() async {
@@ -148,6 +152,41 @@ await session.sync.start()
 
 rooms.emit(SampleData.roomSummaries(count: 5))
 rooms.timeline.emit([SampleData.message("hello")])
+```
+
+## Driving a verification
+
+`MockSessionVerification` runs no state machine: your test sets every state and checks the commands
+your code called.
+
+```swift
+@Test func approvingSendsTheApproval() async throws {
+    let verification = MockSessionVerification()
+    let model = VerificationModel(verification: verification)   // your code
+
+    verification.emit(.comparing(.emojis([SASEmoji(symbol: "🐶", description: "Dog", index: 0)])))
+    try await model.userConfirmedEmojisMatch()
+
+    #expect(verification.calls == [.approve])
+}
+```
+
+## Restoring at launch
+
+``Matrix/restoreSession(storage:)`` is a static function, so no mock can replace it. Inject it as a
+closure instead:
+
+```swift
+struct LaunchModel {
+    var restoreSession: () async throws -> (any MatrixSession)? = {
+        try await Matrix.restoreSession(storage: .appGroup("group.com.example.app"))
+    }
+}
+
+@Test func aStoredSessionSkipsSignIn() async throws {
+    let model = LaunchModel(restoreSession: { MockMatrixSession() })
+    // …
+}
 ```
 
 ## What the mocks do not replace

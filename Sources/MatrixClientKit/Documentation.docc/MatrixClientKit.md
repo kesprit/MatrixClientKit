@@ -8,22 +8,22 @@ MatrixClientKit wraps the official Matrix Rust SDK behind a modern Swift API: `a
 `AsyncStream`, `Sendable` types and typed errors. Room lists and timelines are exposed as
 **snapshots** — you receive the complete, current state and never apply a diff yourself.
 
-See <doc:GettingStarted> for a first end-to-end flow, and <doc:TestingWithMocks> to test an
-application that depends on the package.
+See <doc:GettingStarted> for a first end-to-end flow, <doc:VerificationAndRecovery> to handle
+device trust, and <doc:TestingWithMocks> to test an application that depends on the package.
 
-## What v0.1 covers
+## What v0.2 covers
 
 This page can be read on its own — the Swift Package Index renders it without the repository's
 README — so the limits of this milestone are restated here.
 
-v0.1 covers password authentication, persisted sessions, syncing, the room list, timelines and
-sending text messages.
+v0.2 covers password authentication, persisted sessions (restorable from storage alone), syncing,
+the room list, timelines, sending text messages, device verification by emoji comparison, recovery
+and key backup, and notification of a session ended by the server.
 
-End-to-end encryption is **active** today: the Rust SDK handles it, with no opt-in. What v0.1 does
-**not** expose:
+End-to-end encryption is **active**: the Rust SDK handles it, with no opt-in. What v0.2 does **not**
+expose:
 
-- device verification (cross-signing, SAS, QR);
-- key backup and recovery;
+- QR-code verification, verification of other users, and identity reset;
 - push notifications and the associated service extension;
 - media, read receipts, typing indicators, presence and profiles;
 - OAuth / OIDC, and `MatrixClient.loginDetails()`.
@@ -42,6 +42,7 @@ Two behaviours to know before depending on this version:
 ### Getting started
 
 - <doc:GettingStarted>
+- <doc:VerificationAndRecovery>
 - <doc:TestingWithMocks>
 
 ### Entry point
@@ -50,6 +51,7 @@ Two behaviours to know before depending on this version:
 - ``MatrixClient``
 - ``Credentials``
 - ``MatrixSession``
+- ``AuthState``
 
 ### Rooms and messages
 
@@ -68,6 +70,20 @@ Two behaviours to know before depending on this version:
 
 - ``SyncController``
 - ``SyncState``
+
+### Encryption
+
+- ``EncryptionService``
+- ``VerificationStatus``
+- ``RecoveryState``
+- ``BackupState``
+- ``RecoveryProgress``
+- ``RecoveryKey``
+- ``SessionVerification``
+- ``SessionVerificationState``
+- ``VerificationRequest``
+- ``SASData``
+- ``SASEmoji``
 
 ### Storage
 

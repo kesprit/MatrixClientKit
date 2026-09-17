@@ -18,21 +18,26 @@ to reach the same session. Otherwise ``MatrixStorage/local(directory:accessibili
 
 ## Open a session
 
+At launch, restore the stored session from storage alone — its homeserver address is stored with
+it — and sign in only when there is none:
+
 ```swift
+let storage = MatrixStorage.appGroup("group.com.example.app")
 let session: any MatrixSession
 
-if let restored = try await client.restoreSession() {
+if let restored = try await Matrix.restoreSession(storage: storage) {
     session = restored
 } else {
+    let client = Matrix.client(homeserver: URL(string: "https://matrix.org")!, storage: storage)
     session = try await client.login(
         .password(username: "alice", password: "…", deviceName: "iPhone")
     )
 }
 ```
 
-``MatrixClient/restoreSession()`` returns `nil` when no session is stored — that is not an error.
-Call it before ``MatrixClient/login(_:)`` so you don't sign in a user who is already
-authenticated.
+``Matrix/restoreSession(storage:)`` returns `nil` when no session is stored — that is not an error.
+Once signed in, see <doc:VerificationAndRecovery>: a new device should be verified before it can
+read encrypted history.
 
 ## Sync and observe rooms
 

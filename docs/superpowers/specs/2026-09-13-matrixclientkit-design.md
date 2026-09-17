@@ -226,7 +226,8 @@ l'abandon sont exposés via le handle.
 ### 6.6 Domaines couverts en v1
 
 Rooms et liste de rooms filtrable, timelines paginées, envoi texte et média, chiffrement de bout en
-bout, vérification d'appareils (SAS emoji et QR), récupération et sauvegarde de clés, notifications
+bout, vérification d'appareils (SAS emoji ; QR non exposé par l'amont épinglé, voir la spec 0.2),
+récupération et sauvegarde de clés, notifications
 push et extension de service, paramètres de notification, accusés de lecture, indicateurs de
 frappe, présence, profil et compte.
 
@@ -401,7 +402,7 @@ La spec décrit l'architecture et l'API cibles complètes. Le plan d'implémenta
 | Palier | Contenu | Publiable |
 | --- | --- | --- |
 | v0.1 | Socle : modules, manifeste, pont `ffiStream`, erreurs, auth mot de passe, session persistée, sync, liste de rooms, timeline, envoi texte | Oui |
-| v0.2 | E2EE : vérification d'appareils (SAS, QR), récupération, sauvegarde de clés, états de chiffrement | Oui |
+| v0.2 | E2EE : vérification d'appareils (SAS — QR retiré, non exposé par l'amont), récupération, sauvegarde de clés, états de chiffrement | Oui |
 | v0.3 | Push : `MatrixNotificationService`, App Group, extension, paramètres de notification | Oui |
 | v0.4 | Complément : médias, accusés de lecture, frappe, présence, profil et compte, OAuth | Oui |
 | v1.0 | Gel de l'API, DocC complète, tableau de compatibilité, annonce | Oui |
