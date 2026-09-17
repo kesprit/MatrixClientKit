@@ -4,6 +4,10 @@ public protocol SyncController: Sendable {
     var state: AsyncStream<SyncState> { get }
 
     /// Starts syncing with the homeserver.
+    ///
+    /// Calling `start()` while syncing is already running has no effect; after
+    /// ``SyncState/offline``, ``SyncState/error`` or ``SyncState/terminated`` it starts syncing
+    /// again. Call it whenever the application returns to the foreground.
     func start() async
 
     /// Stops syncing.
