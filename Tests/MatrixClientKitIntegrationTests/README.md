@@ -14,11 +14,27 @@ homeserver and must be run **manually before every bump of the Rust SDK**.
 
 Without the first three variables the suite is skipped, which is the expected behaviour in CI.
 
+`MATRIX_TEST_ROOM_ID` is a room **ID**, which starts with `!` — not an alias, which starts with
+`#`. Element X does not show it; ask the homeserver to resolve the alias instead:
+
+    curl -s 'https://your-homeserver/_matrix/client/v3/directory/room/%23your-alias%3Ayour-homeserver'
+
+## Checking the account before running
+
+Most failures of this suite come from the account, not from the code: a refused password, a room
+the account has not joined, recovery not set up. Check all three in one go — it changes nothing on
+the account and signs its own session out:
+
+    ./Scripts/check-integration-env.sh
+
 Optional variables:
 
 - `MATRIX_TEST_RECOVERY_KEY` enables the verification and recovery cases. Set up recovery **once**
   on the test account — for instance by signing in with Element — and keep its key. The tests never
-  change it, so it stays valid from one run to the next.
+  change it, so it stays valid from one run to the next. Recovery must actually be set up on the
+  account: without it the homeserver answers "The info about the secret key could not have been
+  found in the account data of the user", and the recovery cases fail for that reason rather than
+  for anything the package does.
 - `MATRIX_TEST_FRESH_USERNAME` and `MATRIX_TEST_FRESH_PASSWORD` name an account that has **never
   signed in anywhere**. They enable the case checking that signing in creates a cross-signing
   identity. It is meaningful only on the account's first run: register a new account each time you
