@@ -3,7 +3,7 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
 follows [SemVer](https://semver.org/).
 
-## [0.2.0] - 2026-09-17
+## [0.2.0] - 2026-09-18
 
 ### Breaking
 

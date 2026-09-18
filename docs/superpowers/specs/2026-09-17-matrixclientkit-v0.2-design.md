@@ -409,10 +409,10 @@ Trois questions ont été tranchées par lecture du source amont (§2.8 à §2.1
 qui ne se vérifient que contre un vrai serveur ; ils sont couverts par la suite d'intégration, pas
 par une tâche préalable :
 
-| Question | Test d'intégration | Conséquence si la réponse est non |
+| Question | Test d'intégration | Résultat |
 | --- | --- | --- |
-| L'amorçage automatique du cross-signing réussit-il sans UIAA sur le homeserver de test ? | Amorçage sur compte neuf (§12, cas 6) | Documenter la limite ; l'API explicite d'amorçage devient un candidat du palier suivant |
-| Le message d'une mauvaise clé correspond-il bien à §2.10 ? | Récupération (§12, cas 2) | Corriger le mappage de §7.1 |
+| Le message d'une mauvaise clé correspond-il bien à §2.10 ? | Récupération (§12, cas 2) | **Vérifié le 2026-09-18** contre Tuwunel (matrix.ekreen.uk) : le mappage de §7.1 est juste. La vérification croisée entre deux appareils (§12, cas 1) passe également. |
+| L'amorçage automatique du cross-signing réussit-il sans UIAA sur le homeserver de test ? | Amorçage sur compte neuf (§12, cas 6) | **Non vérifié à la publication de la 0.2.0** : le cas exige un compte jamais utilisé, et n'a de valeur qu'à sa première exécution. Le risque porte sur un compte créé et utilisé uniquement via ce package, sur un serveur exigeant une ré-authentification pour publier les clés de cross-signing : l'amorçage échouerait alors en silence et l'appareil resterait non vérifié. À exécuter au prochain palier ; si la réponse est non, documenter la limite et faire de l'API explicite d'amorçage un candidat. |
 
 ## 12. Tests
 
