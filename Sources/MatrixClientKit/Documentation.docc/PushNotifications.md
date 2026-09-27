@@ -15,14 +15,20 @@ servers.
 ## Share the storage
 
 The application and its extension must open the **same** ``MatrixStorage``: the same App Group and,
-if you set one, the same Keychain access group.
+if you set one, the same Keychain access group. Define it once, in a file both targets compile, so
+the two can never drift apart:
 
 ```swift
-let storage = MatrixStorage.appGroup(
-    "group.com.example.app",
-    keychainAccessGroup: "TEAMID.com.example.app"
-)
+extension MatrixStorage {
+    /// The storage the application and its extension share.
+    static let shared = MatrixStorage.appGroup(
+        "group.com.example.app",
+        keychainAccessGroup: "TEAMID.com.example.app"
+    )
+}
 ```
+
+The application opens its ``MatrixClient`` on `.shared`, and the extension below does the same.
 
 Both targets need the matching entitlements:
 
@@ -69,9 +75,7 @@ func application(
 ```
 
 Provide `fallbackAlert` in the user's language: it is what the notification shows if the extension
-fails or runs out of time. The package sets `mutable-content` on the pusher's default payload for
-you — without it, iOS never calls the extension at all — so there is nothing to configure on that
-side.
+fails or runs out of time.
 
 The push key the package sends to the homeserver, ``PusherConfiguration/pushKey``, is the device
 token encoded in base64. That is what Sygnal's APNs pushkin expects by default: it decodes the push
@@ -80,10 +84,43 @@ in another encoding, reconfigure it to match, or every push will be rejected.
 
 ## Write the extension
 
-The extension's `didReceive(_:withContentHandler:)` reads the push, resolves it, and fills the
-notification:
+iOS calls the extension only for a push whose `aps` dictionary carries both `mutable-content` and
+an `alert`: without `mutable-content`, the notification is shown as it arrived; without `alert`, the
+push is treated as silent and nothing is shown at all. The package sets both in the pusher's
+default payload — `alert` being your `fallbackAlert` — which the gateway merges into every push, so
+there is nothing to configure on that side.
+
+The extension keeps **one** ``MatrixNotificationService`` for the lifetime of its process, opened on
+first use. An actor holding the opening task guarantees it even when several pushes arrive at once:
+they all await the same task. Each push is then read, resolved, and used to fill the notification;
+every failure delivers the push's original content:
 
 ```swift
+import MatrixClientKit
+import UserNotifications
+
+/// The extension's one `MatrixNotificationService`, opened on first use and kept for the lifetime
+/// of the process.
+actor SharedNotificationService {
+    static let shared = SharedNotificationService()
+
+    private var opening: Task<MatrixNotificationService, any Error>?
+
+    func service() async throws -> MatrixNotificationService {
+        // Checked and set with no suspension in between: concurrent pushes await the same task.
+        if let opening { return try await opening.value }
+        let task = Task { try await MatrixNotificationService(storage: .shared) }
+        opening = task
+        do {
+            return try await task.value
+        } catch {
+            // Keep no failure: the next push tries again, for instance once the user signed back in.
+            if opening == task { opening = nil }
+            throw error
+        }
+    }
+}
+
 final class NotificationService: UNNotificationServiceExtension {
     private var originalRequest: UNNotificationRequest?
     private var contentHandler: ((UNNotificationContent) -> Void)?
@@ -101,12 +138,13 @@ final class NotificationService: UNNotificationServiceExtension {
 
         Task {
             do {
-                let service = try await MatrixNotificationService(storage: .appGroup("group.com.example.app"))
+                let service = try await SharedNotificationService.shared.service()
                 switch try await service.notification(roomID: payload.roomID, eventID: payload.eventID) {
                 case .notification(let notification):
                     content.apply(notification)
                     contentHandler(content)
                 case .filteredOut, .redacted:
+                    // Hiding the notification requires the filtering entitlement (see below).
                     contentHandler(UNNotificationContent())
                 case .notFound:
                     contentHandler(request.content)
@@ -128,6 +166,12 @@ final class NotificationService: UNNotificationServiceExtension {
 
 `MatrixPushPayload(userInfo:)` returns `nil` for anything that is not a Matrix push in the
 `event_id_only` format, in which case the original, unresolved content is delivered as-is.
+
+**Hiding a notification needs an entitlement.** For ``NotificationResult/filteredOut`` and
+``NotificationResult/redacted``, the example delivers empty content so that nothing is shown. iOS
+honours that only when the extension has the `com.apple.developer.usernotifications.filtering`
+entitlement, which Apple grants on request. Without it, iOS does not hide the notification:
+deliver the original content or a generic one instead.
 
 ## Rules
 

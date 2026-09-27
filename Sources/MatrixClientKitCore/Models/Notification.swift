@@ -59,7 +59,15 @@ public enum NotificationResult: Sendable, Hashable {
     /// fallback.
     case notFound
     /// The user's push rules, or an ignored sender, rule the event out: display nothing.
+    ///
+    /// Hiding a notification by delivering empty content requires the extension to have the
+    /// `com.apple.developer.usernotifications.filtering` entitlement. Without it, deliver the
+    /// original content or a generic one.
     case filteredOut
     /// The event was deleted: display nothing.
+    ///
+    /// Hiding a notification by delivering empty content requires the extension to have the
+    /// `com.apple.developer.usernotifications.filtering` entitlement. Without it, deliver the
+    /// original content or a generic one.
     case redacted
 }

@@ -308,6 +308,13 @@ override func didReceive(_ request: UNNotificationRequest,
 }
 ```
 
+Ce squelette montre le flux. L'article DocC en donne la forme complète, vérifiée à la compilation :
+un stockage partagé unique (avec `keychainAccessGroup`) défini pour l'application et l'extension,
+une seule instance de `MatrixNotificationService` par processus, ouverte au premier push par un
+acteur qui retient la tâche d'ouverture, et le rappel `serviceExtensionTimeWillExpire()`. Masquer
+une notification (`.filteredOut`, `.redacted`) par un contenu vide exige l'entitlement
+`com.apple.developer.usernotifications.filtering`.
+
 1. `MatrixNotificationService.init(storage:)` lit la session persistée via `SessionRestorer` ; sans
    session, `MatrixError.authentication(.missingToken)`.
 2. Il construit un client persistant sur le même store SQLite avec le rôle « extension »
