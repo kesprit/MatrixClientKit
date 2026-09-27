@@ -3,6 +3,35 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
 follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Breaking
+
+- `MatrixSession` requires a new member, `notifications`. An application that implements the
+  protocol itself — typically in a test double — must add it, or use `MockMatrixSession`.
+
+### Added
+
+- `MatrixSession.notifications`, a `NotificationService`: `registerPusher(_:)` and
+  `unregisterPusher(_:)` with a `PusherConfiguration`, and per-room notification settings —
+  `notificationSettings(for:)`, `setNotificationMode(_:for:)`, `restoreDefaultNotificationMode(for:)`.
+- `MatrixNotificationService`, the notification service extension's entry point: resolves a push
+  into a `MatrixNotification` without syncing. `MatrixPushPayload` reads the push's room and event.
+- `UNMutableNotificationContent.apply(_:)` fills a notification from a `MatrixNotification`.
+- `MockNotificationService`, `MockNotificationResolver`, `SampleData.notification(kind:isDirect:isNoisy:)`
+  and `SampleData.pusherConfiguration()`.
+
+### Changed
+
+- Clients built on an App Group storage take the Rust SDK's cross-process lock, so that the
+  application and its extension no longer write the same store unaware of each other. Clients on
+  a local storage are explicitly single-process.
+
+### Not included
+
+- Account-wide notification settings (mentions, invitations, calls, keywords) and batch
+  resolution of notifications.
+
 ## [0.2.0] - 2026-09-18
 
 ### Breaking

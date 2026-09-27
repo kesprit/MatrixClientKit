@@ -308,12 +308,11 @@ et conservation en Keychain de la clé de chiffrement SQLite, implémentation du
 ### API de l'extension
 
 ```swift
-let service = try await MatrixNotificationService(
-    storage: .appGroup("group.com.exemple.app"),
-    userID: userID
-)
+let service = try await MatrixNotificationService(storage: .appGroup("group.com.exemple.app"))
 let notification = try await service.notification(roomID: roomID, eventID: eventID)
 ```
+
+Voir la spec 0.3 pour le verrou inter-processus.
 
 S'appuie sur `NotificationClient.getNotification(roomId:eventId:)`. Règle documentée et vérifiée à
 l'exécution : **aucune sync dans l'extension**, uniquement ce service — lancer une sync depuis le
@@ -403,7 +402,7 @@ La spec décrit l'architecture et l'API cibles complètes. Le plan d'implémenta
 | --- | --- | --- |
 | v0.1 | Socle : modules, manifeste, pont `ffiStream`, erreurs, auth mot de passe, session persistée, sync, liste de rooms, timeline, envoi texte | Oui |
 | v0.2 | E2EE : vérification d'appareils (SAS — QR retiré, non exposé par l'amont), récupération, sauvegarde de clés, états de chiffrement | Oui |
-| v0.3 | Push : `MatrixNotificationService`, App Group, extension, paramètres de notification | Oui |
+| v0.3 | Push : `MatrixNotificationService`, App Group, extension, verrou inter-processus, mode de notification par salon (paramètres globaux reportés) | Oui |
 | v0.4 | Complément : médias, accusés de lecture, frappe, présence, profil et compte, OAuth | Oui |
 | v1.0 | Gel de l'API, DocC complète, tableau de compatibilité, annonce | Oui |
 

@@ -34,6 +34,8 @@ test suite runs without pulling in the Rust binary, and starts at its usual spee
 | `MockTimeline` | ``Timeline`` | `emit(_:)`, `finish()`, `sentMessages`, `sendError`, `paginationError` |
 | `MockEncryptionService` | ``EncryptionService`` | `emitVerificationStatus(_:)`, `emitRecoveryState(_:)`, `emitBackupState(_:)`, `finish()`, injected results and errors |
 | `MockSessionVerification` | ``SessionVerification`` | `emit(_:)`, `finish()`, `setError(_:for:)`, `calls` |
+| `MockNotificationService` | ``NotificationService`` | `registeredPushers`, `unregisteredPushers`, `setSettings(_:for:)`, injected errors |
+| `MockNotificationResolver` | ``NotificationContentResolving`` | `setResult(_:roomID:eventID:)`, `defaultResult`, `error`, `requests` |
 
 The stream-bearing doubles expose the **same pair**: an `emit` method pushes a value, `finish()`
 ends the stream.

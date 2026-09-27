@@ -43,6 +43,7 @@ Two behaviours to know before depending on this version:
 
 - <doc:GettingStarted>
 - <doc:VerificationAndRecovery>
+- <doc:PushNotifications>
 - <doc:TestingWithMocks>
 
 ### Entry point
@@ -84,6 +85,18 @@ Two behaviours to know before depending on this version:
 - ``VerificationRequest``
 - ``SASData``
 - ``SASEmoji``
+
+### Push notifications
+
+- ``NotificationService``
+- ``PusherConfiguration``
+- ``RoomNotificationMode``
+- ``RoomNotificationSettings``
+- ``MatrixNotificationService``
+- ``NotificationContentResolving``
+- ``MatrixPushPayload``
+- ``MatrixNotification``
+- ``NotificationResult``
 
 ### Storage
 

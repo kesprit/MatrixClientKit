@@ -37,17 +37,18 @@ for await rooms in session.rooms.list(filter: .joined) {
 
 ## Scope
 
-v0.2 covers password authentication, persisted sessions, syncing, the room list, timelines, sending
-text messages, device verification, recovery and key backup.
+v0.3 covers password authentication, persisted sessions, syncing, the room list, timelines, sending
+text messages, device verification, recovery and key backup, and push notifications through a
+notification service extension, and per-room notification settings.
 
 End-to-end encryption is **active** — the Rust SDK handles it, with no opt-in on your part. An
 application can verify a new device by comparing emojis with another of the user's devices, set up
 recovery, restore keys with the recovery key, and learn that the server ended the session. What
-v0.2 does **not** expose:
+v0.3 does **not** expose:
 
 - QR-code verification — the bundled Rust SDK does not expose it;
 - verifying other users, and resetting a lost cryptographic identity;
-- push notifications and the associated service extension.
+- account-wide notification settings (mentions, invitations, calls, keywords).
 
 Because a lost identity cannot be reset yet, set up recovery early: a user who never does and then
 loses or signs out of their last device cannot verify any device of that account again in v0.2.
@@ -60,7 +61,7 @@ sign-in screen will have to wait. Its absence is a decision, not an oversight.
 | --- | --- |
 | 0.1 | Foundation: auth, session, sync, rooms, timeline, sending text |
 | 0.2 | Device verification (emoji), recovery and key backup, server sign-out, restore from storage |
-| 0.3 | Push notifications and the service extension |
+| 0.3 | Push notifications, service extension, cross-process lock, per-room notification settings |
 | 0.4 | Media, read receipts, typing, presence, account, OAuth, `loginDetails()` |
 | Later | Verifying other users, identity reset, QR-code verification once the SDK exposes it |
 | 1.0 | API freeze |
@@ -68,13 +69,14 @@ sign-in screen will have to wait. Its absence is a decision, not an oversight.
 ## Installation
 
 ```swift
-.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.2.0")
+.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.3.0")
 ```
 
 ## Compatibility
 
 | MatrixClientKit | Bundled Matrix Rust SDK | iOS | macOS | Swift |
 | --- | --- | --- | --- | --- |
+| 0.3.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 | 0.2.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 | 0.1.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 
