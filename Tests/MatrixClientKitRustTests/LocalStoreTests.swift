@@ -117,3 +117,24 @@ private func makeStore(
     #expect(FileManager.default.fileExists(atPath: database.path) == false)
     #expect(FileManager.default.fileExists(atPath: paths.userDirectory.path) == false)
 }
+
+@Test func withoutCreationAMissingKeyThrowsAndTouchesNothing() throws {
+    let root = makeRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let secureStore = InMemorySecureStore()
+    let store = makeStore(root: root, secureStore: secureStore)
+    let paths = try store.paths()
+    try paths.createDirectoriesIfNeeded()
+    let database = paths.dataDirectory.appendingPathComponent("matrix.sqlite")
+    try Data("données chiffrées".utf8).write(to: database)
+
+    // Rôle extension, pendant une déconnexion : l'application vient d'effacer la clé. L'extension
+    // ne doit ni en recréer une ni purger ce qu'elle prendrait pour un orphelin.
+    #expect(throws: MatrixError.authentication(.missingToken)) {
+        _ = try store.encryptionKey(createIfMissing: false)
+    }
+
+    #expect(try secureStore.data(forKey: "\(LocalStore.keyPrefix).\(StoragePaths.segment(for: alice))") == nil)
+    #expect(FileManager.default.fileExists(atPath: database.path))
+}

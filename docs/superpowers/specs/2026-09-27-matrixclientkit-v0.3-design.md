@@ -352,6 +352,13 @@ Le rôle règle aussi `autoEnableCrossSigning` : `true` pour l'application (comp
 `false` pour l'extension — l'amorçage d'une identité est une écriture de compte que seule
 l'application doit faire, jamais un processus de quelques secondes lancé par un push.
 
+Le rôle règle enfin la clé de chiffrement du store : `LocalStore.encryptionKey(createIfMissing:)`
+reçoit `role == .application`. L'application génère une clé absente et purge le store orphelin
+(comportement 0.2) ; l'extension ne crée jamais de clé et ne purge jamais : une clé absente y
+signifie qu'une déconnexion est en cours, et elle lève `.authentication(.missingToken)` sans rien
+toucher sur disque — sinon un push reçu pendant la déconnexion recréerait la clé et les répertoires
+que l'application vient d'effacer. La clé est lue avant la création des répertoires du store.
+
 Une couture interne, `SessionRestorer.LockPolicy` (`.automatic` par défaut, `.unset` pour
 reproduire un client 0.2 sans appel à `crossProcessLockConfig`), sert uniquement au cas
 d'intégration 5. Elle n'est pas publique.
@@ -368,6 +375,7 @@ Aucun nouveau cas, y compris dans les enums imbriqués.
 | Situation | Erreur |
 | --- | --- |
 | Aucune session persistée à l'ouverture de l'extension | `.authentication(.missingToken)` |
+| Clé du store absente à l'ouverture de l'extension (déconnexion en cours) | `.authentication(.missingToken)` |
 | Extension ouverte sur un stockage `.local` | `.storage(.unavailable)` |
 | Salon inconnu pour les paramètres | `.notFound(.room)` |
 | Identifiant invalide dans une réponse amont | `.unexpected(message:details:)` |
@@ -402,7 +410,8 @@ Tout écart avec cette spec est consigné dans la spec avant d'écrire le code c
   `PusherConfiguration.pushKey` (base64, jeton vide → chaîne vide), modèles.
 - Rust : `NotificationMapper` (4 statuts, message et invitation, expéditeur sans nom, chaque ligne du
   tableau §6.1, `isNoisy`/`hasMention` nil, identifiant invalide) ; `CrossProcessLock` (les quatre
-  lignes du tableau §7) ; `RustNotificationService` derrière `NotificationDriving` (pusher construit
+  lignes du tableau §7) ; `LocalStore.encryptionKey(createIfMissing: false)` (clé absente : lève
+  `.authentication(.missingToken)`, ne crée aucune clé, laisse le store en place) ; `RustNotificationService` derrière `NotificationDriving` (pusher construit
   avec `pushkey`, `appId`, URL, `.eventIdOnly`, `default_payload` avec `mutable-content` et l'alerte de repli, `append: false` ; paramètres ; erreurs mappées).
 - Umbrella : `apply(_:)` en salon direct, en salon de groupe, invitation, bruyant ou non.
 - Mocks : injection d'erreurs et historique.

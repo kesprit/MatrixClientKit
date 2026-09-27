@@ -49,7 +49,13 @@ struct LocalStore: Sendable {
     ///
     /// - Important: ce qui dort dans ce store n'est pas seulement l'historique des messages, mais
     ///   le store crypto : identité d'appareil et clés de room Megolm.
-    func encryptionKey() throws -> Data {
+    ///
+    /// - Parameter createIfMissing: `false` dans l'extension de notification. Une clé absente y
+    ///   signifie que l'application est en train de déconnecter la session : l'extension ne doit
+    ///   ni recréer une clé ni purger un store qu'elle croirait orphelin, sans quoi un push reçu
+    ///   pendant la déconnexion ferait réapparaître ce que l'application vient d'effacer. Elle
+    ///   lève alors `MatrixError.authentication(.missingToken)` sans toucher au disque.
+    func encryptionKey(createIfMissing: Bool = true) throws -> Data {
         if let existing = try secureStore.data(forKey: keychainKey) {
             // Une clé de mauvaise taille ne peut pas être remplacée en silence : la remplacer
             // rendrait définitivement illisible le store qu'elle chiffre. On signale la
@@ -58,6 +64,10 @@ struct LocalStore: Sendable {
                 throw MatrixError.storage(.corrupted)
             }
             return existing
+        }
+
+        guard createIfMissing else {
+            throw MatrixError.authentication(.missingToken)
         }
 
         // Clé absente alors qu'un store existe : celui-ci est déjà définitivement illisible, sa

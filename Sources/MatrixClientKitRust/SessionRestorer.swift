@@ -68,6 +68,9 @@ final class SessionRestorer: Sendable {
     func makeClient(homeserver: URL, localStore: LocalStore) async throws -> Client {
         do {
             let paths = try localStore.paths()
+            // La clé avant les répertoires : dans l'extension, une clé absente (déconnexion en
+            // cours) doit échouer sans rien recréer sur disque.
+            let key = try localStore.encryptionKey(createIfMissing: role == .application)
             try paths.createDirectoriesIfNeeded()
 
             var builder = ClientBuilder()
@@ -86,7 +89,7 @@ final class SessionRestorer: Sendable {
                         dataPath: paths.dataDirectory.path,
                         cachePath: paths.cacheDirectory.path
                     )
-                    .key(key: try localStore.encryptionKey())
+                    .key(key: key)
                 )
             if let lock = try lockConfiguration() {
                 builder = builder.crossProcessLockConfig(crossProcessLockConfig: lock)
