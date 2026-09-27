@@ -137,4 +137,27 @@ final class SessionRestorer: Sendable {
             throw mapped
         }
     }
+
+    /// Ouvre la session persistée pour résoudre des notifications, sans sync.
+    ///
+    /// Contrairement à ``restore()``, une authentification refusée n'efface rien : c'est à
+    /// l'application, au prochain lancement, de constater la session morte et de nettoyer. Une
+    /// extension qui purgerait le store pendant que l'application l'utilise le corromprait.
+    func makeNotificationResolver() async throws -> RustNotificationResolver {
+        // Échoue avant toute lecture pour un stockage qu'une extension ne peut pas atteindre.
+        _ = try lockConfiguration()
+        guard let data = try persistence.load() else {
+            throw MatrixError.authentication(.missingToken)
+        }
+
+        let localStore = makeLocalStore(for: data.userID)
+        let client = try await makeClient(homeserver: data.homeserverURL, localStore: localStore)
+        do {
+            try await client.restoreSession(session: SessionMapper.session(from: data))
+            let notificationClient = try await client.notificationClient(processSetup: .multipleProcesses)
+            return RustNotificationResolver(notificationClient: notificationClient, client: client, restorer: self)
+        } catch {
+            throw ErrorMapper.mapAuthentication(error)
+        }
+    }
 }
