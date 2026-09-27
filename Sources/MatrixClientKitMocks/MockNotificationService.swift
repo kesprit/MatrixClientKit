@@ -21,7 +21,8 @@ public final class MockNotificationService: NotificationService, @unchecked Send
     /// The configurations passed to ``unregisterPusher(_:)`` that succeeded, in order.
     public var unregisteredPushers: [PusherConfiguration] { lock.withLock { _unregisteredPushers } }
 
-    /// What a room without its own setting reports. Defaults to all messages, as a default.
+    /// What ``notificationSettings(for:)`` returns for a room given no setting of its own through
+    /// ``setSettings(_:for:)``. Initially `.allMessages` with `isDefault` set to `true`.
     public var defaultSettings: RoomNotificationSettings {
         get { lock.withLock { _defaultSettings } }
         set { lock.withLock { _defaultSettings = newValue } }
