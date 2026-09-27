@@ -12,6 +12,12 @@ struct IntegrationConfiguration {
     /// Compte **jamais utilisé**, pour vérifier l'amorçage du cross-signing. Utile une seule fois.
     let freshUsername: String?
     let freshPassword: String?
+    /// Salon partagé par les deux comptes (`MATRIX_TEST_ROOM_ID`).
+    let roomID: RoomID?
+    /// Second compte, membre de `roomID`, qui envoie le message que l'extension du compte
+    /// principal doit résoudre.
+    let senderUsername: String?
+    let senderPassword: String?
 
     static var current: IntegrationConfiguration? {
         let environment = ProcessInfo.processInfo.environment
@@ -27,13 +33,20 @@ struct IntegrationConfiguration {
             password: password,
             recoveryKey: environment["MATRIX_TEST_RECOVERY_KEY"],
             freshUsername: environment["MATRIX_TEST_FRESH_USERNAME"],
-            freshPassword: environment["MATRIX_TEST_FRESH_PASSWORD"]
+            freshPassword: environment["MATRIX_TEST_FRESH_PASSWORD"],
+            roomID: environment["MATRIX_TEST_ROOM_ID"].flatMap(RoomID.init(rawValue:)),
+            senderUsername: environment["MATRIX_TEST_SENDER_USERNAME"],
+            senderPassword: environment["MATRIX_TEST_SENDER_PASSWORD"]
         )
     }
 
     static var isAvailable: Bool { current != nil }
     static var hasRecoveryKey: Bool { current?.recoveryKey != nil }
     static var hasFreshAccount: Bool { current?.freshUsername != nil && current?.freshPassword != nil }
+    static var hasRoom: Bool { current?.roomID != nil }
+    static var hasSenderAccount: Bool {
+        hasRoom && current?.senderUsername != nil && current?.senderPassword != nil
+    }
 }
 
 /// Client d'intégration et répertoire qui l'héberge.
@@ -140,4 +153,82 @@ func sqliteFiles(in directory: URL) -> [URL] {
     let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil)
     let urls = enumerator?.allObjects.compactMap { $0 as? URL } ?? []
     return urls.filter { $0.lastPathComponent.contains("sqlite") }
+}
+
+/// Stockage App Group propre à une exécution. Sur macOS hors bac à sable, `FileManager`
+/// synthétise le conteneur sous `~/Library/Group Containers/` sans entitlement.
+func appGroupStorage() -> MatrixStorage {
+    .appGroup("group.com.matrixclientkit.integration.\(UUID().uuidString)")
+}
+
+/// Supprime le conteneur synthétisé d'un stockage App Group. L'échec est ignoré, comme pour
+/// ``removeDirectory(_:)``.
+func removeAppGroup(_ storage: MatrixStorage) {
+    guard case let .appGroup(identifier) = storage.location,
+        let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
+    else { return }
+    try? FileManager.default.removeItem(at: container)
+}
+
+/// Déconnecte un appareil ouvert par ``rawAccessToken(_:)``.
+func rawLogout(_ configuration: IntegrationConfiguration, accessToken: String) async throws {
+    var request = URLRequest(url: configuration.homeserver.appending(path: "_matrix/client/v3/logout"))
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = Data("{}".utf8)
+    _ = try await URLSession.shared.data(for: request)
+}
+
+/// Les `pushkey` des pushers du compte, lus par l'API client, hors SDK.
+func pushers(_ configuration: IntegrationConfiguration, accessToken: String) async throws -> [String] {
+    var request = URLRequest(url: configuration.homeserver.appending(path: "_matrix/client/v3/pushers"))
+    request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+    let (data, _) = try await URLSession.shared.data(for: request)
+    let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    let list = object?["pushers"] as? [[String: Any]] ?? []
+    return list.compactMap { $0["pushkey"] as? String }
+}
+
+/// Se connecte sur un stockage donné et attend que la sync tourne.
+func signIn(
+    _ configuration: IntegrationConfiguration,
+    storage: MatrixStorage,
+    username: String? = nil,
+    password: String? = nil,
+    deviceName: String
+) async throws -> any MatrixSession {
+    let client = Matrix.client(homeserver: configuration.homeserver, storage: storage)
+    let session = try await client.login(
+        .password(
+            username: username ?? configuration.username,
+            password: password ?? configuration.password,
+            deviceName: deviceName
+        )
+    )
+    let states = session.sync.state
+    await session.sync.start()
+    _ = await firstValue(of: states) { $0 == .running }
+    return session
+}
+
+/// Envoie un texte dans un salon et rend l'identifiant de l'événement une fois accepté par le
+/// homeserver.
+func sendText(_ body: String, in roomID: RoomID, from session: any MatrixSession) async throws -> EventID {
+    for await snapshot in session.rooms.list(filter: .joined) where snapshot.contains(where: { $0.id == roomID }) {
+        break
+    }
+    let timeline = try await session.rooms.room(roomID).timeline()
+    let items = timeline.items
+    try await timeline.send(.text(body))
+
+    for await snapshot in items {
+        if let message = snapshot.compactMap(\.message).first(where: { $0.body == body }),
+            message.sendState == .sent,
+            let eventID = message.eventID
+        {
+            return eventID
+        }
+    }
+    throw MatrixError.unexpected(message: "The sent message never reached the sent state", details: nil)
 }

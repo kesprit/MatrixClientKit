@@ -13,6 +13,13 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
         self.restorer = SessionRestorer(storage: storage)
     }
 
+    /// Couture de test : un restorer à politique de verrou choisie, pour reproduire un client 0.2
+    /// dans la suite d'intégration.
+    init(homeserver: URL, restorer: SessionRestorer) {
+        self.homeserver = homeserver
+        self.restorer = restorer
+    }
+
     /// Restaure la session persistée sans connaître l'adresse du homeserver, enregistrée avec elle.
     public static func restoreSession(storage: MatrixStorage) async throws -> (any MatrixClientKitCore.MatrixSession)? {
         try await SessionRestorer(storage: storage).restore()

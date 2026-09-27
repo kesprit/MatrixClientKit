@@ -10,6 +10,8 @@ homeserver and must be run **manually before every bump of the Rust SDK**.
     MATRIX_TEST_PASSWORD=secret \
     MATRIX_TEST_ROOM_ID='!room:your-homeserver' \
     MATRIX_TEST_RECOVERY_KEY='EsTc …' \
+    MATRIX_TEST_SENDER_USERNAME=sender \
+    MATRIX_TEST_SENDER_PASSWORD=secret \
     swift test --filter MatrixClientKitIntegrationTests
 
 Without the first three variables the suite is skipped, which is the expected behaviour in CI.
@@ -39,6 +41,10 @@ Optional variables:
   signed in anywhere**. They enable the case checking that signing in creates a cross-signing
   identity. It is meaningful only on the account's first run: register a new account each time you
   want to check it.
+- `MATRIX_TEST_SENDER_USERNAME` and `MATRIX_TEST_SENDER_PASSWORD` name a **second** account,
+  also a member of `MATRIX_TEST_ROOM_ID`. It sends the message the main account's notification
+  service extension must resolve. Without them, the push case that needs two accounts is skipped.
+  The room must not be muted for the main account, or the event is filtered out.
 
 ## Requirements on the test account
 
@@ -57,3 +63,9 @@ Use an account **dedicated** to testing, for two reasons:
 - The Keychain holds one persisted session per service, so the verification case — which signs the
   same account in twice in one process — overwrites the first session's entry with the second's.
   The case never restores a session, so this does not affect it.
+- The notification cases use an App Group storage. On macOS, outside a sandbox, `FileManager`
+  creates its container under `~/Library/Group Containers/group.com.matrixclientkit.integration.*`;
+  each case removes its own. An interrupted run may leave one behind: delete them by hand.
+- In the two-account case, the sender signs in **before** the main account and signs out **after**
+  the extension opened: the Keychain holds one session entry per process, which every sign-in
+  overwrites and every sign-out erases.

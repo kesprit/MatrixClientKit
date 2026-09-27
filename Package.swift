@@ -34,7 +34,7 @@ let package = Package(
         .testTarget(name: "MatrixClientKitTests", dependencies: ["MatrixClientKit"]),
         .testTarget(
             name: "MatrixClientKitIntegrationTests",
-            dependencies: ["MatrixClientKit"],
+            dependencies: ["MatrixClientKit", "MatrixClientKitRust"],
             exclude: ["README.md"]
         ),
     ],

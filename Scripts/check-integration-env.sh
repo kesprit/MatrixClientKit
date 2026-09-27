@@ -1,9 +1,8 @@
 #!/bin/bash
 # Checks that the test account is ready for the integration suite, before running it.
 #
-# It verifies the password, the room, and whether recovery is set up — the three things that make
-# the suite fail for reasons that have nothing to do with the code under test. It writes nothing,
-# changes nothing on the account, and signs out the session it opens.
+# It verifies the password, the room, whether recovery is set up, and the optional sender account.
+# It writes nothing, changes nothing on the account, and signs out the session it opens.
 #
 # Usage:
 #     ./Scripts/check-integration-env.sh
@@ -121,7 +120,84 @@ PY
 )
 report "${room_result%%|*}" "${room_result#*|}"
 
-# 3. Recovery, which the encryption cases need set up on the account.
+# 3. Optional second account, also expected to be a member of the room.
+SENDER_USERNAME="${MATRIX_TEST_SENDER_USERNAME:-}"
+if [ -z "$SENDER_USERNAME" ]; then
+    printf '  SKIP  sender account (MATRIX_TEST_SENDER_USERNAME not set)\n'
+else
+    if [ -n "${MATRIX_TEST_SENDER_PASSWORD:-}" ]; then
+        SENDER_PASSWORD="$MATRIX_TEST_SENDER_PASSWORD"
+    else
+        printf 'Sender password (not echoed): ' >&2
+        read -rs SENDER_PASSWORD
+        printf '\n' >&2
+    fi
+    export SENDER_USERNAME SENDER_PASSWORD
+
+    sender_login_body=$(python3 - <<'PY'
+import json, os
+print(json.dumps({
+    "type": "m.login.password",
+    "identifier": {"type": "m.id.user", "user": os.environ["SENDER_USERNAME"]},
+    "password": os.environ["SENDER_PASSWORD"],
+    "initial_device_display_name": "MatrixClientKit env check (sender)",
+}))
+PY
+)
+
+    sender_login_response=$(curl -s -m 30 "$HOMESERVER/_matrix/client/v3/login" \
+        -H 'Content-Type: application/json' -d "$sender_login_body")
+
+    sender_login_result=$(RESPONSE="$sender_login_response" python3 - <<'PY'
+import json, os, sys
+
+try:
+    body = json.loads(os.environ["RESPONSE"])
+except ValueError:
+    print("|unreadable response from the homeserver")
+    sys.exit()
+
+token = body.get("access_token")
+if token:
+    print(f"{token}|")
+else:
+    print(f'|{body.get("errcode", "?")}: {body.get("error", "")}')
+PY
+)
+
+    SENDER_TOKEN="${sender_login_result%%|*}"
+    if [ -z "$SENDER_TOKEN" ]; then
+        report ko "Sender sign-in refused — ${sender_login_result#*|}"
+    else
+        report ok 'Sender password accepted'
+
+        sender_joined_response=$(curl -s -m 30 -H "Authorization: Bearer $SENDER_TOKEN" \
+            "$HOMESERVER/_matrix/client/v3/joined_rooms")
+
+        sender_room_result=$(RESPONSE="$sender_joined_response" python3 - <<'PY'
+import json, os, sys
+
+target = os.environ["ROOM_ID"]
+try:
+    rooms = json.loads(os.environ["RESPONSE"]).get("joined_rooms", [])
+except ValueError:
+    print("ko|could not read the sender's joined-room list")
+    sys.exit()
+
+if target in rooms:
+    print("ok|Sender has joined the room")
+else:
+    print(f"ko|The sender account has not joined {target} ({len(rooms)} room(s) joined)")
+PY
+)
+        report "${sender_room_result%%|*}" "${sender_room_result#*|}"
+
+        curl -s -m 30 -X POST -H "Authorization: Bearer $SENDER_TOKEN" -H 'Content-Type: application/json' \
+            -d '{}' "$HOMESERVER/_matrix/client/v3/logout" > /dev/null
+    fi
+fi
+
+# 4. Recovery, which the encryption cases need set up on the account.
 user_id="@$USERNAME:$(printf '%s' "$HOMESERVER" | sed -e 's|^https\{0,1\}://||' -e 's|/.*$||')"
 encoded_user=$(USER_ID="$user_id" python3 - <<'PY'
 import os, urllib.parse
