@@ -5,6 +5,10 @@ import MatrixClientKitCore
 /// Traduit les types de timeline amont vers le domaine.
 enum TimelineMapper {
 
+    /// Phrase générique d'un message indéchiffrable, partagée avec les notifications : la même
+    /// situation doit se lire de la même façon dans la timeline et sur l'écran verrouillé.
+    static let undecryptableMessage = "The message could not be decrypted."
+
     static func eventContent(
         for content: MatrixClientKitCore.MessageContent
     ) throws -> RoomMessageEventContentWithoutRelation {
@@ -63,12 +67,12 @@ enum TimelineMapper {
     /// - Note: seule la variante Megolm porte une cause ; les autres reçoivent la phrase générique.
     static func decryptionFailureReason(for message: EncryptedMessage) -> String {
         guard case let .megolmV1AesSha2(_, cause) = message else {
-            return "The message could not be decrypted."
+            return undecryptableMessage
         }
 
         switch cause {
         case .unknown:
-            return "The message could not be decrypted."
+            return undecryptableMessage
         case .sentBeforeWeJoined:
             return "Sent before you joined the room."
         case .verificationViolation:
