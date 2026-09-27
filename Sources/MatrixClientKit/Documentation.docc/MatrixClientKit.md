@@ -9,24 +9,30 @@ MatrixClientKit wraps the official Matrix Rust SDK behind a modern Swift API: `a
 **snapshots** — you receive the complete, current state and never apply a diff yourself.
 
 See <doc:GettingStarted> for a first end-to-end flow, <doc:VerificationAndRecovery> to handle
-device trust, and <doc:TestingWithMocks> to test an application that depends on the package.
+device trust, <doc:PushNotifications> to receive push notifications through a notification service
+extension, and <doc:TestingWithMocks> to test an application that depends on the package.
 
-## What v0.2 covers
+## What v0.3 covers
 
 This page can be read on its own — the Swift Package Index renders it without the repository's
 README — so the limits of this milestone are restated here.
 
-v0.2 covers password authentication, persisted sessions (restorable from storage alone), syncing,
+v0.3 covers password authentication, persisted sessions (restorable from storage alone), syncing,
 the room list, timelines, sending text messages, device verification by emoji comparison, recovery
-and key backup, and notification of a session ended by the server.
+and key backup, notification of a session ended by the server, push notifications through a
+notification service extension, and per-room notification settings.
 
-End-to-end encryption is **active**: the Rust SDK handles it, with no opt-in. What v0.2 does **not**
+End-to-end encryption is **active**: the Rust SDK handles it, with no opt-in. What v0.3 does **not**
 expose:
 
-- QR-code verification, verification of other users, and identity reset;
-- push notifications and the associated service extension;
+- QR-code verification — the bundled Rust SDK does not expose it;
+- verification of other users, and resetting a lost cryptographic identity;
+- account-wide notification settings (mentions, invitations, calls, keywords);
 - media, read receipts, typing indicators, presence and profiles;
 - OAuth / OIDC, and `MatrixClient.loginDetails()`.
+
+Because a lost identity cannot be reset yet, set up recovery early: a user who never does and then
+loses or signs out of their last device cannot verify any device of that account again.
 
 Two behaviours to know before depending on this version:
 

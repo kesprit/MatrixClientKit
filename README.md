@@ -38,7 +38,7 @@ for await rooms in session.rooms.list(filter: .joined) {
 ## Scope
 
 v0.3 covers password authentication, persisted sessions, syncing, the room list, timelines, sending
-text messages, device verification, recovery and key backup, and push notifications through a
+text messages, device verification, recovery and key backup, push notifications through a
 notification service extension, and per-room notification settings.
 
 End-to-end encryption is **active** — the Rust SDK handles it, with no opt-in on your part. An
@@ -51,7 +51,8 @@ v0.3 does **not** expose:
 - account-wide notification settings (mentions, invitations, calls, keywords).
 
 Because a lost identity cannot be reset yet, set up recovery early: a user who never does and then
-loses or signs out of their last device cannot verify any device of that account again in v0.2.
+loses or signs out of their last device cannot verify any device of that account again — identity
+reset is still not part of v0.3.
 
 `MatrixClient.loginDetails()` — which reports the login methods a homeserver accepts — is planned
 but **not implemented** yet: an application that needs to query the homeserver before showing a
