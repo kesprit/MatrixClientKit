@@ -10,6 +10,8 @@ public protocol MatrixSession: Sendable {
     var sync: any SyncController { get }
     /// End-to-end encryption: this device's verification, recovery and key backup.
     var encryption: any EncryptionService { get }
+    /// Push notifications: this device's pusher, and how much each room notifies.
+    var notifications: any NotificationService { get }
 
     /// A stream of the session's authentication state, starting with the current value. Every
     /// access opens an independent subscription.

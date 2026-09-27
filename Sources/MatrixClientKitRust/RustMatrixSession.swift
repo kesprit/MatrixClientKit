@@ -8,6 +8,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     public let rooms: any RoomService
     public let sync: any SyncController
     public let encryption: any EncryptionService
+    public let notifications: any NotificationService
 
     private let client: Client
     /// Retenu pour la durée de la session : il porte le `SessionDelegate` dont le SDK se sert à
@@ -30,6 +31,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         rooms: any RoomService,
         sync: any SyncController,
         encryption: any EncryptionService,
+        notifications: any NotificationService,
         client: Client,
         restorer: SessionRestorer,
         lifecycle: SessionLifecycle,
@@ -42,6 +44,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         self.rooms = rooms
         self.sync = sync
         self.encryption = encryption
+        self.notifications = notifications
         self.client = client
         self.restorer = restorer
         self.lifecycle = lifecycle
@@ -80,6 +83,17 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
                 sessionVerification: verification
             )
 
+            let notifications = RustNotificationService(
+                pushers: client,
+                settings: await client.getNotificationSettings(),
+                roomFacts: { roomID in
+                    guard let room = try client.getRoom(roomId: roomID) else { return nil }
+                    // Même définition qu'Element X (Task 1, constat 4) : l'amont en déduit le
+                    // réglage par défaut d'un salon.
+                    return RoomFacts(isEncrypted: await room.isEncrypted(), isOneToOne: room.activeMembersCount() == 2)
+                }
+            )
+
             let lifecycle = SessionLifecycle(
                 stopSync: { await syncService.stop() },
                 erase: { try eraseLocalData(persistence: persistence, localStore: localStore) }
@@ -93,6 +107,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
                 rooms: RustRoomService(roomListService: syncService.roomListService()),
                 sync: sync,
                 encryption: encryption,
+                notifications: notifications,
                 client: client,
                 restorer: restorer,
                 lifecycle: lifecycle,

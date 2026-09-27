@@ -78,3 +78,12 @@ private let event = EventID(rawValue: "$event")!
     }
     #expect(resolver.requests.count == 1)
 }
+
+@Test func mockSessionExposesTheNotificationServiceItWasGiven() async throws {
+    let notifications = MockNotificationService()
+    let session: any MatrixSession = MockMatrixSession(notifications: notifications)
+
+    try await session.notifications.registerPusher(SampleData.pusherConfiguration())
+
+    #expect(notifications.registeredPushers.count == 1)
+}

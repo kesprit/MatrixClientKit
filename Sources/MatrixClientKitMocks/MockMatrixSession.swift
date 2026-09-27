@@ -2,8 +2,8 @@ import Foundation
 import MatrixClientKitCore
 
 /// A drivable authenticated session for tests: exposes a ready-made ``MockRoomService``,
-/// ``MockSyncController`` and ``MockEncryptionService``, lets you push authentication states, and
-/// records calls to ``logout()``.
+/// ``MockSyncController``, ``MockEncryptionService`` and ``MockNotificationService``, lets you
+/// push authentication states, and records calls to ``logout()``.
 public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
     private let lock = NSLock()
 
@@ -12,6 +12,7 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
     public let rooms: any RoomService
     public let sync: any SyncController
     public let encryption: any EncryptionService
+    public let notifications: any NotificationService
 
     private let authStateStream: AsyncStream<AuthState>
     private let authStateContinuation: AsyncStream<AuthState>.Continuation
@@ -35,13 +36,15 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
         deviceID: String = "DEV1",
         rooms: MockRoomService = MockRoomService(),
         sync: MockSyncController = MockSyncController(),
-        encryption: MockEncryptionService = MockEncryptionService()
+        encryption: MockEncryptionService = MockEncryptionService(),
+        notifications: MockNotificationService = MockNotificationService()
     ) {
         self.userID = UserID(rawValue: userID) ?? UserID(rawValue: "@alice:matrix.org")!
         self.deviceID = DeviceID(rawValue: deviceID) ?? DeviceID(rawValue: "DEV1")!
         self.rooms = rooms
         self.sync = sync
         self.encryption = encryption
+        self.notifications = notifications
         (authStateStream, authStateContinuation) = AsyncStream<AuthState>.makeStream(
             bufferingPolicy: .bufferingNewest(1)
         )
