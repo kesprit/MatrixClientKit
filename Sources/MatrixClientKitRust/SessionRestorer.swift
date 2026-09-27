@@ -9,24 +9,55 @@ import MatrixClientKitCore
 /// session persistée. Retenu par chaque session qu'il produit, pour que ``sessionDelegate`` vive
 /// aussi longtemps qu'elle.
 final class SessionRestorer: Sendable {
+    /// Couture de test : `.unset` reproduit un client 0.2, qui n'appelait jamais
+    /// `crossProcessLockConfig`. Sert uniquement au cas d'intégration qui restaure un tel store.
+    enum LockPolicy: Sendable {
+        case automatic
+        case unset
+    }
+
     let storage: MatrixStorage
     let secureStore: any SecureStore
     let persistence: SessionPersistence
+    let role: ClientRole
+    let lockPolicy: LockPolicy
 
     /// Le SDK s'en sert à chaque rafraîchissement de jeton : un delegate libéré ne persisterait
     /// plus rien, et l'utilisateur serait déconnecté au lancement suivant sans erreur visible.
     let sessionDelegate: SessionDelegate
 
-    convenience init(storage: MatrixStorage) {
-        self.init(storage: storage, secureStore: KeychainSecureStore(storage: storage))
+    convenience init(storage: MatrixStorage, role: ClientRole = .application, lockPolicy: LockPolicy = .automatic) {
+        self.init(
+            storage: storage,
+            secureStore: KeychainSecureStore(storage: storage),
+            role: role,
+            lockPolicy: lockPolicy
+        )
     }
 
-    init(storage: MatrixStorage, secureStore: any SecureStore) {
+    init(
+        storage: MatrixStorage,
+        secureStore: any SecureStore,
+        role: ClientRole = .application,
+        lockPolicy: LockPolicy = .automatic
+    ) {
         self.storage = storage
         self.secureStore = secureStore
+        self.role = role
+        self.lockPolicy = lockPolicy
         let persistence = SessionPersistence(store: secureStore)
         self.persistence = persistence
         self.sessionDelegate = SessionDelegate(persistence: persistence)
+    }
+
+    /// Le verrou à poser sur le builder, ou `nil` pour ne pas l'appeler.
+    func lockConfiguration() throws -> CrossProcessLockConfig? {
+        switch lockPolicy {
+        case .automatic:
+            return try CrossProcessLock.configuration(for: storage, role: role)
+        case .unset:
+            return nil
+        }
     }
 
     func makeLocalStore(for userID: UserID) -> LocalStore {
@@ -39,15 +70,17 @@ final class SessionRestorer: Sendable {
             let paths = try localStore.paths()
             try paths.createDirectoriesIfNeeded()
 
-            return try await ClientBuilder()
+            var builder = ClientBuilder()
                 .homeserverUrl(url: homeserver.absoluteString)
                 .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
                 .setSessionDelegate(sessionDelegate: sessionDelegate)
                 // Désactivé par défaut en amont : sans lui, un compte qui ne s'est jamais connecté
                 // ailleurs n'a pas d'identité cross-signing, et la vérification échoue toujours
                 // (spec 0.2, §2.8). Uniquement ici, jamais sur le client de poignée de main : son
-                // store en mémoire perdrait les clés privées aussitôt créées.
-                .autoEnableCrossSigning(autoEnableCrossSigning: true)
+                // store en mémoire perdrait les clés privées aussitôt créées. Jamais non plus dans
+                // l'extension : amorcer une identité est une écriture de compte réservée à
+                // l'application (spec 0.3, §7).
+                .autoEnableCrossSigning(autoEnableCrossSigning: role == .application)
                 .sqliteStore(
                     config: SqliteStoreBuilder(
                         dataPath: paths.dataDirectory.path,
@@ -55,7 +88,10 @@ final class SessionRestorer: Sendable {
                     )
                     .key(key: try localStore.encryptionKey())
                 )
-                .build()
+            if let lock = try lockConfiguration() {
+                builder = builder.crossProcessLockConfig(crossProcessLockConfig: lock)
+            }
+            return try await builder.build()
         } catch {
             throw ErrorMapper.map(error)
         }
