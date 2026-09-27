@@ -57,6 +57,54 @@ permettre à l'utilisateur de régler le niveau de notification d'un salon.
    `restoreDefaultRoomNotificationMode(roomId:)`. `RoomNotificationMode` : `.allMessages`,
    `.mentionsAndKeywordsOnly`, `.mute`.
 
+## 2 bis. Constats vérifiés (Task 1 du plan)
+
+Révision `matrix-rust-sdk` de la release `26.09.07` :
+`48e07662de89d626c1ee0349ee44c5553ca30eb7`.
+
+1. **Défaut de `crossProcessLockConfig`.** Quand le `ClientBuilder` n'appelle jamais
+   `cross_process_lock_config(_:)`, la valeur par défaut du champ est
+   `CrossProcessLockConfig::SingleProcess`
+   (`bindings/matrix-sdk-ffi/src/client_builder.rs`, ligne 216, dans
+   `ClientBuilder::new()` ; l'enum et sa conversion FFI sont définies lignes 876–893).
+   C'est donc le comportement de la 0.2 (aucun verrou). Cela ne contredit pas la spec :
+   le §3 choisit déjà explicitement le verrou par le type de stockage, quelle que soit
+   la valeur par défaut amont.
+2. **`getNotification` et le verrou tenu par l'application.** Le verrou inter-processus
+   n'est pas spécifique à `NotificationClient` : `NotificationClient::new()` configure le
+   store de l'extension avec `CrossProcessLockConfig::multi_process("notifications")`
+   quand `process_setup` vaut `MultipleProcesses`
+   (`crates/matrix-sdk-ui/src/notification_client.rs`, lignes 113–128), puis c'est
+   l'infrastructure générique de verrou (`crates/matrix-sdk-common/src/cross_process_lock.rs`)
+   qui gère l'attente. `CrossProcessLock::spin_lock(max_backoff)` (lignes 543–590) retente
+   la prise du verrou avec un recul exponentiel : premier délai `INITIAL_BACKOFF_MS = 10 ms`
+   (ligne 297), doublé à chaque tentative, plafonné par défaut à
+   `MAX_BACKOFF_MS = 1000 ms` (ligne 301) ; une fois ce plafond atteint sans avoir obtenu
+   le verrou, l'appel rend `CrossProcessLockUnobtained::TimedOut` (ligne 583) plutôt que
+   d'attendre indéfiniment. Donc l'extension **attend** le verrou tenu par l'application,
+   avec un recul exponentiel de 10 ms à 1 s, puis **échoue** par un timeout si le verrou
+   n'est toujours pas libre (l'application le renouvelle par défaut toutes les
+   `EXTEND_LEASE_EVERY_MS = 50 ms`, pour un bail de `LEASE_DURATION_MS = 500 ms`,
+   lignes 286–293).
+3. **Payload Sygnal `event_id_only`.**
+   `sygnal/apnspushkin.py`, fonction `_get_payload_event_id_only` (lignes 388–414) :
+   (a) `room_id` et `event_id` sont bien affectés à la racine du payload
+   (`payload["room_id"] = n.room_id`, `payload["event_id"] = n.event_id`, lignes 405–408) ;
+   (b) `default_payload` est fusionné à la racine avant cela
+   (`payload = {}` puis `payload.update(default_payload)`, lignes 401–403), donc un `aps`
+   fourni par le pusher (dans `HttpPusherData.defaultPayload`) arrive tel quel à la racine
+   du payload APNs, sans être écrasé (seules les clés `room_id`/`event_id` sont ensuite
+   posées, distinctes de `aps`). Les deux points de la spec sont confirmés ; aucune
+   correction nécessaire.
+4. **`isOneToOne` chez Element X.** Élément X calcule
+   `isOneToOne: roomProxy.infoPublisher.value.activeMembersCount == 2` à chaque appel à
+   `getNotificationSettings`/`getDefaultRoomNotificationMode`
+   (`ElementX/Sources/Screens/RoomDetailsScreen/RoomDetailsScreenViewModel.swift` et
+   `ElementX/Sources/Screens/RoomNotificationSettingsScreen/RoomNotificationSettingsScreenViewModel.swift`),
+   avec le commentaire : « `isOneToOne` here is not the same as `isDirect` on the room. From
+   the point of view of the push rule, a one-to-one room is a room with exactly two active
+   members. » Conforme à l'attente de la spec (`activeMembersCount == 2`).
+
 ## 3. Décisions actées
 
 | Décision | Raison |
