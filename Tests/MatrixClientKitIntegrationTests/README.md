@@ -48,6 +48,10 @@ Optional variables:
 
 ## Requirements on the test account
 
+Every case runs one after the other, across all three suites — not just within one — because they
+share a single test account and a single Keychain entry per process; do not remove the
+serialization to speed the suite up.
+
 Use an account **dedicated** to testing, for two reasons:
 
 - The account must belong to **at least one joined room**: `loginSyncAndListRooms` checks that a

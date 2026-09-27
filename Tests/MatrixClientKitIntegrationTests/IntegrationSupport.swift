@@ -2,6 +2,17 @@ import Testing
 import Foundation
 import MatrixClientKit
 
+// Sérialisée : les trois suites partagent un seul compte de test et une seule entrée Keychain par
+// processus (une session persistée par service). Swift Testing ne sérialise une suite qu'entre ses
+// propres cas ; sans ce parent, les trois suites tournent en parallèle et se marchent dessus —
+// jeton révoqué par une suite pendant qu'une autre s'authentifie, entrée Keychain écrasée en plein
+// vol — ce qui échoue avec `.authentication(.missingToken)` ou dépasse la `.timeLimit` du cas pour
+// une raison qui ne concerne pas le chemin testé. `.serialized` sur un `@Suite` parent s'applique
+// récursivement à ses suites imbriquées : c'est l'idiome Swift Testing pour sérialiser au-delà
+// d'une seule suite, sans dépendre d'une option de ligne de commande comme `--no-parallel`.
+@Suite(.enabled(if: IntegrationConfiguration.isAvailable), .serialized)
+struct IntegrationTests {}
+
 /// Configuration lue dans l'environnement. Absente, la suite entière est ignorée.
 struct IntegrationConfiguration {
     let homeserver: URL
