@@ -1,15 +1,19 @@
 #!/bin/bash
 # Checks that the test account is ready for the integration suite, before running it.
 #
-# It verifies the password, the room, whether recovery is set up, and the optional sender account.
-# It writes nothing, changes nothing on the account, and signs out the session it opens.
+# It verifies the password, the room, whether recovery is set up, and the optional sender account —
+# it can open two sessions, and signs out each one it opens. It writes nothing else and changes
+# nothing else on either account.
 #
 # Usage:
 #     ./Scripts/check-integration-env.sh
 #
-# It reads MATRIX_TEST_HOMESERVER, MATRIX_TEST_USERNAME and MATRIX_TEST_ROOM_ID from the
-# environment when they are set, and asks for whatever is missing. The password is never echoed,
-# never stored, and never passed as a command-line argument.
+# It reads MATRIX_TEST_HOMESERVER, MATRIX_TEST_USERNAME, MATRIX_TEST_ROOM_ID,
+# MATRIX_TEST_SENDER_USERNAME and MATRIX_TEST_SENDER_PASSWORD from the environment when they are
+# set, and asks for whatever is missing (the sender account stays optional either way). No
+# password, and no bearer token, is ever echoed, stored, or passed as a command-line argument —
+# every request body and every `Authorization` header goes to `curl` through a file descriptor
+# instead, never through argv.
 
 set -u
 
@@ -66,8 +70,8 @@ print(json.dumps({
 PY
 )
 
-login_response=$(curl -s -m 30 "$HOMESERVER/_matrix/client/v3/login" \
-    -H 'Content-Type: application/json' -d "$login_body")
+login_response=$(printf '%s' "$login_body" | curl -s -m 30 "$HOMESERVER/_matrix/client/v3/login" \
+    -H 'Content-Type: application/json' --data-binary @-)
 
 login_result=$(RESPONSE="$login_response" python3 - <<'PY'
 import json, os, sys
@@ -97,7 +101,7 @@ export TOKEN
 report ok 'Password accepted'
 
 # 2. The room the send-a-message case needs, and the account's membership in it.
-joined_response=$(curl -s -m 30 -H "Authorization: Bearer $TOKEN" \
+joined_response=$(curl -s -m 30 -H @<(printf 'Authorization: Bearer %s\n' "$TOKEN") \
     "$HOMESERVER/_matrix/client/v3/joined_rooms")
 
 room_result=$(RESPONSE="$joined_response" python3 - <<'PY'
@@ -145,8 +149,8 @@ print(json.dumps({
 PY
 )
 
-    sender_login_response=$(curl -s -m 30 "$HOMESERVER/_matrix/client/v3/login" \
-        -H 'Content-Type: application/json' -d "$sender_login_body")
+    sender_login_response=$(printf '%s' "$sender_login_body" | curl -s -m 30 "$HOMESERVER/_matrix/client/v3/login" \
+        -H 'Content-Type: application/json' --data-binary @-)
 
     sender_login_result=$(RESPONSE="$sender_login_response" python3 - <<'PY'
 import json, os, sys
@@ -171,7 +175,7 @@ PY
     else
         report ok 'Sender password accepted'
 
-        sender_joined_response=$(curl -s -m 30 -H "Authorization: Bearer $SENDER_TOKEN" \
+        sender_joined_response=$(curl -s -m 30 -H @<(printf 'Authorization: Bearer %s\n' "$SENDER_TOKEN") \
             "$HOMESERVER/_matrix/client/v3/joined_rooms")
 
         sender_room_result=$(RESPONSE="$sender_joined_response" python3 - <<'PY'
@@ -192,8 +196,8 @@ PY
 )
         report "${sender_room_result%%|*}" "${sender_room_result#*|}"
 
-        curl -s -m 30 -X POST -H "Authorization: Bearer $SENDER_TOKEN" -H 'Content-Type: application/json' \
-            -d '{}' "$HOMESERVER/_matrix/client/v3/logout" > /dev/null
+        printf '{}' | curl -s -m 30 -X POST -H @<(printf 'Authorization: Bearer %s\n' "$SENDER_TOKEN") \
+            -H 'Content-Type: application/json' --data-binary @- "$HOMESERVER/_matrix/client/v3/logout" > /dev/null
     fi
 fi
 
@@ -205,7 +209,7 @@ print(urllib.parse.quote(os.environ["USER_ID"], safe=""))
 PY
 )
 
-recovery_response=$(curl -s -m 30 -H "Authorization: Bearer $TOKEN" \
+recovery_response=$(curl -s -m 30 -H @<(printf 'Authorization: Bearer %s\n' "$TOKEN") \
     "$HOMESERVER/_matrix/client/v3/user/$encoded_user/account_data/m.secret_storage.default_key")
 
 recovery_result=$(RESPONSE="$recovery_response" python3 - <<'PY'
@@ -227,8 +231,8 @@ PY
 report "${recovery_result%%|*}" "${recovery_result#*|}"
 
 # Leaves no device behind on the account.
-curl -s -m 30 -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-    -d '{}' "$HOMESERVER/_matrix/client/v3/logout" > /dev/null
+printf '{}' | curl -s -m 30 -X POST -H @<(printf 'Authorization: Bearer %s\n' "$TOKEN") \
+    -H 'Content-Type: application/json' --data-binary @- "$HOMESERVER/_matrix/client/v3/logout" > /dev/null
 report ok 'Check session signed out'
 printf '\n'
 
