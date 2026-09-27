@@ -6,6 +6,7 @@ import MatrixClientKitCore
 
 private let room = RoomID(rawValue: "!room:matrix.org")!
 private let event = EventID(rawValue: "$event")!
+private let persistedHomeserver = URL(string: "https://matrix-client.persisted.example")!
 
 private final class FakeNotificationClient: NotificationClientDriving, @unchecked Sendable {
     private let lock = NSLock()
@@ -28,7 +29,7 @@ private func persistedSession() -> MatrixSessionData {
     MatrixSessionData(
         userID: UserID(rawValue: "@alice:matrix.org")!,
         deviceID: DeviceID(rawValue: "DEV1")!,
-        homeserverURL: URL(string: "https://matrix.example")!,
+        homeserverURL: persistedHomeserver,
         accessToken: "jeton",
         refreshToken: nil,
         oauthData: nil,
@@ -82,4 +83,29 @@ private func persistedSession() -> MatrixSessionData {
     await #expect(throws: MatrixError.storage(.unavailable)) {
         _ = try await restorer.makeNotificationResolver()
     }
+}
+
+@Test func makingTheResolverBuildsTheClientForThePersistedHomeserver() async throws {
+    let restorer = SessionRestorer(
+        storage: .appGroup("group.com.example.app"),
+        secureStore: InMemorySecureStore(),
+        role: .notificationExtension
+    )
+    try restorer.persistence.save(persistedSession())
+    var requestedHomeserver: URL?
+
+    do {
+        _ = try await restorer.makeNotificationResolver { homeserver, _ in
+            requestedHomeserver = homeserver
+            throw MatrixError.storage(.unavailable)
+        }
+        Issue.record("la fabrique de client a échoué : le résolveur doit relayer l'erreur")
+    } catch {
+        #expect(error as? MatrixError == .storage(.unavailable))
+    }
+
+    // La session appartient au serveur qui l'a émise : aucune autre adresse ne doit être utilisée.
+    #expect(requestedHomeserver == persistedHomeserver)
+    // Un échec de stockage ne dit rien de la validité de la session : l'extension ne l'efface jamais.
+    #expect(try restorer.persistence.load() != nil)
 }

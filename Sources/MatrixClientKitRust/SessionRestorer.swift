@@ -144,6 +144,16 @@ final class SessionRestorer: Sendable {
     /// l'application, au prochain lancement, de constater la session morte et de nettoyer. Une
     /// extension qui purgerait le store pendant que l'application l'utilise le corromprait.
     func makeNotificationResolver() async throws -> RustNotificationResolver {
+        try await makeNotificationResolver { homeserver, localStore in
+            try await self.makeClient(homeserver: homeserver, localStore: localStore)
+        }
+    }
+
+    /// - Parameter makeClient: fabrique du client. Couture de test : `Client` est une classe FFI
+    ///   qu'un test ne peut pas construire, mais il peut vérifier l'adresse demandée.
+    func makeNotificationResolver(
+        makeClient: (URL, LocalStore) async throws -> Client
+    ) async throws -> RustNotificationResolver {
         // Échoue avant toute lecture pour un stockage qu'une extension ne peut pas atteindre.
         _ = try lockConfiguration()
         guard let data = try persistence.load() else {
@@ -151,7 +161,7 @@ final class SessionRestorer: Sendable {
         }
 
         let localStore = makeLocalStore(for: data.userID)
-        let client = try await makeClient(homeserver: data.homeserverURL, localStore: localStore)
+        let client = try await makeClient(data.homeserverURL, localStore)
         do {
             try await client.restoreSession(session: SessionMapper.session(from: data))
             let notificationClient = try await client.notificationClient(processSetup: .multipleProcesses)
