@@ -46,8 +46,8 @@ private func configuration(token: [UInt8], fallbackAlert: String = "New message"
     )
 }
 
-@Test func pushKeyIsTheTokenInLowercaseHexadecimal() {
-    #expect(configuration(token: [0x00, 0x0F, 0xAB, 0xFF]).pushKey == "000fabff")
+@Test func pushKeyIsTheTokenInBase64() {
+    #expect(configuration(token: [0x00, 0x0F, 0xAB, 0xFF]).pushKey == "AA+r/w==")
 }
 
 @Test func pushKeyOfAnEmptyTokenIsEmpty() {

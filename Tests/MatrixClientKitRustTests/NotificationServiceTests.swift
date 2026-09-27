@@ -124,7 +124,7 @@ private func makeService(
     #expect(
         pushers.setCalls == [
             SetPusherCall(
-                identifiers: PusherIdentifiers(pushkey: "ab01", appId: "com.example.app.ios.prod"),
+                identifiers: PusherIdentifiers(pushkey: "qwE=", appId: "com.example.app.ios.prod"),
                 kind: .http(
                     data: HttpPusherData(
                         url: "https://push.example.com/_matrix/push/v1/notify",
@@ -148,7 +148,7 @@ private func makeService(
 
     try await service.unregisterPusher(configuration())
 
-    #expect(pushers.deleted == [PusherIdentifiers(pushkey: "ab01", appId: "com.example.app.ios.prod")])
+    #expect(pushers.deleted == [PusherIdentifiers(pushkey: "qwE=", appId: "com.example.app.ios.prod")])
 }
 
 @Test func aPusherFailureIsMapped() async {

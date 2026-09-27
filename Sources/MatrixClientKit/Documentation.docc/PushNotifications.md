@@ -73,6 +73,11 @@ fails or runs out of time. The package sets `mutable-content` on the pusher's de
 you — without it, iOS never calls the extension at all — so there is nothing to configure on that
 side.
 
+The push key the package sends to the homeserver, ``PusherConfiguration/pushKey``, is the device
+token encoded in base64. That is what Sygnal's APNs pushkin expects by default: it decodes the push
+key from base64 before handing the token to Apple. If your gateway is configured to read the token
+in another encoding, reconfigure it to match, or every push will be rejected.
+
 ## Write the extension
 
 The extension's `didReceive(_:withContentHandler:)` reads the push, resolves it, and fills the

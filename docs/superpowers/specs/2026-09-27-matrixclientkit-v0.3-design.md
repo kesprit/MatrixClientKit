@@ -127,7 +127,7 @@ MatrixClientKitCore      (aucun import amont)
   Services/NotificationService.swift           protocole, sur MatrixSession.notifications
   Services/NotificationContentResolving.swift  protocole de l'extension
   Models/Notification.swift                    MatrixNotification, NotificationResult
-  Models/PusherConfiguration.swift             configuration du pusher, jeton APNs en hexa
+  Models/PusherConfiguration.swift             configuration du pusher, jeton APNs en base64
   Models/MatrixPushPayload.swift               lecture du payload APNs
   Models/RoomNotificationMode.swift            mode et réglage d'un salon
 
@@ -187,7 +187,10 @@ public struct PusherConfiguration: Sendable, Hashable {
     public let language: String         // défaut : Locale.current, code de langue
     public let fallbackAlert: String    // défaut : "New message" — affiché si l'extension échoue
     public init(deviceToken:appID:gatewayURL:appDisplayName:deviceDisplayName:language:fallbackAlert:)
-    /// Le `pushkey` envoyé au homeserver : le jeton en hexadécimal minuscule.
+    /// Le `pushkey` envoyé au homeserver : le jeton encodé en base64 (`base64EncodedString()`).
+    /// C'est ce qu'attend par défaut le pushkin APNs de Sygnal, qui décode le pushkey depuis le
+    /// base64 (`convert_device_token_to_hex`, apnspushkin.py:242-247) ; une passerelle configurée
+    /// autrement doit s'aligner.
     public var pushKey: String { get }
 }
 
@@ -396,7 +399,7 @@ Tout écart avec cette spec est consigné dans la spec avant d'écrire le code c
 **Unitaires (TDD, Swift Testing)**
 
 - Core : `MatrixPushPayload` (valide, champ manquant, identifiant invalide, types inattendus),
-  `PusherConfiguration.pushKey` (hexa minuscule, jeton vide), modèles.
+  `PusherConfiguration.pushKey` (base64, jeton vide → chaîne vide), modèles.
 - Rust : `NotificationMapper` (4 statuts, message et invitation, expéditeur sans nom, chaque ligne du
   tableau §6.1, `isNoisy`/`hasMention` nil, identifiant invalide) ; `CrossProcessLock` (les quatre
   lignes du tableau §7) ; `RustNotificationService` derrière `NotificationDriving` (pusher construit

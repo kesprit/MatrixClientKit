@@ -41,9 +41,13 @@ public struct PusherConfiguration: Sendable, Hashable {
         self.fallbackAlert = fallbackAlert
     }
 
-    /// The key identifying this device to the gateway: the device token in lowercase hexadecimal.
+    /// The key identifying this device to the gateway: the device token encoded in base64.
+    ///
+    /// This is the encoding Sygnal's APNs pushkin expects by default: it decodes the push key from
+    /// base64 before handing the token to Apple. A gateway configured to read another encoding
+    /// must be reconfigured to match.
     public var pushKey: String {
-        deviceToken.map { String(format: "%02x", $0) }.joined()
+        deviceToken.base64EncodedString()
     }
 
     /// Le `default_payload` du pusher, fusionné par la passerelle dans chaque push APNs.
