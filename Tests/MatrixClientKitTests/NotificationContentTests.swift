@@ -70,11 +70,11 @@ private func notification(
     #expect(quiet.sound == nil)
 }
 
-@Test func theServiceRefusesALocalStorage() async {
+@Test func theResolverRefusesALocalStorage() async {
     // Le refus a lieu avant toute lecture du Keychain : le cas ne dépend donc pas d'une session
     // qu'une autre exécution y aurait laissée.
     do {
-        _ = try await MatrixNotificationService(storage: .local(directory: FileManager.default.temporaryDirectory))
+        _ = try await MatrixNotificationResolver(storage: .local(directory: FileManager.default.temporaryDirectory))
         Issue.record("une extension ne doit pas pouvoir ouvrir un stockage local")
     } catch {
         #expect(error as? MatrixError == .storage(.unavailable))

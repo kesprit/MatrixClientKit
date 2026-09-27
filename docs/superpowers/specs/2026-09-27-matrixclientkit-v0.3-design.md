@@ -19,7 +19,7 @@ permettre à l'utilisateur de régler le niveau de notification d'un salon.
 | Inclus | Exclu (et palier) |
 | --- | --- |
 | Enregistrement et suppression du pusher HTTP (APNs, format `eventIdOnly`) | La passerelle push elle-même (côté serveur, à la charge de l'application) |
-| `MatrixNotificationService(storage:)` : résolution d'une notification dans l'extension | Résolution par lot (`getNotifications`) |
+| `MatrixNotificationResolver(storage:)` : résolution d'une notification dans l'extension | Résolution par lot (`getNotifications`) |
 | Verrou inter-processus (`crossProcessLockConfig`) sur les stockages App Group | Montée de l'amont |
 | `MatrixPushPayload(userInfo:)` : lecture du payload APNs | Notifications locales, badges, actions de notification |
 | Aide `UNMutableNotificationContent.apply(_:)` dans l'umbrella | — |
@@ -109,16 +109,17 @@ Révision `matrix-rust-sdk` de la release `26.09.07` :
 
 | Décision | Raison |
 | --- | --- |
-| L'extension a son propre point d'entrée, `MatrixNotificationService`, et son propre client | Aucune sync accessible depuis l'extension par construction ; mémoire réduite (limite d'environ 24 Mo d'une NSE) |
+| L'extension a son propre point d'entrée, `MatrixNotificationResolver`, et son propre client | Aucune sync accessible depuis l'extension par construction ; mémoire réduite (limite d'environ 24 Mo d'une NSE) |
 | Écarté : restaurer une `MatrixSession` complète dans l'extension | Rendrait la sync appelable depuis l'extension, contre la règle de la spec §8 |
 | Écarté : requêtes HTTP brutes sans SDK | Aucun déchiffrement : inutilisable sur un salon chiffré |
-| `MatrixNotificationService(storage:)` sans `userID` | Un stockage porte une seule session (`SessionPersistence.storageKey`), comme `Matrix.restoreSession(storage:)` |
+| `MatrixNotificationResolver(storage:)` sans `userID` | Un stockage porte une seule session (`SessionPersistence.storageKey`), comme `Matrix.restoreSession(storage:)` |
 | Verrou choisi par le stockage : App Group → `.multiProcess`, local → `.singleProcess` | Un stockage local n'est partagé avec aucune extension ; un App Group l'est par définition |
 | Core rend un modèle pur ; l'aide `UserNotifications` vit dans l'umbrella | Core reste utilisable hors iOS ; l'application peut ignorer l'aide |
 | Format de pusher `eventIdOnly` imposé | Le contenu des messages ne transite pas par Apple ; c'est le seul format amont |
 | Paramètres minimaux : mode par salon | Choix explicite de périmètre ; le reste est listé au §1 |
 | Aucun nouveau cas de `MatrixError` | Règle d'évolution du README ; les cas existants suffisent (§8) |
 | `MatrixSession` gagne `notifications` : **changement cassant** | Même traitement qu'`encryption` en 0.2 ; consigné au CHANGELOG |
+| Renommage : `MatrixNotificationService` devient `MatrixNotificationResolver` | Le nom suggérait une conformité au protocole `NotificationService` (côté application) qu'il n'implémente pas, et le type voisinait avec la classe `NotificationService` générée par Xcode dans chaque extension de service de notification |
 
 ## 4. Architecture
 
@@ -140,7 +141,7 @@ MatrixClientKitRust
   SessionRestorer.swift                        applique le verrou (point unique) ; rôle app ou extension
 
 MatrixClientKit (umbrella)
-  MatrixNotificationService.swift              point d'entrée de l'extension
+  MatrixNotificationResolver.swift             point d'entrée de l'extension
   UNMutableNotificationContent+Matrix.swift    apply(_:) (iOS et macOS, `#if canImport(UserNotifications)`)
 
 MatrixClientKitMocks
@@ -261,7 +262,7 @@ racine du dictionnaire `userInfo`. L'expéditeur d'une invitation (`.invite(send
 ### 5.4 Points d'entrée (umbrella)
 
 ```swift
-public final class MatrixNotificationService: NotificationContentResolving {
+public final class MatrixNotificationResolver: NotificationContentResolving {
     /// Opens the session persisted in `storage` for resolving notifications, without syncing.
     /// - Throws: `MatrixError.authentication(.missingToken)` when no session is stored.
     public init(storage: MatrixStorage) async throws
@@ -291,8 +292,8 @@ override func didReceive(_ request: UNNotificationRequest,
 
     Task {
         do {
-            let service = try await MatrixNotificationService(storage: .appGroup("group.com.example.app"))
-            switch try await service.notification(roomID: payload.roomID, eventID: payload.eventID) {
+            let resolver = try await MatrixNotificationResolver(storage: .appGroup("group.com.example.app"))
+            switch try await resolver.notification(roomID: payload.roomID, eventID: payload.eventID) {
             case .notification(let notification):
                 content.apply(notification)
                 contentHandler(content)
@@ -310,12 +311,12 @@ override func didReceive(_ request: UNNotificationRequest,
 
 Ce squelette montre le flux. L'article DocC en donne la forme complète, vérifiée à la compilation :
 un stockage partagé unique (avec `keychainAccessGroup`) défini pour l'application et l'extension,
-une seule instance de `MatrixNotificationService` par processus, ouverte au premier push par un
+une seule instance de `MatrixNotificationResolver` par processus, ouverte au premier push par un
 acteur qui retient la tâche d'ouverture, et le rappel `serviceExtensionTimeWillExpire()`. Masquer
 une notification (`.filteredOut`, `.redacted`) par un contenu vide exige l'entitlement
 `com.apple.developer.usernotifications.filtering`.
 
-1. `MatrixNotificationService.init(storage:)` lit la session persistée via `SessionRestorer` ; sans
+1. `MatrixNotificationResolver.init(storage:)` lit la session persistée via `SessionRestorer` ; sans
    session, `MatrixError.authentication(.missingToken)`.
 2. Il construit un client persistant sur le même store SQLite avec le rôle « extension »
    (§7), puis `notificationClient(processSetup: .multipleProcesses)`. Les deux sont retenus par
@@ -428,7 +429,7 @@ Tout écart avec cette spec est consigné dans la spec avant d'écrire le code c
 `Scripts/check-integration-env.sh` :
 
 1. Le compte principal a une session d'application ouverte sur un stockage App Group de test ; le
-   second compte envoie un message ; `MatrixNotificationService` ouvert sur le **même stockage**
+   second compte envoie un message ; `MatrixNotificationResolver` ouvert sur le **même stockage**
    résout l'événement en `.notification` avec le bon expéditeur et le bon texte.
 2. Après ce cas, la session d'application reste utilisable : la sync repart et un message s'envoie.
 3. `registerPusher` puis `unregisterPusher` sont acceptés par le homeserver (passerelle factice en
@@ -451,7 +452,7 @@ Destinée aux consommateurs, donc en anglais :
 - CHANGELOG 0.3.0 : **Breaking** (`MatrixSession.notifications`), **Added**, **Changed** (verrou
   inter-processus fixé explicitement pour tous les stockages).
 - Spec de référence : §12 corrigée (paramètres minimaux en 0.3, le reste reporté), §8 alignée sur
-  `MatrixNotificationService(storage:)` sans `userID`.
+  `MatrixNotificationResolver(storage:)` sans `userID`.
 
 ## 13. Publication 0.3.0
 

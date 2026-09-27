@@ -63,8 +63,8 @@ struct NotificationTests {
             let body = "notification d'intégration \(UUID().uuidString)"
             let eventID = try await sendText(body, in: roomID, from: localSender)
 
-            let service = try await MatrixNotificationService(storage: storage)
-            let result = try await service.notification(roomID: roomID, eventID: eventID)
+            let resolver = try await MatrixNotificationResolver(storage: storage)
+            let result = try await resolver.notification(roomID: roomID, eventID: eventID)
 
             guard case let .notification(notification) = result else {
                 Issue.record("résultat inattendu : \(result)")

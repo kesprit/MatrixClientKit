@@ -15,7 +15,7 @@ follows [SemVer](https://semver.org/).
 - `MatrixSession.notifications`, a `NotificationService`: `registerPusher(_:)` and
   `unregisterPusher(_:)` with a `PusherConfiguration`, and per-room notification settings —
   `notificationSettings(for:)`, `setNotificationMode(_:for:)`, `restoreDefaultNotificationMode(for:)`.
-- `MatrixNotificationService`, the notification service extension's entry point: resolves a push
+- `MatrixNotificationResolver`, the notification service extension's entry point: resolves a push
   into a `MatrixNotification` without syncing. `MatrixPushPayload` reads the push's room and event.
 - `UNMutableNotificationContent.apply(_:)` fills a notification from a `MatrixNotification`.
 - `MockNotificationService`, `MockNotificationResolver`, `SampleData.notification(kind:isDirect:isNoisy:)`

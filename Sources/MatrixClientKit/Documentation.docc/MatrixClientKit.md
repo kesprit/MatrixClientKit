@@ -98,7 +98,7 @@ Two behaviours to know before depending on this version:
 - ``PusherConfiguration``
 - ``RoomNotificationMode``
 - ``RoomNotificationSettings``
-- ``MatrixNotificationService``
+- ``MatrixNotificationResolver``
 - ``NotificationContentResolving``
 - ``MatrixPushPayload``
 - ``MatrixNotification``

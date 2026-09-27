@@ -8,7 +8,7 @@ displayable notification without syncing.
 A push travels: the homeserver tells a push gateway — typically [Sygnal](https://github.com/matrix-org/sygnal),
 operated by the application's publisher — that an event happened; the gateway sends APNs a minimal
 payload (`event_id_only`: just a room and event identifier); APNs wakes the notification service
-extension; the extension asks ``MatrixNotificationService`` to resolve the event; the extension
+extension; the extension asks ``MatrixNotificationResolver`` to resolve the event; the extension
 shows a notification built from the result. The message's content never passes through Apple's
 servers.
 
@@ -90,7 +90,7 @@ push is treated as silent and nothing is shown at all. The package sets both in 
 default payload — `alert` being your `fallbackAlert` — which the gateway merges into every push, so
 there is nothing to configure on that side.
 
-The extension keeps **one** ``MatrixNotificationService`` for the lifetime of its process, opened on
+The extension keeps **one** ``MatrixNotificationResolver`` for the lifetime of its process, opened on
 first use. An actor holding the opening task guarantees it even when several pushes arrive at once:
 they all await the same task. Each push is then read, resolved, and used to fill the notification;
 every failure delivers the push's original content:
@@ -99,17 +99,17 @@ every failure delivers the push's original content:
 import MatrixClientKit
 import UserNotifications
 
-/// The extension's one `MatrixNotificationService`, opened on first use and kept for the lifetime
+/// The extension's one `MatrixNotificationResolver`, opened on first use and kept for the lifetime
 /// of the process.
 actor SharedNotificationService {
     static let shared = SharedNotificationService()
 
-    private var opening: Task<MatrixNotificationService, any Error>?
+    private var opening: Task<MatrixNotificationResolver, any Error>?
 
-    func service() async throws -> MatrixNotificationService {
+    func service() async throws -> MatrixNotificationResolver {
         // Checked and set with no suspension in between: concurrent pushes await the same task.
         if let opening { return try await opening.value }
-        let task = Task { try await MatrixNotificationService(storage: .shared) }
+        let task = Task { try await MatrixNotificationResolver(storage: .shared) }
         opening = task
         do {
             return try await task.value
@@ -138,8 +138,8 @@ final class NotificationService: UNNotificationServiceExtension {
 
         Task {
             do {
-                let service = try await SharedNotificationService.shared.service()
-                switch try await service.notification(roomID: payload.roomID, eventID: payload.eventID) {
+                let resolver = try await SharedNotificationService.shared.service()
+                switch try await resolver.notification(roomID: payload.roomID, eventID: payload.eventID) {
                 case .notification(let notification):
                     content.apply(notification)
                     contentHandler(content)
@@ -175,12 +175,12 @@ deliver the original content or a generic one instead.
 
 ## Rules
 
-**No sync in the extension.** ``MatrixNotificationService`` never starts a sync: starting one from
+**No sync in the extension.** ``MatrixNotificationResolver`` never starts a sync: starting one from
 the extension would race the application's own sync over the same store and corrupt its state. The
 extension only ever calls ``NotificationContentResolving/notification(roomID:eventID:)``.
 
 **Memory is scarce.** A notification service extension gets roughly 24 MB. Keep the
-``MatrixNotificationService`` instance alive for the extension process's lifetime instead of
+``MatrixNotificationResolver`` instance alive for the extension process's lifetime instead of
 recreating it on every push, and never open a full `MatrixSession` from the extension — it is not
 built for the budget.
 
@@ -191,7 +191,7 @@ time, resolution fails with a timeout. In practice this means resolution can be 
 app is active in the foreground, and a failure here must fall back to the original push content —
 which is exactly what the `catch` block above does.
 
-**A signed-out session fails immediately.** If the user signed out, `MatrixNotificationService.init(storage:)`
+**A signed-out session fails immediately.** If the user signed out, `MatrixNotificationResolver.init(storage:)`
 throws ``MatrixError/authentication(_:)`` with ``MatrixError/Authentication/missingToken``: there is
 no session to read. Deliver the original content, as the example does.
 
