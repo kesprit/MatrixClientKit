@@ -137,7 +137,8 @@ public struct PusherConfiguration: Sendable, Hashable {
     public let appDisplayName: String
     public let deviceDisplayName: String
     public let language: String         // défaut : Locale.current, code de langue
-    public init(deviceToken:appID:gatewayURL:appDisplayName:deviceDisplayName:language:)
+    public let fallbackAlert: String    // défaut : "New message" — affiché si l'extension échoue
+    public init(deviceToken:appID:gatewayURL:appDisplayName:deviceDisplayName:language:fallbackAlert:)
     /// Le `pushkey` envoyé au homeserver : le jeton en hexadécimal minuscule.
     public var pushKey: String { get }
 }
@@ -153,6 +154,12 @@ public struct RoomNotificationSettings: Sendable, Hashable {
     public let isDefault: Bool              // true quand aucun réglage propre au salon n'existe
 }
 ```
+
+Le pusher est enregistré avec un `default_payload` que la passerelle fusionne dans chaque push
+APNs : `{"aps":{"mutable-content":1,"alert":{"body":"<fallbackAlert>"}}}`. **Sans
+`mutable-content`, iOS n'appelle jamais l'extension** ; sans `alert`, iOS n'appelle pas non plus
+l'extension. L'alerte de repli est ce que voit l'utilisateur si l'extension échoue ou dépasse son
+temps : l'application la fournit dans sa langue.
 
 `notificationSettings(for:)` récupère lui-même `isEncrypted` et « un à un » (salon direct à deux
 membres) du salon, que l'amont exige, via le client de la session.
@@ -266,8 +273,10 @@ override func didReceive(_ request: UNNotificationRequest,
 | --- | --- |
 | `.text`, `.notice` | le corps du message |
 | `.emote` | `"* \(sender) \(body)"` |
-| `.image`, `.video`, `.audio`, `.file` | le corps amont (nom du fichier ou légende) s'il existe, sinon `"Sent an image"` / `"Sent a video"` / `"Sent an audio message"` / `"Sent a file"` |
+| `.image`, `.video`, `.audio`, `.file` | la légende si elle existe et n'est pas vide, sinon `"Sent an image"` / `"Sent a video"` / `"Sent an audio message"` / `"Sent a file"` (le nom de fichier, souvent `IMG_1234.jpg`, n'est jamais utilisé) |
+| `.gallery` | `"Sent images"` |
 | `.location` | `"Shared a location"` |
+| `.other(msgtype:body:)` | le corps de repli s'il n'est pas vide (la spec Matrix l'exige pour tout `msgtype`), sinon `"Sent a message"` |
 | `.roomEncrypted` | `"The message could not be decrypted."` (même phrase que la timeline sans cause) |
 | tout autre contenu (`.poll`, `.sticker`, appels…) | `"Sent a message"` |
 
@@ -287,6 +296,14 @@ la configuration renvoyée par une fonction pure :
 | `.local` | extension | refusé : `MatrixError.storage(.unavailable)` — une extension ne peut pas lire un stockage local |
 
 Le client de poignée de main (store en mémoire, utilisé pendant `login`) n'est pas concerné.
+
+Le rôle règle aussi `autoEnableCrossSigning` : `true` pour l'application (comportement 0.2),
+`false` pour l'extension — l'amorçage d'une identité est une écriture de compte que seule
+l'application doit faire, jamais un processus de quelques secondes lancé par un push.
+
+Une couture interne, `SessionRestorer.LockPolicy` (`.automatic` par défaut, `.unset` pour
+reproduire un client 0.2 sans appel à `crossProcessLockConfig`), sert uniquement au cas
+d'intégration 5. Elle n'est pas publique.
 
 Rafraîchissement de jeton (piège n° 3 de la spec §8) : en `.multiProcess`, le SDK prend son verrou
 de rafraîchissement inter-processus et relit la session via
@@ -335,7 +352,7 @@ Tout écart avec cette spec est consigné dans la spec avant d'écrire le code c
 - Rust : `NotificationMapper` (4 statuts, message et invitation, expéditeur sans nom, chaque ligne du
   tableau §6.1, `isNoisy`/`hasMention` nil, identifiant invalide) ; `CrossProcessLock` (les quatre
   lignes du tableau §7) ; `RustNotificationService` derrière `NotificationDriving` (pusher construit
-  avec `pushkey`, `appId`, URL, `.eventIdOnly`, `append: false` ; paramètres ; erreurs mappées).
+  avec `pushkey`, `appId`, URL, `.eventIdOnly`, `default_payload` avec `mutable-content` et l'alerte de repli, `append: false` ; paramètres ; erreurs mappées).
 - Umbrella : `apply(_:)` en salon direct, en salon de groupe, invitation, bruyant ou non.
 - Mocks : injection d'erreurs et historique.
 
