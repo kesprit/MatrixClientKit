@@ -61,4 +61,36 @@ public enum SampleData: Sendable {
             )
         )
     }
+
+    /// Builds a sample ``MatrixNotification`` from Alice in the "Lounge" room.
+    public static func notification(
+        kind: MatrixNotification.Kind = .message(body: "Hello"),
+        isDirect: Bool = false,
+        isNoisy: Bool = true
+    ) -> MatrixNotification {
+        MatrixNotification(
+            roomID: RoomID(rawValue: "!room:matrix.org")!,
+            eventID: EventID(rawValue: "$event")!,
+            sender: UserID(rawValue: "@alice:matrix.org")!,
+            senderDisplayName: "Alice",
+            roomDisplayName: "Lounge",
+            isDirect: isDirect,
+            kind: kind,
+            isNoisy: isNoisy,
+            hasMention: false,
+            threadID: nil
+        )
+    }
+
+    /// Builds a sample ``PusherConfiguration`` pointing at a gateway on `example.com`.
+    public static func pusherConfiguration() -> PusherConfiguration {
+        PusherConfiguration(
+            deviceToken: Data([0xDE, 0xAD, 0xBE, 0xEF]),
+            appID: "com.example.app.ios.dev",
+            gatewayURL: URL(string: "https://push.example.com/_matrix/push/v1/notify")!,
+            appDisplayName: "Example",
+            deviceDisplayName: "iPhone",
+            language: "en"
+        )
+    }
 }
