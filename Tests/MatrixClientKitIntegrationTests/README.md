@@ -70,6 +70,13 @@ Use an account **dedicated** to testing, for two reasons:
 - The notification cases use an App Group storage. On macOS, outside a sandbox, `FileManager`
   creates its container under `~/Library/Group Containers/group.com.matrixclientkit.integration.*`;
   each case removes its own. An interrupted run may leave one behind: delete them by hand.
+- `aStoreCreatedWithoutTheLockIsRestoredWithIt` models an upgrade from 0.2 to 0.3, which is a
+  relaunch: the lock-less 0.2 store is created by the `IntegrationLegacySeeder` executable, in a
+  separate process that exits before the test restores the store with the lock. Two clients on one
+  store in one process never happen in an application, and that setup hung intermittently. The
+  seeder hands its Keychain secrets back through a pipe and the test writes them itself: on macOS, an
+  entry written by another executable cannot be read without an authorization dialog. `swift test`
+  builds the seeder automatically; run it on its own only for debugging, from the environment.
 - In the two-account case, the sender signs in **before** the main account and signs out **after**
   the extension opened: the Keychain holds one session entry per process, which every sign-in
   overwrites and every sign-out erases.

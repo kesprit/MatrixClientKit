@@ -32,9 +32,17 @@ let package = Package(
         ),
         .testTarget(name: "MatrixClientKitRustTests", dependencies: ["MatrixClientKitRust"]),
         .testTarget(name: "MatrixClientKitTests", dependencies: ["MatrixClientKit"]),
+        // Réservé à la suite d'intégration, jamais dans `products:` : crée un store sans verrou
+        // (comportement 0.2) dans un processus à part. La dépendance de la suite sur lui garantit
+        // qu'il est construit avant les tests.
+        .executableTarget(
+            name: "IntegrationLegacySeeder",
+            dependencies: ["MatrixClientKit", "MatrixClientKitRust"],
+            path: "Tests/IntegrationLegacySeeder"
+        ),
         .testTarget(
             name: "MatrixClientKitIntegrationTests",
-            dependencies: ["MatrixClientKit", "MatrixClientKitRust"],
+            dependencies: ["MatrixClientKit", "MatrixClientKitRust", "IntegrationLegacySeeder"],
             exclude: ["README.md"]
         ),
     ],

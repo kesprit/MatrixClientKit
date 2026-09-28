@@ -189,84 +189,74 @@ extension IntegrationTests {
         }
 
         /// Cas 5 : un store créé par un client sans verrou, comme en 0.2, se restaure avec le verrou.
-        @Test(.timeLimit(.minutes(2)))
+        ///
+        /// Modélise une vraie mise à jour 0.2 → 0.3, qui est un relancement : le store 0.2 est créé
+        /// par l'exécutable `IntegrationLegacySeeder`, dans un processus qui se termine avant que le
+        /// client 0.3 de ce processus-ci ne l'ouvre. Deux clients sur un même store dans un même
+        /// processus — ce que faisait ce cas auparavant — n'arrive jamais dans une application, et
+        /// ce montage bloquait par intermittence dans un appel du SDK insensible à l'annulation.
+        ///
+        /// Les secrets du client 0.2 (session et clé du store) reviennent par le tube du seeder et
+        /// sont écrits ici dans le Keychain, sous l'identité de ce processus : sur macOS, une entrée
+        /// écrite par un autre exécutable ne se lit pas sans dialogue d'autorisation, alors qu'une
+        /// application relancée retrouve les siennes. Le format des entrées est celui du client,
+        /// inchangé entre 0.2 et 0.3 ; ce qui est vérifié, c'est le store créé sans verrou.
+        @Test(.timeLimit(.minutes(3)))
         func aStoreCreatedWithoutTheLockIsRestoredWithIt() async throws {
             let configuration = try #require(IntegrationConfiguration.current)
-            let storage = appGroupStorage()
+            let appGroup = newAppGroupIdentifier()
+            let storage = appGroupStorage(appGroup)
 
-            var firstUserID: UserID?
             var legacyAccessToken: String?
+            var writtenSecretKeys: [String] = []
             var restored: (any MatrixSession)?
 
-            // Contrairement aux autres cas, il n'y a pas de `first` capturé ici : le client 0.2 et
-            // sa session sont scopés à ``loginWithLegacyClient()`` ci-dessous et n'ont plus de
-            // référent Swift une fois celle-ci retournée (voir son commentaire) — la référence forte
-            // qui gardait `first` en vie pendant tout le cas disparaît, ce qui suffit à ne plus tenir
-            // le store SQLite ouvert deux fois. Le nettoyage n'a donc que `restored` pour déconnecter
-            // l'appareil ; s'il n'existe pas (restauration jamais tentée ou en échec), on utilise
-            // `legacyAccessToken`, capturé avant la libération du client 0.2, avec `rawLogout` — la
-            // même déconnexion HTTP brute que le cas du pusher, indépendante du client relâché et de
-            // `Matrix.restoreSession` elle-même : retenter cette dernière ici referait la manipulation
-            // que ce cas vérifie justement, et échouerait probablement pour la même raison, laissant
-            // l'appareil enregistré (c'est le risque que `rawLogout` évite).
+            // Le nettoyage déconnecte l'appareil par la session restaurée si elle existe ; sinon
+            // (restauration jamais tentée ou en échec) par `rawLogout` avec le jeton rendu par le
+            // seeder — la déconnexion HTTP brute du cas du pusher, indépendante de
+            // `Matrix.restoreSession` elle-même : la retenter ici referait la manipulation que ce
+            // cas vérifie, et échouerait probablement pour la même raison, laissant l'appareil
+            // enregistré. Les entrées Keychain écrites par ce cas sont ensuite retirées dans tous
+            // les cas : `logout()` les efface déjà, mais pas `rawLogout`.
             func cleanup() async {
                 let openedRestored = restored
                 let openedLegacyAccessToken = legacyAccessToken
+                let openedSecretKeys = writtenSecretKeys
                 await cleaningUp {
                     if let openedRestored {
                         try? await openedRestored.logout()
                     } else if let openedLegacyAccessToken {
                         try? await rawLogout(configuration, accessToken: openedLegacyAccessToken)
                     }
+                    let keychain = KeychainSecureStore(storage: storage)
+                    for key in openedSecretKeys {
+                        try? keychain.removeValue(forKey: key)
+                    }
                     removeAppGroup(storage)
                 }
             }
 
             do {
-                // Isolée dans une fonction locale pour que la référence Swift à `legacy` et à sa
-                // session se libère dès la fin de cette étape, avant la restauration, plutôt qu'à la
-                // fin du `do` : ni l'une ni l'autre n'est capturée par une variable qui survivrait à
-                // son retour ; seuls l'identifiant utilisateur et le jeton d'accès en sortent, pour
-                // la comparaison finale et pour ``cleanup()``.
-                func loginWithLegacyClient() async throws -> (userID: UserID, accessToken: String) {
-                    let legacy = RustMatrixClient(
-                        homeserver: configuration.homeserver,
-                        restorer: SessionRestorer(storage: storage, lockPolicy: .unset)
-                    )
-                    let localFirst = try await legacy.login(
-                        .password(
-                            username: configuration.username,
-                            password: configuration.password,
-                            deviceName: "MatrixClientKit Integration (0.2 store)"
-                        )
-                    )
-                    let firstStates = localFirst.sync.state
-                    await localFirst.sync.start()
-                    let firstState = await waitUntilRunning(firstStates)
-                    // `stop()` avant le `#require` : que la sync ait atteint `.running` ou non, la
-                    // laisser tourner ne sert à rien de plus ici, et un `#require` qui jette avant
-                    // `stop()` laisserait la sync du client 0.2 active pendant que la restauration
-                    // tente d'ouvrir le même store avec le verrou.
-                    await localFirst.sync.stop()
-                    try #require(firstState == .running, "initial sync reached \(String(describing: firstState))")
+                // Le seeder se connecte sans verrou, attend `.running`, arrête la sync et se
+                // termine : à son retour, plus rien ne tient le store ouvert.
+                let run = try await runLegacySeeder(appGroup: appGroup, timeout: .seconds(90))
 
-                    // Lu directement dans le Keychain plutôt que gardé via `localFirst` : le jeton
-                    // d'accès a été persisté par `login()` (voir ``SessionDelegate``), donc rien
-                    // n'oblige à garder le client 0.2 en vie pour l'obtenir.
-                    let persistence = SessionPersistence(store: KeychainSecureStore(storage: storage))
-                    let sessionData = try #require(
-                        try persistence.load(), "no session persisted for the legacy client")
-                    return (localFirst.userID, sessionData.accessToken)
+                // Le jeton d'abord, même si le seeder a échoué après sa connexion : c'est ce qui
+                // permet à ``cleanup()`` de déconnecter l'appareil qu'il a ouvert.
+                let received = InMemorySecureStore()
+                for (key, value) in run.seed?.secrets ?? [:] {
+                    try received.set(value, forKey: key)
                 }
-                // La fonction ci-dessus retournée, plus rien dans ce test ne garde de référence
-                // Swift vers `legacy` ou sa session : sans ça, deux clients resteraient ouverts sur
-                // le même store SQLite pendant la restauration — l'un sans verrou, l'autre avec — ce
-                // qu'un vrai relaunch de l'application évite en fermant entièrement le premier client
-                // avant d'ouvrir le second. Ça ne garantit pas que le SDK amont a fini toute trace du
-                // premier client à l'instant où cet appel retourne (un observateur de vérification
-                // annulé de façon asynchrone, un delegate encore référencé ailleurs) : seule la part
-                // Swift de la référence est traitée ici.
-                (firstUserID, legacyAccessToken) = try await loginWithLegacyClient()
+                legacyAccessToken = try SessionPersistence(store: received).load()?.accessToken
+                try #require(run.succeeded, "\(run.failureDescription)")
+                let seed = try #require(run.seed)
+
+                // Ce que retrouve l'application relancée : ses propres entrées Keychain.
+                let keychain = KeychainSecureStore(storage: storage)
+                writtenSecretKeys = Array(seed.secrets.keys)
+                for (key, value) in seed.secrets {
+                    try keychain.set(value, forKey: key)
+                }
 
                 let localRestored = try #require(try await Matrix.restoreSession(storage: storage))
                 restored = localRestored
@@ -275,7 +265,7 @@ extension IntegrationTests {
                 let state = await waitUntilRunning(states)
 
                 #expect(state == .running, "sync reached \(String(describing: state))")
-                #expect(localRestored.userID == firstUserID)
+                #expect(localRestored.userID.rawValue == seed.userID)
             } catch {
                 await cleanup()
                 throw error

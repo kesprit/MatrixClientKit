@@ -237,10 +237,15 @@ func sqliteFiles(in directory: URL) -> [URL] {
     return urls.filter { $0.lastPathComponent.contains("sqlite") }
 }
 
+/// Identifiant d'App Group propre à une exécution.
+func newAppGroupIdentifier() -> String {
+    "group.com.matrixclientkit.integration.\(UUID().uuidString)"
+}
+
 /// Stockage App Group propre à une exécution. Sur macOS hors bac à sable, `FileManager`
 /// synthétise le conteneur sous `~/Library/Group Containers/` sans entitlement.
-func appGroupStorage() -> MatrixStorage {
-    .appGroup("group.com.matrixclientkit.integration.\(UUID().uuidString)")
+func appGroupStorage(_ identifier: String = newAppGroupIdentifier()) -> MatrixStorage {
+    .appGroup(identifier)
 }
 
 /// Supprime le conteneur synthétisé d'un stockage App Group. L'échec est ignoré, comme pour
