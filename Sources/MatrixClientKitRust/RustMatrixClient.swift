@@ -14,8 +14,8 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
     }
 
     /// Couture de test : un restorer à politique de verrou choisie, pour reproduire un client 0.2
-    /// dans la suite d'intégration.
-    init(homeserver: URL, restorer: SessionRestorer) {
+    /// dans la suite d'intégration. Portée `package` pour l'exécutable `IntegrationLegacySeeder`.
+    package init(homeserver: URL, restorer: SessionRestorer) {
         self.homeserver = homeserver
         self.restorer = restorer
     }

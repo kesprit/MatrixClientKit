@@ -8,10 +8,13 @@ import MatrixClientKitCore
 /// restauration n'a besoin que du stockage, puisque l'adresse du homeserver fait partie de la
 /// session persistée. Retenu par chaque session qu'il produit, pour que ``sessionDelegate`` vive
 /// aussi longtemps qu'elle.
-final class SessionRestorer: Sendable {
+package final class SessionRestorer: Sendable {
     /// Couture de test : `.unset` reproduit un client 0.2, qui n'appelait jamais
     /// `crossProcessLockConfig`. Sert uniquement au cas d'intégration qui restaure un tel store.
-    enum LockPolicy: Sendable {
+    ///
+    /// Portée `package` (comme le type et son initialiseur désigné) pour l'exécutable
+    /// `IntegrationLegacySeeder`, qui doit compiler sans `@testable` en release.
+    package enum LockPolicy: Sendable {
         case automatic
         case unset
     }
@@ -35,7 +38,7 @@ final class SessionRestorer: Sendable {
         )
     }
 
-    init(
+    package init(
         storage: MatrixStorage,
         secureStore: any SecureStore,
         role: ClientRole = .application,

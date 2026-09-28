@@ -13,13 +13,15 @@
 // jamais écrit nulle part.
 //
 // Codes de sortie : 0 succès, 64 environnement incomplet, 1 échec de connexion, 2 sync qui n'a pas
-// atteint `.running`, 3 délai global dépassé.
+// atteint `.running`, 3 délai global dépassé, 143 `SIGTERM` reçu (du parent, à son propre délai).
 
 import Foundation
 import Synchronization
 import MatrixClientKit
 import MatrixClientKitCore
-@testable import MatrixClientKitRust
+// Import simple, pas `@testable` : ce que le seeder utilise est en portée `package`, et une cible
+// exécutable du package racine est construite aussi par `swift build -c release`, sans testabilité.
+import MatrixClientKitRust
 
 enum Seeder {
     /// Préfixe de l'unique ligne lisible par le parent ; tout le reste de stdout est ignoré.
@@ -66,24 +68,31 @@ final class ExportableSecureStore: SecureStore {
     }
 }
 
-/// Émet la ligne du parent au plus une fois, que ce soit depuis le chemin principal ou depuis le
-/// délai global. Dès la connexion réussie, une ligne est prête : même si la sync échoue ensuite, le
-/// parent a de quoi déconnecter l'appareil ouvert ici.
+/// La ligne du parent, prête dès la connexion réussie : même si la sync échoue ensuite, ou si le
+/// délai global ou un `SIGTERM` interrompt le processus, le parent a de quoi déconnecter l'appareil
+/// ouvert ici.
 enum Report {
     private static let pending = Mutex<LegacySeed?>(nil)
+
+    /// Tenu de l'émission jusqu'à `_exit` : un second ``finish(_:_:)`` concurrent (chemin
+    /// principal, délai global, `SIGTERM`) attend ici que le processus se termine, sans jamais
+    /// couper une ligne à moitié écrite ni en écrire une seconde.
+    private static let exiting = Mutex<Void>(())
 
     static func prepare(_ seed: LegacySeed) {
         pending.withLock { $0 = seed }
     }
 
-    static func emitIfPending() {
-        let taken = pending.withLock { current in
-            defer { current = nil }
-            return current
+    static func finish(_ code: Int32, _ message: String?) -> Never {
+        exiting.withLock { _ -> Never in
+            if let seed = pending.withLock({ $0 }), let json = try? JSONEncoder().encode(seed) {
+                FileHandle.standardOutput.write(Data(Seeder.seedLinePrefix.utf8) + json + Data("\n".utf8))
+            }
+            if let message {
+                FileHandle.standardError.write(Data("IntegrationLegacySeeder: \(message)\n".utf8))
+            }
+            _exit(code)
         }
-        guard let seed = taken, let json = try? JSONEncoder().encode(seed)
-        else { return }
-        FileHandle.standardOutput.write(Data(Seeder.seedLinePrefix.utf8) + json + Data("\n".utf8))
     }
 }
 
@@ -91,11 +100,7 @@ enum Report {
 /// fermeture propre du client, qui modélise le relancement — sur iOS, une mise à jour tue
 /// l'application. Stdout et stderr sont écrits par `FileHandle`, sans tampon à vider.
 func finish(_ code: Int32, _ message: String? = nil) -> Never {
-    Report.emitIfPending()
-    if let message {
-        FileHandle.standardError.write(Data("IntegrationLegacySeeder: \(message)\n".utf8))
-    }
-    _exit(code)
+    Report.finish(code, message)
 }
 
 func requiredEnvironment(_ name: String) -> String {
@@ -130,6 +135,18 @@ guard let homeserver = URL(string: homeserverValue) else {
 DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(Seeder.globalTimeout)) {
     finish(3, "timed out after \(Seeder.globalTimeout) s")
 }
+
+// Le parent envoie `SIGTERM` à son propre délai : l'action par défaut tuerait le processus sans
+// rendre la ligne, donc sans le jeton qui permet de déconnecter l'appareil. Ignoré au niveau du
+// processus, le signal n'est plus livré que par cette source, qui passe par ``finish(_:_:)``.
+signal(SIGTERM, SIG_IGN)
+let terminationSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
+// `@Sendable` explicite : sans lui, la closure écrite dans le code de premier niveau hérite de
+// l'isolation `@MainActor`, et son appel depuis la file globale piège à l'exécution (`SIGTRAP`).
+terminationSource.setEventHandler { @Sendable in
+    finish(143, "terminated by SIGTERM")
+}
+terminationSource.resume()
 
 let secrets = ExportableSecureStore()
 // Client 0.2 : `.unset` ne pose jamais `crossProcessLockConfig` sur le builder.

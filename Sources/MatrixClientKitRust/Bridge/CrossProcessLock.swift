@@ -2,7 +2,7 @@ import MatrixRustSDK
 import MatrixClientKitCore
 
 /// Le processus qui ouvre le store : l'application, ou son extension de service de notification.
-enum ClientRole: Sendable, Hashable {
+package enum ClientRole: Sendable, Hashable {
     case application
     case notificationExtension
 }
