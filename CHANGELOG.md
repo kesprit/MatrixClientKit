@@ -3,7 +3,7 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
 follows [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] - 2026-09-28
 
 ### Breaking
 
@@ -31,6 +31,14 @@ follows [SemVer](https://semver.org/).
 
 - Account-wide notification settings (mentions, invitations, calls, keywords) and batch
   resolution of notifications.
+
+### Verified
+
+- Full push path exercised against a real homeserver (Tuwunel 1.8.1): the notification service
+  extension resolving a message sent by another account while the application session is open on
+  the same App Group storage, pusher registration and removal, per-room notification mode, and a
+  store created without the cross-process lock (as by 0.2) restored with it from a separate
+  process. A real APNs push through a gateway was not tested.
 
 ## [0.2.0] - 2026-09-18
 
