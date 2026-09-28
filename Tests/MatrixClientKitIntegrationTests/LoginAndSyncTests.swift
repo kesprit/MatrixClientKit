@@ -33,14 +33,10 @@ extension IntegrationTests {
                 )
             )
 
+            let states = session.sync.state
             await session.sync.start()
-
-            var states: [SyncState] = []
-            for await state in session.sync.state {
-                states.append(state)
-                if state == .running { break }
-            }
-            #expect(states.contains(.running))
+            let state = await waitUntilRunning(states)
+            #expect(state == .running, "sync reached \(String(describing: state))")
 
             // La liste part vide et se remplit à la première réponse de sync : prendre le premier
             // instantané venu testerait l'état initial, pas la synchronisation. On attend donc le

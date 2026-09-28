@@ -78,12 +78,53 @@ func makeClient(_ configuration: IntegrationConfiguration) -> IntegrationClient 
     )
 }
 
+/// Garde interne à ``cleaningUp(_:)`` : deux tâches indépendantes (le nettoyage et le délai)
+/// peuvent chacune vouloir reprendre la continuation, qui ne tolère qu'une seule reprise. Un
+/// acteur sérialise les deux appels concurrents sans lock explicite.
+private actor ResumeOnce {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(_ continuation: CheckedContinuation<Void, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 /// Exécute un nettoyage même lorsque la tâche de test a été annulée — par exemple par
 /// `.timeLimit` lorsqu'un flux attendu ne produit jamais la valeur cherchée. Une tâche détachée
 /// n'hérite pas de l'annulation de son appelant, donc `session.logout()` a une vraie chance
 /// d'atteindre le serveur au lieu d'échouer immédiatement sur un contexte déjà annulé.
+///
+/// Rend la main après ~30 secondes au plus, même si `body` ne se termine jamais (`logout()` sur
+/// une session dont la sync est dans un état inattendu, observé une fois contre un vrai
+/// homeserver, suivi d'un processus bloqué pendant des heures). `body` continue de tourner en
+/// arrière-plan si c'est le délai qui l'emporte — c'est voulu, un `logout()` encore en vol garde
+/// une petite chance d'aboutir.
+///
+/// Volontairement pas de `withTaskGroup` ici : à la sortie de sa closure, un groupe de tâches
+/// attend structurellement tous ses enfants non encore consommés, y compris un enfant annulé —
+/// l'annulation est coopérative et n'interrompt pas un `await` sur la valeur d'une autre tâche.
+/// Attendre la tâche détachée dans un enfant de groupe referait donc pendre `cleaningUp` jusqu'à
+/// ce que `body` se termine, exactement le problème à corriger. `withCheckedContinuation` avec
+/// deux tâches non structurées (`Task.detached`) n'a pas cette contrainte : la fonction rend la
+/// main dès que l'une des deux appelle ``ResumeOnce/resume()``, sans attendre l'autre.
 func cleaningUp(_ body: @escaping @Sendable () async -> Void) async {
-    await Task.detached(operation: body).value
+    let detached = Task.detached(operation: body)
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        let guardian = ResumeOnce(continuation)
+        Task.detached {
+            await detached.value
+            await guardian.resume()
+        }
+        Task.detached {
+            try? await Task.sleep(for: .seconds(30))
+            await guardian.resume()
+        }
+    }
 }
 
 /// Supprime le répertoire de travail d'une exécution. L'échec est ignoré : le nettoyage ne doit
@@ -100,6 +141,30 @@ func firstValue<Element: Sendable>(
 ) async -> Element? {
     for await value in stream where predicate(value) {
         return value
+    }
+    return nil
+}
+
+/// Attend que la sync atteigne `.running`, ou un état après lequel elle n'y arrivera pas sans
+/// intervention. D'après la doc de ``SyncController/start()``, seuls trois états sont dans ce cas
+/// : `.terminated` et `.error` ne bougent plus tout seuls, et `.offline` non plus — la même doc
+/// dit qu'il faut rappeler `start()` après `.offline`, donc le SDK ne relance pas la sync de
+/// lui-même après une coupure réseau. `.idle` reste un état d'attente normal (avant que le
+/// premier cycle de sync n'ait rien produit) : on continue de boucler dessus.
+///
+/// Retourner dès qu'un état terminal apparaît, plutôt que de boucler jusqu'à épuisement du flux,
+/// est ce qui permet à l'appelant de faire échouer le test tout de suite avec l'état observé au
+/// lieu d'attendre la `.timeLimit` du cas en silence — c'est le bug qu'on corrige ici : une sync
+/// qui va en `.offline` ou `.error` au lieu de `.running` ne redeviendra pas `.running` toute
+/// seule, donc `firstValue(where: { $0 == .running })` bloquait jusqu'à la borne de temps.
+func waitUntilRunning(_ states: AsyncStream<SyncState>) async -> SyncState? {
+    for await state in states {
+        switch state {
+        case .running, .terminated, .error, .offline:
+            return state
+        case .idle:
+            continue
+        }
     }
     return nil
 }
@@ -123,7 +188,8 @@ func signIn(
     // Abonnement posé avant `start()` : le flux de sync ne rejoue pas l'état courant.
     let states = session.sync.state
     await session.sync.start()
-    _ = await firstValue(of: states) { $0 == .running }
+    let state = await waitUntilRunning(states)
+    try #require(state == .running, "sync reached \(String(describing: state)) instead of .running")
 
     return (session, integration.directory)
 }
@@ -219,7 +285,8 @@ func signIn(
     )
     let states = session.sync.state
     await session.sync.start()
-    _ = await firstValue(of: states) { $0 == .running }
+    let state = await waitUntilRunning(states)
+    try #require(state == .running, "sync reached \(String(describing: state)) instead of .running")
     return session
 }
 

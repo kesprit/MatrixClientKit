@@ -71,7 +71,8 @@ extension IntegrationTests {
             }
 
             await session.sync.start()
-            _ = await firstValue(of: untilRunning) { $0 == .running }
+            let untilRunningState = await waitUntilRunning(untilRunning)
+            try #require(untilRunningState == .running, "sync reached \(String(describing: untilRunningState))")
 
             // Second démarrage pendant que la sync tourne déjà : sans effet d'après le contrat
             // documenté sur `SyncController.start()`.

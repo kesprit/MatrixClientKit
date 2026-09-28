@@ -193,50 +193,67 @@ extension IntegrationTests {
             let configuration = try #require(IntegrationConfiguration.current)
             let storage = appGroupStorage()
 
-            var first: (any MatrixSession)?
+            var firstUserID: UserID?
             var restored: (any MatrixSession)?
 
-            // `first` et `restored` désignent le même appareil serveur ; déconnecter `restored` s'il
-            // existe suffit. Sinon, si seul `first` a pu s'ouvrir, c'est lui qu'il faut déconnecter.
+            // Contrairement aux autres cas, il n'y a pas de `first` capturé ici : le client 0.2 et
+            // sa session sont scopés à ``loginWithLegacyClient()`` ci-dessous et n'ont donc plus de
+            // référent une fois celle-ci retournée (voir son commentaire). Le nettoyage n'a donc que
+            // `restored` pour déconnecter l'appareil ; s'il n'existe pas encore (restauration jamais
+            // tentée ou en échec), on rouvre le store une dernière fois par une restauration fraîche,
+            // seulement pour ça — les identifiants du client 0.2 sont toujours sur disque, ce client
+            // lui-même n'est plus nécessaire pour les lire.
             func cleanup() async {
-                let openedFirst = first
                 let openedRestored = restored
                 await cleaningUp {
                     if let openedRestored {
                         try? await openedRestored.logout()
-                    } else {
-                        try? await openedFirst?.logout()
+                    } else if let freshSession = try? await Matrix.restoreSession(storage: storage) {
+                        try? await freshSession.logout()
                     }
                     removeAppGroup(storage)
                 }
             }
 
             do {
-                let legacy = RustMatrixClient(
-                    homeserver: configuration.homeserver,
-                    restorer: SessionRestorer(storage: storage, lockPolicy: .unset)
-                )
-                let localFirst = try await legacy.login(
-                    .password(
-                        username: configuration.username,
-                        password: configuration.password,
-                        deviceName: "MatrixClientKit Integration (0.2 store)"
+                // Isolée dans une fonction locale pour que `legacy` et sa session se libèrent dès la
+                // fin de cette étape, avant la restauration, plutôt qu'à la fin du `do` : aucune des
+                // deux n'est capturée par une variable qui survivrait à son retour, seul `firstUserID`
+                // en sort, pour la comparaison finale.
+                func loginWithLegacyClient() async throws -> UserID {
+                    let legacy = RustMatrixClient(
+                        homeserver: configuration.homeserver,
+                        restorer: SessionRestorer(storage: storage, lockPolicy: .unset)
                     )
-                )
-                first = localFirst
-                let firstStates = localFirst.sync.state
-                await localFirst.sync.start()
-                _ = await firstValue(of: firstStates) { $0 == .running }
-                await localFirst.sync.stop()
+                    let localFirst = try await legacy.login(
+                        .password(
+                            username: configuration.username,
+                            password: configuration.password,
+                            deviceName: "MatrixClientKit Integration (0.2 store)"
+                        )
+                    )
+                    let firstStates = localFirst.sync.state
+                    await localFirst.sync.start()
+                    let firstState = await waitUntilRunning(firstStates)
+                    try #require(firstState == .running, "initial sync reached \(String(describing: firstState))")
+                    await localFirst.sync.stop()
+                    return localFirst.userID
+                }
+                // Le client 0.2 (`legacy`) et sa session ne survivent pas à cet appel : sans ça, deux
+                // clients resteraient ouverts sur le même store SQLite pendant la restauration —
+                // l'un sans verrou, l'autre avec — ce qu'un vrai relaunch de l'application ne
+                // reproduirait jamais, puisqu'il ferme entièrement le premier client avant d'ouvrir
+                // le second.
+                firstUserID = try await loginWithLegacyClient()
 
                 let localRestored = try #require(try await Matrix.restoreSession(storage: storage))
                 restored = localRestored
                 let states = localRestored.sync.state
                 await localRestored.sync.start()
-                let running = await firstValue(of: states) { $0 == .running }
+                let state = await waitUntilRunning(states)
 
-                #expect(running == .running)
-                #expect(localRestored.userID == localFirst.userID)
+                #expect(state == .running, "sync reached \(String(describing: state))")
+                #expect(localRestored.userID == firstUserID)
             } catch {
                 await cleanup()
                 throw error
