@@ -146,23 +146,28 @@ func firstValue<Element: Sendable>(
 }
 
 /// Attend que la sync atteigne `.running`, ou un état après lequel elle n'y arrivera pas sans
-/// intervention. D'après la doc de ``SyncController/start()``, seuls trois états sont dans ce cas
-/// : `.terminated` et `.error` ne bougent plus tout seuls, et `.offline` non plus — la même doc
-/// dit qu'il faut rappeler `start()` après `.offline`, donc le SDK ne relance pas la sync de
-/// lui-même après une coupure réseau. `.idle` reste un état d'attente normal (avant que le
-/// premier cycle de sync n'ait rien produit) : on continue de boucler dessus.
+/// intervention. `.terminated` et `.error` sont dans ce cas : rien ne les fait bouger tout seuls.
+/// `.offline`, en revanche, n'est **pas** terminal : sa doc (``SyncState/offline``) est explicite
+/// — « it resumes on its own » — donc on continue de boucler dessus, borné par la `.timeLimit` du
+/// cas comme n'importe quelle autre attente qui traîne. (À la lettre, la doc de
+/// ``SyncController/start()`` dit qu'il faut rappeler `start()` après `.offline`, ce qui semblerait
+/// contredire ça ; mais la doc du cas amont fait foi ici, et de toute façon `RustMatrixSession.make`
+/// construit le service de sync sans mode hors-ligne, donc `.offline` ne peut pas apparaître dans
+/// ces suites aujourd'hui — ce choix documente l'intention plutôt qu'un comportement observable.)
+/// `.idle` reste lui aussi un état d'attente normal (avant que le premier cycle de sync n'ait rien
+/// produit) : on continue de boucler dessus également.
 ///
 /// Retourner dès qu'un état terminal apparaît, plutôt que de boucler jusqu'à épuisement du flux,
 /// est ce qui permet à l'appelant de faire échouer le test tout de suite avec l'état observé au
 /// lieu d'attendre la `.timeLimit` du cas en silence — c'est le bug qu'on corrige ici : une sync
-/// qui va en `.offline` ou `.error` au lieu de `.running` ne redeviendra pas `.running` toute
-/// seule, donc `firstValue(where: { $0 == .running })` bloquait jusqu'à la borne de temps.
+/// qui va en `.error` au lieu de `.running` ne redeviendra pas `.running` toute seule, donc
+/// `firstValue(where: { $0 == .running })` bloquait jusqu'à la borne de temps.
 func waitUntilRunning(_ states: AsyncStream<SyncState>) async -> SyncState? {
     for await state in states {
         switch state {
-        case .running, .terminated, .error, .offline:
+        case .running, .terminated, .error:
             return state
-        case .idle:
+        case .idle, .offline:
             continue
         }
     }

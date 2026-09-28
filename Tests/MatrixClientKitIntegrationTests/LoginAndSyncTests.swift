@@ -36,7 +36,10 @@ extension IntegrationTests {
             let states = session.sync.state
             await session.sync.start()
             let state = await waitUntilRunning(states)
-            #expect(state == .running, "sync reached \(String(describing: state))")
+            // `#require` et non `#expect` : la boucle sur `session.rooms.list` qui suit tiendrait
+            // pour acquis que la sync tourne, et attendrait en silence jusqu'à la `.timeLimit` du
+            // cas si elle avait fini en `.error` ou `.terminated` à la place.
+            try #require(state == .running, "sync reached \(String(describing: state))")
 
             // La liste part vide et se remplit à la première réponse de sync : prendre le premier
             // instantané venu testerait l'état initial, pas la synchronisation. On attend donc le
