@@ -13,6 +13,10 @@ let client = Matrix.client(
 )
 ```
 
+To start from what a user typed — `matrix.org`, a URL or a user ID — and let the package find the
+homeserver, use ``Matrix/client(server:storage:)`` (async, throwing). <doc:Authentication> covers
+discovery, OAuth, email and QR-code login.
+
 Use ``MatrixStorage/appGroup(_:keychainAccessGroup:accessibility:)`` as soon as an extension needs
 to reach the same session. Otherwise ``MatrixStorage/local(directory:accessibility:)`` is enough.
 
@@ -36,6 +40,8 @@ if let restored = try await Matrix.restoreSession(storage: storage) {
 ```
 
 ``Matrix/restoreSession(storage:)`` returns `nil` when no session is stored — that is not an error.
+A password is only one way to sign in: many homeservers require OAuth, and
+``MatrixClient/loginDetails()`` tells you which to offer — see <doc:Authentication>.
 Once signed in, see <doc:VerificationAndRecovery>: a new device should be verified before it can
 read encrypted history.
 

@@ -8,28 +8,32 @@ MatrixClientKit wraps the official Matrix Rust SDK behind a modern Swift API: `a
 `AsyncStream`, `Sendable` types and typed errors. Room lists and timelines are exposed as
 **snapshots** — you receive the complete, current state and never apply a diff yourself.
 
-See <doc:GettingStarted> for a first end-to-end flow, <doc:VerificationAndRecovery> to handle
+See <doc:GettingStarted> for a first end-to-end flow, <doc:Authentication> to sign in against any
+homeserver, <doc:VerificationAndRecovery> to handle
 device trust, <doc:PushNotifications> to receive push notifications through a notification service
 extension, and <doc:TestingWithMocks> to test an application that depends on the package.
 
-## What v0.3 covers
+## What v0.4 covers
 
 This page can be read on its own — the Swift Package Index renders it without the repository's
 README — so the limits of this milestone are restated here.
 
-v0.3 covers password authentication, persisted sessions (restorable from storage alone), syncing,
+v0.4 covers authentication against any current homeserver — server discovery from a name,
+`loginDetails()`, password, email, OAuth and QR-code login, and signing in again on the same device
+after a soft logout — persisted sessions (restorable from storage alone), syncing,
 the room list, timelines, sending text messages, device verification by emoji comparison, recovery
 and key backup, notification of a session ended by the server, push notifications through a
 notification service extension, and per-room notification settings.
 
-End-to-end encryption is **active**: the Rust SDK handles it, with no opt-in. What v0.3 does **not**
+End-to-end encryption is **active**: the Rust SDK handles it, with no opt-in. What v0.4 does **not**
 expose:
 
 - QR-code verification — the bundled Rust SDK does not expose it;
 - verification of other users, and resetting a lost cryptographic identity;
 - account-wide notification settings (mentions, invitations, calls, keywords);
 - media, read receipts, typing indicators, presence and profiles;
-- OAuth / OIDC, and `MatrixClient.loginDetails()`.
+- registering an account with a password, legacy single sign-on, granting a QR-code login from
+  this device, and managing the account through the authorization server.
 
 Because a lost identity cannot be reset yet, set up recovery early: a user who never does and then
 loses or signs out of their last device cannot verify any device of that account again.
@@ -48,6 +52,7 @@ Two behaviours to know before depending on this version:
 ### Getting started
 
 - <doc:GettingStarted>
+- <doc:Authentication>
 - <doc:VerificationAndRecovery>
 - <doc:PushNotifications>
 - <doc:TestingWithMocks>
@@ -57,8 +62,18 @@ Two behaviours to know before depending on this version:
 - ``Matrix``
 - ``MatrixClient``
 - ``Credentials``
+- ``LoginDetails``
 - ``MatrixSession``
 - ``AuthState``
+
+### Signing in with OAuth and QR codes
+
+- ``OAuthConfiguration``
+- ``OAuthPrompt``
+- ``OAuthLoginFlow``
+- ``QRCodeLogin``
+- ``QRCodeLoginState``
+- ``QRCodeLoginFailure``
 
 ### Rooms and messages
 

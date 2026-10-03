@@ -1,4 +1,4 @@
-/// The content of a message to send. v0.1 covers text; media arrives in v0.4.
+/// The content of a message to send. v0.1 covers text; media arrives in v0.5.
 public enum MessageContent: Sendable, Hashable {
     /// Plain text, with no formatting.
     case text(String)

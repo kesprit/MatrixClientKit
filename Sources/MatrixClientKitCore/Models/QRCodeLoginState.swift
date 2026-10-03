@@ -18,11 +18,14 @@ public enum QRCodeLoginFailure: Sendable, Hashable {
     case otherDeviceNotSignedIn
     /// ``QRCodeLogin/cancel()`` was called.
     case cancelled
+    /// Any other failure, including those the underlying SDK reports in ways this package does
+    /// not distinguish.
     case unknown
 }
 
 /// Where a QR-code login stands. See ``QRCodeLogin/state``.
 public enum QRCodeLoginState: Sendable, Hashable {
+    /// The login has not produced anything to show yet.
     case starting
     /// Show these bytes as a QR code for the signed-in device to scan.
     case displayQRCode(Data)
@@ -36,6 +39,7 @@ public enum QRCodeLoginState: Sendable, Hashable {
     case waitingForApproval(userCode: String)
     /// Signed in; receiving this account's encryption secrets from the other device.
     case syncingSecrets
+    /// The session is ready: ``QRCodeLogin/start()`` returns it.
     case done
     case failed(QRCodeLoginFailure)
 

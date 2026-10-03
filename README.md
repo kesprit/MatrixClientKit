@@ -11,6 +11,8 @@ if let restored = try await Matrix.restoreSession(storage: storage) {
     session = restored
 } else {
     let client = Matrix.client(homeserver: URL(string: "https://matrix.org")!, storage: storage)
+    // Or, from what a user typed (`matrix.org`, a URL, a user ID): discovery included.
+    // let client = try await Matrix.client(server: "matrix.org", storage: storage)
     session = try await client.login(.password(username: "alice", password: "…", deviceName: "iPhone"))
 }
 await session.sync.start()
@@ -37,46 +39,52 @@ for await rooms in session.rooms.list(filter: .joined) {
 
 ## Scope
 
-v0.3 covers password authentication, persisted sessions, syncing, the room list, timelines, sending
-text messages, device verification, recovery and key backup, push notifications through a
-notification service extension, and per-room notification settings.
+v0.4 covers authentication against any current homeserver: server discovery from a name, a URL or a
+user ID, `MatrixClient.loginDetails()` to learn which methods a server accepts, password and email
+sign-in, OAuth (including account creation where the server offers it), QR-code login in both
+directions, and signing in again on the same device after a soft logout. It also covers persisted
+sessions, syncing, the room list, timelines, sending text messages, device verification, recovery
+and key backup, push notifications through a notification service extension, and per-room
+notification settings.
 
 End-to-end encryption is **active** — the Rust SDK handles it, with no opt-in on your part. An
 application can verify a new device by comparing emojis with another of the user's devices, set up
 recovery, restore keys with the recovery key, and learn that the server ended the session. What
-v0.3 does **not** expose:
+v0.4 does **not** expose:
 
 - QR-code verification — the bundled Rust SDK does not expose it;
 - verifying other users, and resetting a lost cryptographic identity;
-- account-wide notification settings (mentions, invitations, calls, keywords).
+- account-wide notification settings (mentions, invitations, calls, keywords);
+- registering an account with a password, legacy single sign-on (reported by `loginDetails()`, not
+  supported), granting a QR-code login from this device, and managing the account through the
+  authorization server.
 
 Because a lost identity cannot be reset yet, set up recovery early: a user who never does and then
 loses or signs out of their last device cannot verify any device of that account again — identity
-reset is still not part of v0.3.
-
-`MatrixClient.loginDetails()` — which reports the login methods a homeserver accepts — is planned
-but **not implemented** yet: an application that needs to query the homeserver before showing a
-sign-in screen will have to wait. Its absence is a decision, not an oversight.
+reset is still not part of v0.4.
 
 | Version | Contents |
 | --- | --- |
 | 0.1 | Foundation: auth, session, sync, rooms, timeline, sending text |
 | 0.2 | Device verification (emoji), recovery and key backup, server sign-out, restore from storage |
 | 0.3 | Push notifications, service extension, cross-process lock, per-room notification settings |
-| 0.4 | Media, read receipts, typing, presence, account, OAuth, `loginDetails()` |
+| 0.4 | Authentication: server discovery, `loginDetails()`, OAuth, email, QR-code login, same-device sign-in after soft logout |
+| 0.5 | Media and send handle |
+| 0.6 | Read receipts, typing, presence (publishing only — the SDK does not expose observing it), profile and account |
 | Later | Verifying other users, identity reset, QR-code verification once the SDK exposes it |
 | 1.0 | API freeze |
 
 ## Installation
 
 ```swift
-.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.3.0")
+.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.4.0")
 ```
 
 ## Compatibility
 
 | MatrixClientKit | Bundled Matrix Rust SDK | iOS | macOS | Swift |
 | --- | --- | --- | --- | --- |
+| 0.4.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 | 0.3.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 | 0.2.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 | 0.1.x | 26.09.07 | 18+ | 15+ | 6.2+ |

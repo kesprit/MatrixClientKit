@@ -8,6 +8,21 @@
 The integration tests do not run by default: see
 `Tests/MatrixClientKitIntegrationTests/README.md`.
 
+## Integration harness
+
+Authentication flows that a real homeserver cannot exercise on demand (soft logout, OAuth through
+Matrix Authentication Service, QR-code login) are tested against local Docker servers, described in
+`Tests/IntegrationHarness/README.md`. It is run by hand, never in CI:
+
+    Scripts/integration-harness.sh up
+    eval "$(Scripts/integration-harness.sh env)" && swift test --filter 'MatrixClientKitIntegrationTests\.HarnessTests'
+    Scripts/integration-harness.sh down
+
+The suite against a real homeserver is a separate run (never together with the first: the Keychain
+keeps one persisted session per process):
+
+    ./Scripts/check-integration-env.sh && swift test --filter 'MatrixClientKitIntegrationTests\.IntegrationTests'
+
 ## Architecture rules
 
 - `MatrixClientKitCore` must **never** import `MatrixRustSDK`. That is what guarantees no upstream

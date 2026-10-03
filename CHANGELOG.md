@@ -3,6 +3,87 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
 follows [SemVer](https://semver.org/).
 
+## [0.4.0] - 2026-10-03
+
+### Breaking
+
+- `MatrixClient` requires three new members: `loginDetails()`, `beginOAuthLogin(_:prompt:loginHint:)`
+  and `loginWithQRCode(_:)`. `MatrixSession` requires two: `reauthenticate(_:)` and
+  `beginOAuthReauthentication(_:)`. An application that implements these protocols itself —
+  typically in a test double — must add them, or use `MockMatrixClient` / `MockMatrixSession`.
+- `Credentials` gains the case `.email`: an exhaustive `switch` over `Credentials` no longer compiles.
+
+### Added
+
+- `Matrix.client(server:storage:)`: builds a client from a server name (`matrix.org`), a URL or a
+  user ID, discovering the homeserver through its `.well-known` information.
+- `MatrixClient.loginDetails()` and `LoginDetails`: whether the homeserver accepts a password,
+  OAuth or legacy single sign-on (reported only), and which `OAuthPrompt`s it advertises.
+- OAuth sign-in: `OAuthConfiguration`, `OAuthPrompt`, `OAuthLoginFlow` and
+  `MatrixClient.beginOAuthLogin(_:prompt:loginHint:)`. The application presents the web page, for
+  instance with `ASWebAuthenticationSession`.
+- `Credentials.email(address:password:deviceName:)`.
+- QR-code login in both directions — this device shows the code (`MatrixClient.loginWithQRCode(_:)`)
+  or scans one (`Matrix.loginWithQRCode(scanned:configuration:storage:)`) — through `QRCodeLogin`,
+  `QRCodeLoginState` and `QRCodeLoginFailure`. The returned session starts out verified.
+- `MatrixSession.reauthenticate(_:)` and `MatrixSession.beginOAuthReauthentication(_:)`: sign in
+  again on the same device after a soft logout, keeping its encryption keys. Both return a new
+  session; the old one reports `.signedOut`.
+- `MockOAuthLoginFlow`, `MockQRCodeLogin`, the new members of `MockMatrixClient` and
+  `MockMatrixSession`, and `SampleData.loginDetails(...)` / `SampleData.oauthConfiguration()`.
+- The DocC article *Authentication*.
+
+### Changed
+
+- Each session has its own local store. Sessions created by 0.1 to 0.3 keep the store they have
+  and are never migrated.
+- Orphaned stores are swept by the application — never by an extension — including those that
+  signing in over another session left behind in 0.3.
+- The cross-signing identity of an account that has none is created at sign-in, not at the next
+  launch.
+- A failed token-refresh read never rewrites the stored session.
+- `AuthState.softLoggedOut` and `.signedOut` document the new reauthentication.
+
+### Fixed
+
+- Releasing a session after it had signed out could crash the process (a Rust panic, "there is no
+  reactor running"): the FFI client was freed before the objects that still held it. The defect
+  dates back to 0.2 and 0.3. It is fixed for sessions, the notification resolver and the
+  verification controller. Known limitation: a service or a timeline that the application keeps
+  after a logout is not covered.
+
+### Behaviours to know
+
+- **QR-code login needs a capable granting device.** The signed-in device that grants the login
+  must hold the account's cross-signing private keys: it is the device that created the identity,
+  or one that recovered them. Otherwise the grant fails (`MissingSecretsBackup` upstream) and this
+  device's login ends in `.failed(.unknown)`. A brand-new OAuth account does get its identity at
+  its first sign-in.
+- **Cancelling a QR-code login.** `start()` may return only when the exchange in progress with the
+  other device ends; once the session is being built, `cancel()` has no effect.
+- **OAuth flows are single-use.** After a failed `complete(callbackURL:)` or a `cancel()`, begin a
+  new one.
+- **Reauthentication.** On failure the old session stays `.softLoggedOut`, syncing still stopped.
+  A second, concurrent reauthentication throws `.unexpected`.
+
+### Not included
+
+- Registering an account with a password, and legacy single sign-on (`loginDetails()` reports it).
+- Granting a QR-code login from the signed-in device.
+- Managing the account through the authorization server (Matrix Authentication Service).
+
+### Verified
+
+- Against a local Docker harness (`Tests/IntegrationHarness`), with Synapse v1.162.0: password and
+  email sign-in, a soft logout (access token lifetime of 20 s), reauthentication with decryption of
+  a message encrypted earlier, and the cleanup of local stores.
+- Against Synapse v1.162.0 delegated to Matrix Authentication Service 1.26.0: `loginDetails()`,
+  OAuth sign-in, single-use of a flow, its cancellation and the restoration of the session, and
+  QR-code login in both directions, the new session being verified.
+- **Not run for this release:** the suite against a real homeserver (Tuwunel, `matrix.ekreen.uk`),
+  because its credentials were unavailable. It was only compiled. Server-name discovery against a
+  real server's `.well-known` is therefore not exercised.
+
 ## [0.3.0] - 2026-09-28
 
 ### Breaking

@@ -16,6 +16,7 @@ public struct LoginDetails: Sendable, Hashable {
     /// contains ``OAuthPrompt/create``.
     public let oauthPrompts: Set<OAuthPrompt>
 
+    /// Creates login details, typically as a fixture in a test.
     public init(
         homeserver: URL,
         supportsPassword: Bool,
@@ -57,13 +58,17 @@ public struct OAuthConfiguration: Sendable, Hashable {
     public var redirectURI: URL
     /// A page about the application.
     public var clientURI: URL
+    /// The application's logo, shown on the consent screen.
     public var logoURI: URL?
+    /// The application's terms of service, linked from the consent screen.
     public var termsOfServiceURI: URL?
+    /// The application's privacy policy, linked from the consent screen.
     public var policyURI: URL?
     /// Client IDs registered ahead of time, for authorization servers without dynamic
     /// registration: the homeserver's (or the issuer's) URL → client ID.
     public var staticRegistrations: [URL: String]
 
+    /// Creates a configuration. Only ``redirectURI`` and ``clientURI`` are required.
     public init(
         clientName: String? = nil,
         redirectURI: URL,

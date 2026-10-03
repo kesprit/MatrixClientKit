@@ -27,8 +27,10 @@ test suite runs without pulling in the Rust binary, and starts at its usual spee
 
 | Double | Stands in for | Driven with |
 | --- | --- | --- |
-| `MockMatrixClient` | ``MatrixClient`` | `loginResult`, `restoreResult`, `loginAttempts` |
-| `MockMatrixSession` | ``MatrixSession`` | `emitAuthState(_:)`, `logoutError`, `didLogout` |
+| `MockMatrixClient` | ``MatrixClient`` | `loginResult`, `restoreResult`, `loginAttempts`, `loginDetailsResult`, `oauthFlow`, `oauthRequests`, `oauthLoginError`, `qrCodeLogin` |
+| `MockMatrixSession` | ``MatrixSession`` | `emitAuthState(_:)`, `logoutError`, `didLogout`, `reauthenticateResult`, `reauthenticationAttempts`, `oauthReauthenticationFlow` |
+| `MockOAuthLoginFlow` | ``OAuthLoginFlow`` | `completeResult`, `completedCallbackURLs`, `cancelCount` |
+| `MockQRCodeLogin` | ``QRCodeLogin`` | `emit(_:)`, `startResult`, `submitError`, `submittedCheckCodes`, `didCancel` |
 | `MockRoomService` | ``RoomService`` | `emit(_:)`, `finish()` |
 | `MockSyncController` | ``SyncController`` | `emit(_:)`, `finish()`, `startCallCount` |
 | `MockTimeline` | ``Timeline`` | `emit(_:)`, `finish()`, `sentMessages`, `sendError`, `paginationError` |
@@ -172,6 +174,32 @@ your code called.
     #expect(verification.calls == [.approve])
 }
 ```
+
+## Driving a sign-in
+
+`MockMatrixClient` returns the answers you set. `SampleData.loginDetails(...)` and
+`SampleData.oauthConfiguration()` build the inputs:
+
+```swift
+@Test func anOAuthOnlyServerOffersOAuth() async throws {
+    let client = MockMatrixClient()
+    client.loginDetailsResult = .success(
+        SampleData.loginDetails(supportsPassword: false, supportsOAuth: true, oauthPrompts: [.create])
+    )
+
+    let details = try await client.loginDetails()
+    #expect(details.supportsOAuth && !details.supportsPassword)
+
+    let flow = try await client.beginOAuthLogin(SampleData.oauthConfiguration())
+    _ = try await flow.complete(callbackURL: URL(string: "com.example.app:/callback?code=x")!)
+    #expect(client.oauthFlow.completedCallbackURLs.count == 1)
+}
+```
+
+For a QR-code login, push states with `MockQRCodeLogin.emit(_:)` and let `start()` return
+`startResult`. After a soft logout, `MockMatrixSession.emitAuthState(.softLoggedOut)` then
+`reauthenticate(_:)` returns `reauthenticateResult`, recording the credentials in
+`reauthenticationAttempts`.
 
 ## Restoring at launch
 
