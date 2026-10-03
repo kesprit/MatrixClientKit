@@ -264,8 +264,11 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         verification: RustSessionVerification,
         encryption: RustEncryptionService
     ) -> Task<Void, Never> {
-        retryUntilSuccess(on: encryption.verificationStatus) {
-            (try? await verification.ensureController()) != nil
+        // Référence faible : une tâche annulée ne libère pas sa closure tout de suite, et ne doit
+        // pas prolonger la vérification (et le `Client` qu'elle capture) après la session.
+        retryUntilSuccess(on: encryption.verificationStatus) { [weak verification] in
+            guard let verification else { return true }
+            return (try? await verification.ensureController()) != nil
         }
     }
 

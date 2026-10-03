@@ -9,7 +9,7 @@ Ce répertoire n'est pas une cible SwiftPM ; le harnais se lance à la main, jam
 
 `Scripts/integration-harness.sh up` démarre les conteneurs et crée les comptes de test ;
 `eval "$(Scripts/integration-harness.sh env)"` exporte les variables `MCK_HARNESS_*` ; puis
-`swift test --filter <suite>` ; `Scripts/integration-harness.sh down` arrête tout et efface les volumes.
+`swift test --filter 'MatrixClientKitIntegrationTests\.HarnessTests'` (voir plus bas) ; `Scripts/integration-harness.sh down` arrête tout et efface les volumes.
 
 Tous les secrets de ce répertoire (secret d'enregistrement, mots de passe, clés) sont des valeurs
 de TEST, sans valeur hors de ce harnais local.
@@ -40,8 +40,13 @@ La suite `HarnessTests` (ce harnais) et la suite `IntegrationTests` (Tuwunel, va
 `MATRIX_TEST_*`) sont chacune sérialisée, mais pas l'une par rapport à l'autre : le Keychain ne
 garde qu'une session persistée par processus. Lancer les deux l'une après l'autre, jamais ensemble :
 
-    eval "$(Scripts/integration-harness.sh env)" && swift test --filter HarnessTests
-    ./Scripts/check-integration-env.sh && swift test --filter IntegrationTests
+    eval "$(Scripts/integration-harness.sh env)" && swift test --filter 'MatrixClientKitIntegrationTests\.HarnessTests'
+    ./Scripts/check-integration-env.sh && swift test --filter 'MatrixClientKitIntegrationTests\.IntegrationTests'
+
+`--filter` est une expression régulière appliquée à l'identifiant complet
+(`Module.Suite/…/cas()`) : `--filter IntegrationTests` seul sélectionne aussi `HarnessTests`, dont
+le module s'appelle `MatrixClientKitIntegrationTests`. D'où le préfixe de module et le point
+échappé ; `swift test list | grep -cE '<filtre>'` vérifie ce qu'un filtre sélectionne.
 
 Le cas de soft logout attend jusqu'à 60 s que le jeton de 20 s de `synapse-expiring` soit refusé.
 Les appareils qu'il ouvre ne peuvent pas être déconnectés côté serveur (jeton expiré) : ils

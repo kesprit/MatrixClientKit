@@ -34,6 +34,18 @@ public final class RustSessionVerification: SessionVerification {
         }
     }
 
+    // Le contrôleur amont retient le client interne du SDK (`Arc<ClientInner>`), et peut être
+    // obtenu après la libération de la session (tâche de surveillance encore en vol). Libéré
+    // ici, pendant que `loadController` — qui capture le `Client` FFI — vit encore : sinon les
+    // propriétés partent dans l'ordre de déclaration, le `Client` avant le contrôleur, et le
+    // dernier `Arc<ClientInner>` tombe hors du runtime Tokio (panique « no reactor running »,
+    // arrêt du processus ; voir `RustMatrixSession.Dependents`).
+    deinit {
+        withExtendedLifetime(loadController) {
+            controller.withLock { $0 = nil }
+        }
+    }
+
     public var state: AsyncStream<SessionVerificationState> {
         broadcaster.stream()
     }

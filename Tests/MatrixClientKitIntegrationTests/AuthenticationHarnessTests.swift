@@ -149,9 +149,11 @@ extension HarnessTests {
                 let newState = await waitUntilRunning(newStates)
                 try #require(newState == .running, "sync reached \(String(describing: newState))")
 
-                for await rooms in new.rooms.list(filter: .joined) where rooms.contains(where: { $0.id == roomID }) {
-                    break
+                // `room(_:)` ne résout que les salons déjà remontés par la sync.
+                let joined = await firstValue(of: new.rooms.list(filter: .joined), within: .seconds(10)) { rooms in
+                    rooms.contains { $0.id == roomID }
                 }
+                try #require(joined != nil, "the encrypted room never appeared in the reauthenticated session")
                 let timeline = try await new.rooms.room(roomID).timeline()
                 let snapshot = await firstValue(of: timeline.items, within: .seconds(15)) { items in
                     items.contains { $0.message?.body == body }
@@ -190,13 +192,30 @@ extension HarnessTests {
                 .password(username: configuration.user, password: configuration.password, deviceName: "Harness")
             )
 
-            let error = await #expect(throws: MatrixError.self) {
-                _ = try await session.reauthenticate(
-                    .password(username: configuration.user, password: configuration.password, deviceName: nil)
+            let outcome: Result<any MatrixSession, any Error>
+            do {
+                outcome = .success(
+                    try await session.reauthenticate(
+                        .password(username: configuration.user, password: configuration.password, deviceName: nil)
+                    )
                 )
+            } catch {
+                outcome = .failure(error)
             }
-            let isUnexpected = if case .unexpected = error { true } else { false }
-            #expect(isUnexpected, "expected .unexpected, got \(String(describing: error))")
+
+            switch outcome {
+            case let .success(replacement):
+                // Succès inattendu : la session rendue détient désormais l'appareil, c'est elle
+                // qu'il faut déconnecter avant d'échouer.
+                await cleaningUp {
+                    await replacement.sync.stop()
+                    try? await replacement.logout()
+                }
+                Issue.record("reauthenticate succeeded outside a soft logout")
+            case let .failure(error):
+                let isUnexpected = if case .unexpected? = error as? MatrixError { true } else { false }
+                #expect(isUnexpected, "expected .unexpected, got \(error)")
+            }
 
             await cleaningUp { try? await session.logout() }
         }

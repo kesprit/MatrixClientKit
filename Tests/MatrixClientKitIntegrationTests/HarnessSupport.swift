@@ -4,8 +4,11 @@ import MatrixClientKit
 
 // Sérialisée pour la même raison que ``IntegrationTests`` : une seule entrée Keychain de session
 // par processus. Les deux suites parentes ne sont pas sérialisées **entre elles** — il faudrait un
-// parent commun, donc toucher à l'existant — : lancer `--filter HarnessTests` et
-// `--filter IntegrationTests` séparément (voir `Tests/IntegrationHarness/README.md`).
+// parent commun, donc toucher à l'existant — : lancer séparément
+// `--filter 'MatrixClientKitIntegrationTests\.HarnessTests'` et
+// `--filter 'MatrixClientKitIntegrationTests\.IntegrationTests'`. Le filtre est une expression
+// régulière sur l'identifiant complet : `IntegrationTests` seul désigne aussi cette suite, par le
+// nom du module (voir `Tests/IntegrationHarness/README.md`).
 @Suite(.enabled(if: HarnessConfiguration.isAvailable), .serialized)
 struct HarnessTests {}
 
@@ -105,9 +108,8 @@ func createEncryptedRoom(on homeserver: URL, user: String, password: String) asy
         "password": password,
         "initial_device_display_name": "MatrixClientKit Harness (raw)",
     ])
-    let (loginData, _) = try await URLSession.shared.data(for: login)
-    let loginObject = try JSONSerialization.jsonObject(with: loginData) as? [String: Any]
-    let token = try #require(loginObject?["access_token"] as? String)
+    let loginObject = try await harnessJSON(for: login, step: "login")
+    let token = try #require(loginObject["access_token"] as? String)
 
     var create = URLRequest(url: homeserver.appending(path: "_matrix/client/v3/createRoom"))
     create.httpMethod = "POST"
@@ -124,8 +126,12 @@ func createEncryptedRoom(on homeserver: URL, user: String, password: String) asy
             ]
         ],
     ])
-    let (createData, _) = try await URLSession.shared.data(for: create)
-    let createObject = try JSONSerialization.jsonObject(with: createData) as? [String: Any]
+    let created: Result<[String: Any], any Error>
+    do {
+        created = .success(try await harnessJSON(for: create, step: "createRoom"))
+    } catch {
+        created = .failure(error)
+    }
 
     var logout = URLRequest(url: homeserver.appending(path: "_matrix/client/v3/logout"))
     logout.httpMethod = "POST"
@@ -134,6 +140,18 @@ func createEncryptedRoom(on homeserver: URL, user: String, password: String) asy
     logout.httpBody = Data("{}".utf8)
     _ = try? await URLSession.shared.data(for: logout)
 
-    let rawRoomID = try #require(createObject?["room_id"] as? String)
+    // Le jeton est déconnecté ci-dessus avant de relayer un échec de `createRoom`.
+    let rawRoomID = try #require(try created.get()["room_id"] as? String)
     return try #require(RoomID(rawValue: rawRoomID))
+}
+
+/// Envoie une requête de l'API client brute et rend son corps JSON ; un statut autre que `200`
+/// fait échouer le cas avec le statut et le corps (Synapse y met `errcode` et `error`).
+private func harnessJSON(for request: URLRequest, step: String) async throws -> [String: Any] {
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+    let body = String(decoding: data, as: UTF8.self)
+    try #require(status == 200, "\(step) answered HTTP \(status): \(body)")
+    let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    return try #require(object, "\(step) answered a non-object body: \(body)")
 }

@@ -12,9 +12,14 @@ homeserver and must be run **manually before every bump of the Rust SDK**.
     MATRIX_TEST_RECOVERY_KEY='EsTc …' \
     MATRIX_TEST_SENDER_USERNAME=sender \
     MATRIX_TEST_SENDER_PASSWORD=secret \
-    swift test --filter MatrixClientKitIntegrationTests
+    swift test --filter 'MatrixClientKitIntegrationTests\.IntegrationTests'
 
 Without the first three variables the suite is skipped, which is the expected behaviour in CI.
+
+`--filter` is a regular expression over the full test identifier: keep the module prefix and the
+escaped dot. A bare `IntegrationTests` also selects `HarnessTests` (the local Synapse harness suite,
+see `Tests/IntegrationHarness/README.md`), which must never run in the same process — both suites
+share the single Keychain session entry.
 
 `MATRIX_TEST_ROOM_ID` is a room **ID**, which starts with `!` — not an alias, which starts with
 `#`. Element X does not show it; ask the homeserver to resolve the alias instead:
