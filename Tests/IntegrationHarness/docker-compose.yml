@@ -35,6 +35,49 @@ services:
       interval: 2s
       retries: 60
 
+  # Base commune à MAS et au Synapse délégué. Pas de volume : état éphémère, recréé par `up`.
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres # TEST
+    volumes:
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      retries: 60
+
+  # Matrix Authentication Service : fournisseur OAuth du Synapse délégué. Joignable depuis l'hôte
+  # (le SDK le contacte directement) sur 8082 ; le 8080 de l'hôte est souvent occupé.
+  # L'image porte son propre healthcheck ; `up` vérifie en plus auth_metadata côté Synapse.
+  mas:
+    image: ghcr.io/element-hq/matrix-authentication-service:1.26.0
+    command: ["server", "--config", "/config/config.yaml"]
+    ports: ["127.0.0.1:8082:8080"]
+    volumes: ["./mas:/config:ro"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # Synapse dont l'authentification est déléguée à MAS, avec le rendez-vous MSC4108 (QR code).
+  synapse-oauth:
+    image: ghcr.io/element-hq/synapse:v1.162.0
+    entrypoint: []
+    command: ["sh", "-c", "test -f /data/signing.key || python -m synapse.app.homeserver -c /config/homeserver.yaml --generate-keys; exec python -m synapse.app.homeserver -c /config/homeserver.yaml"]
+    ports: ["127.0.0.1:8010:8008"]
+    volumes:
+      - ./synapse-oauth:/config:ro
+      - synapse-oauth-data:/data
+    environment:
+      SYNAPSE_CONFIG_PATH: /config/homeserver.yaml
+    depends_on:
+      postgres: { condition: service_healthy }
+      mas: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8008/health')"]
+      interval: 2s
+      retries: 60
+
 volumes:
   synapse-password-data:
   synapse-expiring-data:
+  synapse-oauth-data:

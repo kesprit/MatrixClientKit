@@ -1,0 +1,43 @@
+server_name: "localhost"
+public_baseurl: "http://localhost:8010/"
+pid_file: /data/homeserver.pid
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    x_forwarded: false
+    resources:
+      - names: [client]
+        compress: false
+database:
+  name: psycopg2
+  args:
+    user: synapse
+    password: synapse
+    database: synapse
+    host: postgres
+media_store_path: /data/media_store
+signing_key_path: /data/signing.key
+report_stats: false
+trusted_key_servers: []
+suppress_key_server_warning: true
+enable_registration: false
+macaroon_secret_key: "mck-harness-macaroon-secret"
+form_secret: "mck-harness-form-secret"
+# Le harnais enchaîne connexions et déconnexions : sans relâchement, Synapse renvoie
+# M_LIMIT_EXCEEDED au milieu de la suite.
+rc_login:
+  address: { per_second: 1000, burst_count: 1000 }
+  account: { per_second: 1000, burst_count: 1000 }
+  failed_attempts: { per_second: 1000, burst_count: 1000 }
+rc_message: { per_second: 1000, burst_count: 1000 }
+log_config: null
+# Authentification déléguée à MAS : les comptes se créent dans MAS (mas-cli manage register-user).
+matrix_authentication_service:
+  enabled: true
+  endpoint: "http://mas:8080/"
+  # Secret de TEST, identique à matrix.secret dans mas/config.yaml.
+  secret: "mck-harness-mas-synapse-secret"
+experimental_features:
+  # Rendez-vous de la connexion par QR code (MSC4108).
+  msc4108_enabled: true

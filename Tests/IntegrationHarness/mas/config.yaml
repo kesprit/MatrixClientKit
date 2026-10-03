@@ -1,0 +1,113 @@
+# Configuration MAS du harnais d'intégration (jamais en CI).
+# TOUT le contenu de ce fichier (clés de signature, clé de chiffrement, secret partagé avec Synapse,
+# mots de passe de base) est une valeur de TEST, sans valeur hors de ce harnais local.
+# Hôte : MAS est publié sur http://localhost:8082 (le 8080 de l'hôte est souvent pris) ;
+# Synapse le joint par le réseau compose en http://mas:8080.
+http:
+  listeners:
+  - name: web
+    resources:
+    - name: discovery
+    - name: human
+    - name: oauth
+    - name: compat
+    - name: graphql
+    - name: assets
+    binds:
+    - address: '[::]:8080'
+    proxy_protocol: false
+  - name: internal
+    resources:
+    - name: health
+    binds:
+    - host: localhost
+      port: 8081
+    proxy_protocol: false
+  trusted_proxies:
+  - 192.168.0.0/16
+  - 172.16.0.0/12
+  - 10.0.0.0/10
+  - 127.0.0.1/8
+  - fd00::/8
+  - ::1/128
+  public_base: http://localhost:8082/
+  issuer: http://localhost:8082/
+database:
+  uri: postgresql://mas:mas@postgres/mas
+  max_connections: 10
+  min_connections: 0
+  connect_timeout: 30
+  idle_timeout: 600
+  max_lifetime: 1800
+email:
+  from: '"Authentication Service" <root@localhost>'
+  reply_to: '"Authentication Service" <root@localhost>'
+  transport: blackhole
+secrets:
+  encryption: 121917071353be366c970951c5c2f4d8a291239b626c0a6b270b6eb38817ba70
+  keys:
+  - key: |
+      -----BEGIN RSA PRIVATE KEY-----
+      MIIEogIBAAKCAQEAnwr0CmAQHj6W0x223EFs31GrDtw2FfVcWyTbhyjy+R8/YNvW
+      OKldUM3KcGR00YEYfvNx9sTM3khGk+PcfO1sjodpFJwiiaVlmmSF/EK73i+vYOvS
+      EFZmadLUf1adBC9naFZYczyztXm+k6bxpjeSjt7bpIIKk+KqgJ5HJ6eCRnWxDiq1
+      FBTzc32lwrrEQv2/jqWFb6JC7NyMCRDVMu/8Ub7DFAvdwwaftQd14+ySrYzCeXUR
+      k4meOAztidswdBHmCKKYgkLh2eEMQFahUMKFSZI8sru7U4qL3/oBPoqPIgUbGlz2
+      4QDtp0W3+B22lr1s/xZMudWjKyqQJ8RGGW4U+QIDAQABAoIBACH/u2/EXW25v5Be
+      F8s6CUYsNT82ADHtg9LQLEXWkSqEbY4NMNxoCFTPyWkBcJ+g01XAQSqZo5oZJU1U
+      NrxWHRDTDbmkLxXxz6iTuLjWo0a6NumnP/7SGY6hzV9zapmMcLSzULFB1sECx6TU
+      2W/JDYGRTq76Rbybhgt8yoVFn+njxLF1kZ8TEDqZ9vuZGqS+BLTLOXFpE6MSpG4R
+      lnypBrh+BGLaRmXpGClEkFQQEzlDCUxnjK83g2EcYvzxuzqextDmzENPMvhPOeHm
+      vYyW/V0rTtu29PoUv0e4MaQpe6fWMJHLZsBbVfEiF2A5qfM1M0F8sk9RsfH7BHEl
+      TOAvdqkCgYEAy7e/oFxXVWzrsNlzX+6ZHkPmmdE0hhnwp08wGKUVfKOQy2QCIl+V
+      nWEZgIoYvY9cDcgWQghbAQTXmJrXKUdhTFJ6K+eXkKcFSTY7BFSERZhEz872jNx8
+      bAg5ielEzyu1aoaZe3LRQO+FkPkJz+EkdWmrMsbAy0OxkQkO+VTBnwsCgYEAx9wP
+      S75FESZJttQncmcE5DEOQYZ7YutwMlXaXhR1dlVlwZWtP9yikDCvxADVDTDJfdk5
+      zpRZ8igQ96VKaUF76ZGn+5FJcZY4usvSwHuqt1bNzv7H1jBrCMYu4ZmziQwFpDmk
+      s3V1CEFX17lLMOq//TL3VFlDFi7wDbLUw9eibosCgYA7HC32EdUlbF1XC0F27Hxx
+      U7Jtn05mOtChO1DxVbVOXQd+fJ5B6wo2iB4mNevH1PkY5p3Ouy3stcL4/LTBvXx1
+      8NiSNLi9uDjIbXviXcOjjfMpeRwA81kG37wSUCUvF7ekGTofn8kn1lgjIJ/AOcui
+      Ze7O5Oy8DgBP3RkDL5ye0QKBgAlEhBUQEqXT77Ehr16Xtltahv203b3diwtafdDF
+      BBljpl9OsIT4lzU2fMALBdYhwAYs74hLysv23aqOKKAu4C8ZiP+aYhx5SdInp3Mz
+      iNwNk2eY2u1su1nhzsS5WuDtBMnzvlZwCOhEF22ycvEmwZZdKajoprq9nHYWJ9WZ
+      Bzg3AoGADfOGas7KefJHJhoI5yzi83OXzNmhdBIgEuYDyaRzhwcNSMGY2bx2lkCm
+      bEjLs9WDeJArScWrOGvzr/veJ7sUpNfok7KZc7qi8L02i1iitCRJpGMEKQ+MDd/R
+      bMzOAL3igdtWF48sbpcqH7cFooBbnoWoXRKxwT5WvewqBXKAq90=
+      -----END RSA PRIVATE KEY-----
+  - key: |
+      -----BEGIN EC PRIVATE KEY-----
+      MHcCAQEEIJKn05huSFVQw6WuTv3UCsmG8j2Jltthi+i5ln6bnBHuoAoGCCqGSM49
+      AwEHoUQDQgAEx3z2KHfHVKRehbbXdiDju99DP0oknWggJ8080pVknoCzHrqTvG37
+      lSFF0LfGLHFDcSCiqv401GSBNkHh3sBmkA==
+      -----END EC PRIVATE KEY-----
+  - key: |
+      -----BEGIN EC PRIVATE KEY-----
+      MIGkAgEBBDDC+T73QzOVp/GmbptHHlo4XtPg+xUz1QIwa9+wUFlXbt9AdiorDG+a
+      dx9ZYUIz7XqgBwYFK4EEACKhZANiAARFRc9hctWhYOeweKAovvqeq9C/q2pIKlQo
+      5TveymgvgfJpnfqg77h+oqaZmRFgn9aGGct6Of998XCo34O92+SE7egRZ8ZZoQnw
+      ZG0Ej8s2B3P7gxsQU21Bg6yggADaWAM=
+      -----END EC PRIVATE KEY-----
+  - key: |
+      -----BEGIN EC PRIVATE KEY-----
+      MHQCAQEEIEt23Qp4EzkJLPaOArO6P2BMqwMp/pkbkYnO1qxNuzPnoAcGBSuBBAAK
+      oUQDQgAEa9ei7adunrWhg3DIfOa47g891uBmcfKN6XM8v6w3lyKlF6aAh/uPry0n
+      QNCR+6s2B1rVIj66IlaUTqJl3k21KA==
+      -----END EC PRIVATE KEY-----
+passwords:
+  enabled: true
+  schemes:
+  - version: 1
+    algorithm: argon2id
+  minimum_complexity: 0
+matrix:
+  kind: synapse
+  homeserver: localhost
+  secret: mck-harness-mas-synapse-secret
+  endpoint: http://synapse-oauth:8008/
+account:
+  password_registration_enabled: false
+# Le harnais enchaîne les connexions depuis la même adresse.
+rate_limiting:
+  login:
+    per_ip: { burst: 1000, per_second: 1000 }
+    per_account: { burst: 1000, per_second: 1000 }
