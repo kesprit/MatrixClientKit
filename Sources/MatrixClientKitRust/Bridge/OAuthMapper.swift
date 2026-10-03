@@ -13,8 +13,12 @@ enum OAuthMapper {
             logoUri: configuration.logoURI?.absoluteString,
             tosUri: configuration.termsOfServiceURI?.absoluteString,
             policyUri: configuration.policyURI?.absoluteString,
+            // Deux `URL` distinctes peuvent partager la même chaîne absolue (une URL relative à une
+            // base, par exemple) : la clé amont étant une chaîne, une construction à clés uniques
+            // ferait planter l'application sur une entrée qu'elle fournit elle-même.
             staticRegistrations: Dictionary(
-                uniqueKeysWithValues: configuration.staticRegistrations.map { ($0.key.absoluteString, $0.value) }
+                configuration.staticRegistrations.map { ($0.key.absoluteString, $0.value) },
+                uniquingKeysWith: { first, _ in first }
             )
         )
     }

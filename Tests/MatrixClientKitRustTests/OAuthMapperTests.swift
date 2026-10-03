@@ -38,3 +38,21 @@ import MatrixClientKitCore
 @Test func otherErrorsGoThroughTheAuthenticationMapper() {
     #expect(OAuthMapper.map(MatrixError.network(.timeout)) as? MatrixError == .network(.timeout))
 }
+
+@Test func twoRegistrationURLsWithTheSameStringDoNotTrap() {
+    // Deux `URL` distinctes (l'une relative à une base) partagent la même chaîne absolue : la clé
+    // amont étant une chaîne, une construction à clés uniques ferait planter l'application.
+    let absolute = URL(string: "https://matrix.example.com/")!
+    let relative = URL(string: "/", relativeTo: URL(string: "https://matrix.example.com/x")!)!
+    #expect(absolute != relative)
+    #expect(absolute.absoluteString == relative.absoluteString)
+
+    let mapped = OAuthMapper.configuration(
+        MatrixClientKitCore.OAuthConfiguration(
+            clientName: "Example",
+            redirectURI: URL(string: "com.example.app:/callback")!,
+            clientURI: URL(string: "https://example.com")!,
+            staticRegistrations: [absolute: "client-1", relative: "client-1"]
+        ))
+    #expect(mapped.staticRegistrations == ["https://matrix.example.com/": "client-1"])
+}
