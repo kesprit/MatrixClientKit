@@ -24,6 +24,7 @@ private func newRoot() -> URL {
     let directory = try store.localStore.paths().storeDirectory
     #expect(FileManager.default.fileExists(atPath: directory.path))
     #expect(registry.isLeased(directory))
+    withExtendedLifetime(store) {}
 }
 
 @Test func discardingANewAttemptErasesItsStoreAndLease() throws {
@@ -117,4 +118,23 @@ private func newRoot() -> URL {
     restorer.sweepOrphans(keeping: nil)
 
     #expect(FileManager.default.fileExists(atPath: try orphan.paths().storeDirectory.path))
+}
+
+@Test func anUnreadablePersistedSessionSweepsNothingWhenPreparing() throws {
+    let root = newRoot()
+    let restorer = makeRestorer(root: root)
+    let orphan = LocalStore(
+        storage: .local(directory: root),
+        segment: .session("orphan"),
+        secureStore: restorer.secureStore
+    )
+    _ = try orphan.encryptionKey()
+    try orphan.paths().createDirectoriesIfNeeded()
+    // Charge utile illisible : on ne sait pas quel store la session désigne.
+    try restorer.secureStore.set(Data("illisible".utf8), forKey: SessionPersistence.storageKey)
+
+    let store = try LoginAttemptStore.prepare(restorer: restorer, reusing: nil)
+
+    #expect(FileManager.default.fileExists(atPath: try orphan.paths().storeDirectory.path))
+    withExtendedLifetime(store) {}
 }

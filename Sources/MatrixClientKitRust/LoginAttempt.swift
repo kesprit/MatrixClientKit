@@ -35,8 +35,13 @@ struct LoginAttemptStore: Sendable {
             }
         }
 
-        let persisted = (try? restorer.persistence.load()).flatMap { $0 }
-        restorer.sweepOrphans(keeping: persisted.map(StoreSegment.init))
+        // Une lecture en échec ne ramasse rien, comme à la restauration : on ne sait pas quel
+        // store la session persistée désigne. Le ramassage est au mieux (§5.4), la tentative
+        // continue. Pas de `try?`, qui confondrait l'échec avec « rien de persisté ».
+        do {
+            let persisted = try restorer.persistence.load()
+            restorer.sweepOrphans(keeping: persisted.map(StoreSegment.init))
+        } catch {}
 
         return LoginAttemptStore(segment: segment, localStore: localStore, lease: lease, ownsStore: existing == nil)
     }
@@ -57,7 +62,17 @@ final class LoginAttempt: Sendable {
     let client: Client
     private let store: LoginAttemptStore
     private let restorer: SessionRestorer
-    private let isOver = Mutex(false)
+    /// - `pending` : flux en cours, ``fail()`` abandonne la tentative.
+    /// - `succeeding` : ``succeed(expecting:)`` construit la session ; un ``fail()`` concurrent
+    ///   (l'annulation d'un flux OAuth ou QR) est sans effet, c'est `succeed` qui conclut.
+    /// - `over` : tentative close, par succès ou par échec ; plus rien n'a d'effet.
+    private enum State {
+        case pending
+        case succeeding
+        case over
+    }
+
+    private let state = Mutex(State.pending)
 
     private init(client: Client, store: LoginAttemptStore, restorer: SessionRestorer) {
         self.client = client
@@ -118,36 +133,55 @@ final class LoginAttempt: Sendable {
         }
     }
 
-    /// Persiste la session obtenue et la construit sur ce même client.
+    /// Construit la session sur ce même client, puis la persiste.
     ///
-    /// Le bail n'est pas rendu : il passe à la session, qui le garde jusqu'à sa libération.
+    /// Rien n'est persisté tant que la session n'est pas construite : persister d'abord puis
+    /// échouer laisserait une session enregistrée pointant vers un store que l'abandon de la
+    /// tentative efface. En cas d'échec, la tentative est abandonnée ici même. En cas de succès,
+    /// le bail n'est pas rendu : il passe à la session, qui le garde jusqu'à sa libération.
     ///
     /// - Parameter userID: pour une reconnexion, l'utilisateur attendu. Un autre compte est
     ///   déconnecté côté serveur et refusé (spec 0.4, §4.6) : persister ses jetons sur le store
     ///   d'un autre utilisateur mélangerait deux identités cryptographiques.
     func succeed(expecting userID: UserID?) async throws -> RustMatrixSession {
-        let data = try SessionMapper.sessionData(from: client.session(), storeID: store.segment.storeID)
-        if let userID, data.userID != userID {
-            try? await client.logout()
-            throw MatrixError.authentication(.invalidCredentials)
+        let wasPending = state.withLock { state in
+            guard state == .pending else { return false }
+            state = .succeeding
+            return true
         }
-        try restorer.persistence.save(data)
-        let session = try await RustMatrixSession.make(
-            client: client,
-            restorer: restorer,
-            localStore: store.localStore,
-            lease: store.lease
-        )
-        isOver.withLock { $0 = true }
-        return session
+        guard wasPending else {
+            throw MatrixError.unexpected(message: "The login attempt is already over.", details: nil)
+        }
+
+        do {
+            let data = try SessionMapper.sessionData(from: client.session(), storeID: store.segment.storeID)
+            if let userID, data.userID != userID {
+                try? await client.logout()
+                throw MatrixError.authentication(.invalidCredentials)
+            }
+            let session = try await RustMatrixSession.make(
+                client: client,
+                restorer: restorer,
+                localStore: store.localStore,
+                lease: store.lease
+            )
+            try restorer.persistence.save(data)
+            state.withLock { $0 = .over }
+            return session
+        } catch {
+            state.withLock { $0 = .over }
+            store.discard()
+            throw error
+        }
     }
 
-    /// Abandonne la tentative. Sans effet après ``succeed(expecting:)`` ; idempotent.
+    /// Abandonne la tentative. Sans effet une fois ``succeed(expecting:)`` commencé ; idempotent.
     func fail() {
-        let alreadyOver = isOver.withLock { over in
-            defer { over = true }
-            return over
+        let wasPending = state.withLock { state in
+            guard state == .pending else { return false }
+            state = .over
+            return true
         }
-        if !alreadyOver { store.discard() }
+        if wasPending { store.discard() }
     }
 }
