@@ -51,6 +51,7 @@ struct MASDriver {
     /// `redirectScheme`, à passer à ``OAuthLoginFlow/complete(callbackURL:)``.
     func authorize(_ url: URL, username: String, password: String, redirectScheme: String) async throws -> URL {
         var page = try await open(url, redirectScheme: redirectScheme)
+        var loginSubmitted = false
         // Connexion puis consentement : quelques étapes suffisent, la borne évite une boucle.
         for _ in 0..<6 {
             switch page {
@@ -59,6 +60,11 @@ struct MASDriver {
             case let .page(pageURL, html):
                 let fields: [(String, String)]
                 if pageURL.path == loginPath {
+                    // La page de connexion revenue après l'envoi : MAS a refusé, et dit pourquoi.
+                    guard !loginSubmitted else {
+                        throw MASDriverError("MAS refused the sign-in", url: pageURL, html: html)
+                    }
+                    loginSubmitted = true
                     fields = [(usernameField, username), (passwordField, password)]
                 } else if pageURL.path.hasPrefix(consentPathPrefix) {
                     fields = []
@@ -76,6 +82,7 @@ struct MASDriver {
     /// porte déjà.
     func approveDevice(verificationURI: URL, userCode: String?, username: String, password: String) async throws {
         var page = try await open(verificationURI, redirectScheme: nil)
+        var loginSubmitted = false
         for _ in 0..<6 {
             guard case let .page(pageURL, html) = page else {
                 throw MASDriverError("unexpected redirection during device approval", url: verificationURI, html: nil)
@@ -86,6 +93,10 @@ struct MASDriver {
                 }
                 page = try await submit([(userCodeField, userCode)], on: pageURL, html: html, redirectScheme: nil)
             } else if pageURL.path == loginPath {
+                guard !loginSubmitted else {
+                    throw MASDriverError("MAS refused the sign-in", url: pageURL, html: html)
+                }
+                loginSubmitted = true
                 page = try await submit(
                     [(usernameField, username), (passwordField, password)], on: pageURL, html: html,
                     redirectScheme: nil)

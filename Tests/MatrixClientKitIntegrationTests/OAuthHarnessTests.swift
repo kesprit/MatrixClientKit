@@ -29,7 +29,7 @@ extension HarnessTests {
             let directory = newHarnessDirectory()
             defer { removeDirectory(directory) }
 
-            let (session, _) = try await harness.signInWithOAuth(in: directory)
+            let session = try await harness.signInWithOAuth(in: directory).session
             let states = session.sync.state
             await session.sync.start()
             let state = await waitUntilRunning(states)
@@ -49,9 +49,9 @@ extension HarnessTests {
             let directory = newHarnessDirectory()
             defer { removeDirectory(directory) }
 
-            let (session, flow) = try await harness.signInWithOAuth(in: directory)
-            // Une URL de rappel bien formée : seul le caractère « déjà consommé » du flux est en jeu.
-            let callback = try #require(URL(string: "\(OAuthHarness.redirectScheme):/callback?state=x&code=y"))
+            // La vraie URL de rappel, rejouée : seul le caractère « déjà consommé » du flux peut la
+            // refuser. Une URL inventée serait refusée aussi sans la garde, par le SDK.
+            let (session, flow, callback) = try await harness.signInWithOAuth(in: directory)
 
             let outcome: Result<any MatrixSession, any Error>
             do {
@@ -65,8 +65,13 @@ extension HarnessTests {
                 await cleaningUp { try? await second.logout() }
                 Issue.record("a second complete(callbackURL:) succeeded")
             case let .failure(error):
-                let isUnexpected = if case .unexpected? = error as? MatrixError { true } else { false }
-                #expect(isUnexpected, "expected .unexpected, got \(error)")
+                // L'erreur de la garde à usage unique elle-même, sans détail amont.
+                guard case let .unexpected(message, details)? = error as? MatrixError else {
+                    Issue.record("expected .unexpected, got \(error)")
+                    break
+                }
+                #expect(message.contains("already been completed or cancelled"), "message: \(message)")
+                #expect(details == nil, "details: \(String(describing: details))")
             }
 
             await cleaningUp { try? await session.logout() }
@@ -128,9 +133,10 @@ extension HarnessTests {
             let client = Matrix.client(homeserver: harness.homeserver, storage: .local(directory: newDirectory))
             let login = client.loginWithQRCode(harness.oauthConfiguration)
             var signedIn: (any MatrixSession)?
+            var starting: Task<any MatrixSession, any Error>?
             do {
                 try await harness.resetIdentity(of: existing)
-                let starting = Task { try await login.start() }
+                starting = Task { try await login.start() }
                 let displayed = await firstValue(of: login.state, within: .seconds(30)) { $0.qrCode != nil }
                 let bytes = try #require(displayed?.qrCode, "the new device never displayed a QR code")
 
@@ -143,11 +149,17 @@ extension HarnessTests {
                     try await login.submitCheckCode(checkCode)
                 }
 
-                let session = try await starting.value
+                let session = try await starting!.value
                 signedIn = session
                 await harness.expectVerified(session)
             } catch {
                 login.cancel()
+                starting?.cancel()
+                // Attendue avant la déconnexion : la tâche ne doit retenir aucun objet du SDK quand
+                // la session part. Une session qu'elle aurait ouverte malgré tout est déconnectée.
+                if signedIn == nil, let late = try? await starting?.value {
+                    signedIn = late
+                }
                 await harness.signOut(existing, signedIn)
                 throw error
             }
@@ -188,7 +200,11 @@ extension HarnessTests {
                 signedIn = session
                 await harness.expectVerified(session)
             } catch {
-                await scanned.login?.cancel()
+                // Tâche du nouvel appareil annulée et attendue avant la déconnexion (voir le cas
+                // précédent).
+                if signedIn == nil, let late = await scanned.cancel() {
+                    signedIn = late
+                }
                 await harness.signOut(existing, signedIn)
                 throw error
             }
@@ -221,14 +237,16 @@ private struct OAuthHarness {
     }
 
     /// Ouvre une session par OAuth dans `directory`, MAS piloté par HTTP. Rend aussi le flux,
-    /// déjà consommé.
-    func signInWithOAuth(in directory: URL) async throws -> (session: any MatrixSession, flow: any OAuthLoginFlow) {
+    /// déjà consommé, et l'URL de rappel qui l'a consommé.
+    func signInWithOAuth(
+        in directory: URL
+    ) async throws -> (session: any MatrixSession, flow: any OAuthLoginFlow, callback: URL) {
         let client = Matrix.client(homeserver: homeserver, storage: .local(directory: directory))
         let flow = try await client.beginOAuthLogin(oauthConfiguration)
         let callback = try await MASDriver(mas: mas).authorize(
             flow.authorizationURL, username: user, password: password, redirectScheme: Self.redirectScheme
         )
-        return (try await flow.complete(callbackURL: callback), flow)
+        return (try await flow.complete(callbackURL: callback), flow, callback)
     }
 
     /// Donne à `existing` des clés privées de signature croisée, que l'octroi transmet au nouvel
@@ -276,7 +294,9 @@ private struct OAuthHarness {
             }
             try await granting.value
         } catch {
+            // Attendue : le gestionnaire amont qu'elle retient doit partir avant la session.
             granting.cancel()
+            _ = try? await granting.value
             throw error
         }
     }
@@ -313,7 +333,9 @@ private struct OAuthHarness {
             }
             try await granting.value
         } catch {
+            // Attendue : le gestionnaire amont qu'elle retient doit partir avant la session.
             granting.cancel()
+            _ = try? await granting.value
             throw error
         }
     }
@@ -439,5 +461,12 @@ private actor ScannedLogin {
 
     func session() async throws -> (any MatrixSession)? {
         try await starting?.value
+    }
+
+    /// Annule la connexion et attend sa tâche ; rend la session si elle a abouti malgré tout.
+    func cancel() async -> (any MatrixSession)? {
+        login?.cancel()
+        starting?.cancel()
+        return try? await starting?.value
     }
 }
