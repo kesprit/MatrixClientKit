@@ -1,9 +1,11 @@
 import Foundation
 
-/// Sign-in credentials. v0.1 covers passwords; OAuth arrives in v0.4.
+/// Sign-in credentials.
 public enum Credentials: Sendable, Hashable {
     /// Username-and-password sign-in, with an optional device name.
     case password(username: String, password: String, deviceName: String?)
+    /// Sign-in with an email address bound to the account, and its password.
+    case email(address: String, password: String, deviceName: String?)
 }
 
 extension Credentials: CustomStringConvertible, CustomDebugStringConvertible {
@@ -13,6 +15,9 @@ extension Credentials: CustomStringConvertible, CustomDebugStringConvertible {
         case let .password(username, _, deviceName):
             let device = deviceName ?? "nil"
             return "Credentials.password(username: \(username), password: <redacted>, deviceName: \(device))"
+        case let .email(address, _, deviceName):
+            let device = deviceName ?? "nil"
+            return "Credentials.email(address: \(address), password: <redacted>, deviceName: \(device))"
         }
     }
 

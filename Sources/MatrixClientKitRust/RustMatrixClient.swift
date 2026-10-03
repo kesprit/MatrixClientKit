@@ -49,6 +49,13 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
                     initialDeviceName: deviceName,
                     deviceId: nil
                 )
+            case let .email(address, password, deviceName):
+                try await handshake.loginWithEmail(
+                    email: address,
+                    password: password,
+                    initialDeviceName: deviceName,
+                    deviceId: nil
+                )
             }
 
             let data = try SessionMapper.sessionData(from: handshake.session())
