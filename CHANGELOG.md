@@ -47,6 +47,20 @@ follows [SemVer](https://semver.org/).
 
 - A failed read of the stored session during a token refresh no longer overwrites its store
   identifier.
+- Only the most recent successful sign-in is saved for the next launch, and nothing else touches
+  it any more: a token refresh of an older session still open in the process no longer overwrites
+  it, and signing out such a session — or the homeserver ending it — no longer erases it. Either
+  could sign the user out at the next launch and delete the local data of both sessions.
+- `logout()`, or the homeserver ending the session, no longer waits forever on an OAuth
+  reauthentication flow the application keeps without completing it: the flow is cancelled, then
+  the sign-out proceeds.
+- Reauthenticating with another account's credentials fails with
+  `.authentication(.invalidCredentials)`, as documented, instead of `.unexpected`; the device the
+  homeserver opened for that account is signed out.
+- Cancelling a QR-code login right after the exchange with the other device signs the new device
+  out instead of leaving it signed in on the homeserver.
+- Two `OAuthConfiguration.staticRegistrations` URLs with the same string no longer crash the
+  process.
 - Releasing a session after it had signed out could crash the process (a Rust panic, "there is no
   reactor running"): the FFI client was freed before the objects that still held it. The defect
   dates back to 0.2 and 0.3. It is fixed for sessions, the notification resolver and the
@@ -77,7 +91,8 @@ follows [SemVer](https://semver.org/).
 
 - Against a local Docker harness (`Tests/IntegrationHarness`), with Synapse v1.162.0: password and
   email sign-in, a soft logout (access token lifetime of 20 s), reauthentication with decryption of
-  a message encrypted earlier, and the cleanup of local stores.
+  a message encrypted earlier, the refusal of another account's credentials, and the cleanup of
+  local stores.
 - Against Synapse v1.162.0 delegated to Matrix Authentication Service 1.26.0: `loginDetails()`,
   OAuth sign-in, single-use of a flow, its cancellation and the restoration of the session, and
   QR-code login in both directions, the new session being verified.

@@ -39,10 +39,13 @@ for await rooms in session.rooms.list(filter: .joined) {
 
 ## Scope
 
-v0.4 covers authentication against any current homeserver: server discovery from a name, a URL or a
-user ID, `MatrixClient.loginDetails()` to learn which methods a server accepts, password and email
-sign-in, OAuth (including account creation where the server offers it), QR-code login in both
-directions, and signing in again on the same device after a soft logout. It also covers persisted
+v0.4 covers authentication: server discovery from a name, a URL or a user ID,
+`MatrixClient.loginDetails()` to learn which methods a server accepts, password and email sign-in,
+OAuth (including account creation where the server offers it), QR-code login in both directions —
+on homeservers that delegate to an OAuth server and support MSC4108 —, and signing in again on the
+same device after a soft logout. These flows were verified against Synapse and Matrix
+Authentication Service; discovery through a real server's `.well-known` was not exercised for this
+release. It also covers persisted
 sessions, syncing, the room list, timelines, sending text messages, device verification, recovery
 and key backup, push notifications through a notification service extension, and per-room
 notification settings.

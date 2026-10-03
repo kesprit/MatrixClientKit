@@ -90,6 +90,10 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
         if let error { throw error }
     }
 
+    /// Records `credentials`, then returns or throws ``reauthenticateResult``.
+    ///
+    /// Unlike the real session, a success does not move this session to
+    /// ``AuthState/signedOut``: call ``emitAuthState(_:)`` with it to reproduce the replacement.
     public func reauthenticate(_ credentials: Credentials) async throws -> any MatrixSession {
         let result = lock.withLock {
             _reauthenticationAttempts.append(credentials)

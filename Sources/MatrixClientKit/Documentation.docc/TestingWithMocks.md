@@ -199,7 +199,8 @@ your code called.
 For a QR-code login, push states with `MockQRCodeLogin.emit(_:)` and let `start()` return
 `startResult`. After a soft logout, `MockMatrixSession.emitAuthState(.softLoggedOut)` then
 `reauthenticate(_:)` returns `reauthenticateResult`, recording the credentials in
-`reauthenticationAttempts`.
+`reauthenticationAttempts`. A success leaves the mock as it is: call
+`emitAuthState(.signedOut)` to reproduce the old session ending, as the real one does.
 
 ## Restoring at launch
 
