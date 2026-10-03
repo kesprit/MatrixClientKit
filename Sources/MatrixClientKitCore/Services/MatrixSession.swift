@@ -31,6 +31,12 @@ public protocol MatrixSession: Sendable {
     /// Only one session is saved for the next launch: the most recent successful sign-in. Ending
     /// an older session still open in the process erases that session's own data but keeps the
     /// saved one; the same holds when the homeserver ends it.
+    ///
+    /// During a reauthentication, this waits for its outcome: if it replaced the session, this
+    /// returns without erasing anything or calling the server. A pending
+    /// ``beginOAuthReauthentication(_:)`` flow is cancelled first, so its
+    /// ``OAuthLoginFlow/complete(callbackURL:)`` fails; a ``reauthenticate(_:)`` call in flight is
+    /// awaited.
     func logout() async throws
 
     /// Signs in again on the same device after ``AuthState/softLoggedOut``, keeping its
@@ -48,5 +54,10 @@ public protocol MatrixSession: Sendable {
 
     /// Like ``reauthenticate(_:)``, through OAuth: the flow's ``OAuthLoginFlow/complete(callbackURL:)``
     /// returns the new session.
+    ///
+    /// The session stays reserved until the flow ends — completed, cancelled or released. If
+    /// ``logout()`` is called, or the homeserver ends the session, while the flow is pending, the
+    /// flow is cancelled and the sign-out proceeds; this throws `CancellationError` if that
+    /// happens before the flow is returned.
     func beginOAuthReauthentication(_ configuration: OAuthConfiguration) async throws -> any OAuthLoginFlow
 }

@@ -264,5 +264,10 @@ For an account that uses OAuth, ``MatrixSession/beginOAuthReauthentication(_:)``
   account's credentials fail with `.authentication(.invalidCredentials)`.
 - Called outside ``AuthState/softLoggedOut``, or while another reauthentication is running, both
   throw ``MatrixError/unexpected(message:details:)`` and touch nothing.
+- Signing the old session out — ``MatrixSession/logout()``, or the homeserver ending it — while an
+  OAuth reauthentication flow is still pending cancels that flow first: its
+  ``OAuthLoginFlow/complete(callbackURL:)`` then fails, and the sign-out proceeds. A
+  ``MatrixSession/reauthenticate(_:)`` call in flight is awaited instead; it ends with its network
+  request.
 
 Test these flows without a server: see <doc:TestingWithMocks>.

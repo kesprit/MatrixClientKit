@@ -16,7 +16,19 @@ final class SessionLifecycle: Sendable {
         /// Une reconnexion est en cours (spec 0.4, §5.5). `relay` se termine à son issue, quand
         /// `end` est clos ; les terminaisons arrivées entre-temps l'attendent, puis rejouent leur
         /// revendication.
-        case reauthenticating(relay: Task<Void, Never>, end: AsyncStream<Void>.Continuation)
+        ///
+        /// `cancel` annule le flux OAuth qui tient la réservation : l'application peut garder ce
+        /// flux indéfiniment sans le conclure, et une terminaison l'attendrait sans fin. La
+        /// première terminaison le prend et l'appelle (une seule fois) ; `terminationRequested`
+        /// retient qu'elle est arrivée avant que le flux n'existe, pour que celui-ci soit annulé
+        /// dès son ouverture. Une reconnexion par identifiants n'a pas de crochet : son appel
+        /// réseau la borne, elle est attendue.
+        case reauthenticating(
+            relay: Task<Void, Never>,
+            end: AsyncStream<Void>.Continuation,
+            cancel: (@Sendable () async -> Void)?,
+            terminationRequested: Bool
+        )
         /// La tâche qui termine la session, revendiquée par le premier appelant (hard logout ou
         /// `logout()`). Sert de rendez-vous : un appelant qui arrive pendant qu'une terminaison
         /// est déjà en cours l'attend au lieu de rejouer le travail, et la retrouve déjà terminée
@@ -31,7 +43,8 @@ final class SessionLifecycle: Sendable {
     private enum Decision {
         case claimed(Task<Void, Never>)
         case join(Task<Void, Never>)
-        case waitForReauthentication(Task<Void, Never>)
+        /// `cancel` : le crochet d'annulation à appeler avant d'attendre, s'il revient à cet appelant.
+        case waitForReauthentication(Task<Void, Never>, cancel: (@Sendable () async -> Void)?)
         case nothing
     }
 
@@ -85,8 +98,9 @@ final class SessionLifecycle: Sendable {
         switch decision {
         case let .claimed(task):
             return task
-        case let .waitForReauthentication(relay):
+        case let .waitForReauthentication(relay, cancel):
             return Task {
+                await cancel?()
                 await relay.value
                 await self.handleAuthError(isSoftLogout: false)?.value
             }
@@ -108,7 +122,9 @@ final class SessionLifecycle: Sendable {
     ///   avant la fin de l'autre terminaison exposerait un état encore périmé (`current` pas
     ///   encore `.signedOut`) à un appelant qui croirait la déconnexion terminée. Pendant une
     ///   reconnexion, il attend son issue : remplacée, la session ressort sans rien effacer ni
-    ///   appeler le serveur ; abandonnée, la déconnexion a lieu normalement.
+    ///   appeler le serveur ; abandonnée, la déconnexion a lieu normalement. Une reconnexion OAuth
+    ///   est d'abord annulée (voir ``registerReauthenticationCancel(_:)``) : sauf `complete` déjà
+    ///   en vol, elle est donc abandonnée.
     func logout(server: @Sendable () async throws -> Void) async throws {
         while true {
             // Un simple relais : `stream` ne porte aucune valeur, sa seule fin
@@ -135,7 +151,8 @@ final class SessionLifecycle: Sendable {
                 // `current` reflète déjà `.signedOut` alors que l'effacement est encore en vol.
                 await task.value
                 return
-            case let .waitForReauthentication(relay):
+            case let .waitForReauthentication(relay, cancel):
+                await cancel?()
                 await relay.value
             case .nothing:
                 return
@@ -184,7 +201,7 @@ final class SessionLifecycle: Sendable {
             let relay = Task {
                 for await _ in stream {}
             }
-            claim = .reauthenticating(relay: relay, end: end)
+            claim = .reauthenticating(relay: relay, end: end, cancel: nil, terminationRequested: false)
             return true
         }
         guard reserved else {
@@ -192,6 +209,19 @@ final class SessionLifecycle: Sendable {
                 message: "Only a session the homeserver soft-logged out can sign in again.",
                 details: "\(current)"
             )
+        }
+    }
+
+    /// Pose le crochet qui annule le flux OAuth tenant la réservation ; une terminaison l'appelle
+    /// au lieu d'attendre que l'application conclue le flux.
+    ///
+    /// - Returns: `false` si une terminaison est déjà demandée (ou si la réservation n'est plus
+    ///   tenue) : le crochet n'est pas retenu, et c'est à l'appelant d'annuler le flux aussitôt.
+    func registerReauthenticationCancel(_ cancel: @escaping @Sendable () async -> Void) -> Bool {
+        claim.withLock { claim in
+            guard case let .reauthenticating(relay, end, nil, false) = claim else { return false }
+            claim = .reauthenticating(relay: relay, end: end, cancel: cancel, terminationRequested: false)
+            return true
         }
     }
 
@@ -204,7 +234,7 @@ final class SessionLifecycle: Sendable {
     /// et les terminaisons qui attendaient reprennent normalement.
     func releaseReauthentication() {
         let end = claim.withLock { claim -> AsyncStream<Void>.Continuation? in
-            guard case let .reauthenticating(_, end) = claim else { return nil }
+            guard case let .reauthenticating(_, end, _, _) = claim else { return nil }
             claim = .none
             return end
         }
@@ -216,7 +246,7 @@ final class SessionLifecycle: Sendable {
     /// tardif —, et elle publie `.signedOut`.
     func markReplaced() {
         let end = claim.withLock { claim -> AsyncStream<Void>.Continuation? in
-            guard case let .reauthenticating(_, end) = claim else { return nil }
+            guard case let .reauthenticating(_, end, _, _) = claim else { return nil }
             claim = .replaced
             return end
         }
@@ -241,8 +271,10 @@ final class SessionLifecycle: Sendable {
                 return .claimed(task)
             case let .terminating(task):
                 return .join(task)
-            case let .reauthenticating(relay, _):
-                return .waitForReauthentication(relay)
+            case let .reauthenticating(relay, end, cancel, _):
+                // Le crochet est pris : seule la première terminaison annule le flux.
+                claim = .reauthenticating(relay: relay, end: end, cancel: nil, terminationRequested: true)
+                return .waitForReauthentication(relay, cancel: cancel)
             case .replaced:
                 return .nothing
             }

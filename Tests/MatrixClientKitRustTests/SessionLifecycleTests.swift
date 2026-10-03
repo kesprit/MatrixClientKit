@@ -410,3 +410,95 @@ func aReservationIsRefusedWhileATerminationIsInFlight() async throws {
     await hardLogout?.value
     #expect(journal.all == ["stopSync", "erase"])
 }
+
+// MARK: - Reconnexion OAuth annulée par une terminaison
+
+/// Le crochet d'annulation d'un flux OAuth de reconnexion, comme le pose
+/// `beginOAuthReauthentication` : `cancel()` du flux, dont l'issue rend la réservation.
+private func cancelHook(_ lifecycle: SessionLifecycle, journal: Journal) -> @Sendable () async -> Void {
+    { [weak lifecycle] in
+        journal.append("cancel")
+        lifecycle?.releaseReauthentication()
+    }
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aLogoutCancelsAPendingOAuthReauthenticationThenTerminatesOnce() async throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
+    #expect(lifecycle.registerReauthenticationCancel(cancelHook(lifecycle, journal: journal)))
+
+    // Un flux gardé par l'application sans jamais être conclu ferait attendre `logout()` sans fin.
+    try await lifecycle.logout { journal.append("server") }
+
+    #expect(journal.all.filter { $0 == "cancel" }.count == 1)
+    #expect(journal.all.filter { $0 == "server" }.count == 1)
+    #expect(journal.all.filter { $0.hasPrefix("erase") }.count == 1)
+    #expect(journal.all.first == "cancel")
+    #expect(lifecycle.current == .signedOut)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aHardLogoutCancelsAPendingOAuthReauthenticationThenTerminatesOnce() async throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
+    #expect(lifecycle.registerReauthenticationCancel(cancelHook(lifecycle, journal: journal)))
+
+    let hardLogout = lifecycle.handleAuthError(isSoftLogout: false)
+    let logout = Task { try await lifecycle.logout { journal.append("server") } }
+    await hardLogout?.value
+    try await logout.value
+
+    #expect(journal.all.filter { $0 == "cancel" }.count == 1)
+    #expect(journal.all.filter { $0.hasPrefix("erase") }.count == 1)
+    #expect(journal.all.filter { $0 == "stopSync" }.count == 1)
+    #expect(lifecycle.current == .signedOut)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aTerminationRequestedBeforeTheHookIsRegisteredRefusesIt() async throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
+
+    // Le flux n'existe pas encore (URL d'autorisation en cours d'obtention) quand `logout()` arrive.
+    let logout = Task { try await lifecycle.logout { journal.append("server") } }
+    await yieldABunch()
+    #expect(journal.all.isEmpty)
+
+    // Refusé : c'est à l'appelant d'annuler le flux qu'il vient d'ouvrir, comme le fait
+    // `beginOAuthReauthentication`.
+    let hook = cancelHook(lifecycle, journal: journal)
+    let registered = lifecycle.registerReauthenticationCancel(hook)
+    #expect(!registered)
+    #expect(journal.all.isEmpty)
+    if !registered { await hook() }
+    try await logout.value
+
+    #expect(journal.all.filter { $0 == "cancel" }.count == 1)
+    #expect(journal.all.filter { $0.hasPrefix("erase") }.count == 1)
+    #expect(lifecycle.current == .signedOut)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aLogoutStillWaitsForAReauthenticationWithoutCancelHook() async throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
+
+    // Une reconnexion par identifiants n'a pas de crochet : son appel réseau la borne.
+    let logout = Task {
+        try await lifecycle.logout { journal.append("server") }
+        journal.append("logoutReturned")
+    }
+    await yieldABunch()
+    #expect(journal.all.isEmpty)
+
+    lifecycle.releaseReauthentication()
+    try await logout.value
+
+    #expect(journal.all.filter { $0.hasPrefix("erase") }.count == 1)
+    #expect(journal.all.last == "logoutReturned")
+}

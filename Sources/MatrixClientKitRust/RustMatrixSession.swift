@@ -223,12 +223,16 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
 
     // Variante OAuth de ``reauthenticate(_:)`` : la réservation est tenue pendant toute la vie du
     // flux, et rendue ou consommée à son issue.
+    //
+    // Le flux appartient à l'application, qui peut le garder sans jamais le conclure : une
+    // terminaison (`logout()`, hard logout) l'annule donc au lieu d'attendre son issue. Le crochet
+    // vise le flux faiblement : le retenir empêcherait son `deinit` de rendre la réservation.
     public func beginOAuthReauthentication(
         _ configuration: MatrixClientKitCore.OAuthConfiguration
     ) async throws -> any OAuthLoginFlow {
         let attempt = try await beginReauthenticationAttempt()
         let lifecycle = lifecycle
-        return try await RustOAuthLoginFlow.begin(
+        let flow = try await RustOAuthLoginFlow.begin(
             attempt: attempt, configuration: configuration, prompt: nil, loginHint: userID.rawValue,
             deviceID: deviceID, expecting: userID,
             onEnd: { succeeded in
@@ -239,6 +243,12 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
                 }
             }
         )
+        guard lifecycle.registerReauthenticationCancel({ [weak flow] in await flow?.cancel() }) else {
+            // Une terminaison est arrivée pendant l'ouverture du flux : elle attend son issue.
+            await flow.cancel()
+            throw CancellationError()
+        }
+        return flow
     }
 
     /// Réserve la session, arrête sa sync et ouvre une tentative sur son store. La réservation
