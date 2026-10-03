@@ -110,7 +110,10 @@ final class LoginAttempt: Sendable {
     var segment: StoreSegment { store.segment }
 
     /// Connexion par identifiants. `deviceID` réutilise l'appareil d'une session en soft logout.
-    func authenticate(_ credentials: Credentials, deviceID: DeviceID?) async throws {
+    ///
+    /// - Parameter userID: pour une reconnexion, l'utilisateur attendu (voir
+    ///   ``refusingAnotherAccount(after:expecting:)``).
+    func authenticate(_ credentials: Credentials, deviceID: DeviceID?, expecting userID: UserID?) async throws {
         do {
             switch credentials {
             case let .password(username, password, deviceName):
@@ -129,8 +132,28 @@ final class LoginAttempt: Sendable {
                 )
             }
         } catch {
-            throw ErrorMapper.mapAuthentication(error)
+            throw ErrorMapper.mapAuthentication(await refusingAnotherAccount(after: error, expecting: userID))
         }
+    }
+
+    /// Ce qu'une connexion en échec doit lever, pour une reconnexion avec le compte d'un autre.
+    ///
+    /// Sur le store d'une session existante, l'amont échoue avant même de rendre la main : la
+    /// connexion aboutit côté serveur, pose la session sur le client, puis l'ouverture du store
+    /// crypto échoue (`MismatchedAccount` — le store est à un autre compte), une erreur générique
+    /// qui ne dit rien de la cause. Constaté contre Synapse. Le compte réellement connecté reste
+    /// lisible sur le client : s'il diffère de l'attendu, c'est un refus d'identifiants (spec 0.4,
+    /// §4.6), et l'appareil créé pour cet autre compte est déconnecté, au mieux. Plutôt que de
+    /// reconnaître le message amont, on compare les comptes : rien ne dépend du libellé.
+    ///
+    /// - Returns: `MatrixError.authentication(.invalidCredentials)` pour un autre compte, `error`
+    ///   tel quel sinon (y compris hors reconnexion, `userID == nil`).
+    func refusingAnotherAccount(after error: any Error, expecting userID: UserID?) async -> any Error {
+        guard let userID, let session = try? client.session(), session.userId != userID.rawValue else {
+            return error
+        }
+        try? await client.logout()
+        return MatrixError.authentication(.invalidCredentials)
     }
 
     /// Construit la session sur ce même client, puis la persiste.
@@ -154,8 +177,7 @@ final class LoginAttempt: Sendable {
         }
 
         do {
-            let data = try SessionMapper.sessionData(from: client.session(), storeID: store.segment.storeID)
-            if let userID, data.userID != userID {
+            if let userID, try client.session().userId != userID.rawValue {
                 try? await client.logout()
                 throw MatrixError.authentication(.invalidCredentials)
             }
@@ -165,6 +187,9 @@ final class LoginAttempt: Sendable {
                 localStore: store.localStore,
                 lease: store.lease
             )
+            // Relue après `make` : un rafraîchissement de jeton pendant sa construction n'est pas
+            // persisté par le delegate (rien ne désigne encore cette session), il n'existe que là.
+            let data = try SessionMapper.sessionData(from: client.session(), storeID: store.segment.storeID)
             try restorer.persistence.save(data)
             state.withLock { $0 = .over }
             return session

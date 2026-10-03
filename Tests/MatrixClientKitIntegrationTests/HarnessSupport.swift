@@ -29,6 +29,9 @@ struct HarnessConfiguration {
     let email: String
     let oauthUser: String?
     let oauthPassword: String?
+    /// Un second compte sur `passwordHomeserver` et `expiringHomeserver`, si le harnais l'exporte.
+    let otherUser: String?
+    let otherPassword: String?
 
     static var current: HarnessConfiguration? {
         let environment = ProcessInfo.processInfo.environment
@@ -49,7 +52,9 @@ struct HarnessConfiguration {
             password: password,
             email: email,
             oauthUser: environment["MCK_HARNESS_OAUTH_USER"],
-            oauthPassword: environment["MCK_HARNESS_OAUTH_PASSWORD"]
+            oauthPassword: environment["MCK_HARNESS_OAUTH_PASSWORD"],
+            otherUser: environment["MCK_HARNESS_OTHER_USER"],
+            otherPassword: environment["MCK_HARNESS_OTHER_PASSWORD"]
         )
     }
 
@@ -143,6 +148,42 @@ func createEncryptedRoom(on homeserver: URL, user: String, password: String) asy
     // Le jeton est déconnecté ci-dessus avant de relayer un échec de `createRoom`.
     let rawRoomID = try #require(try created.get()["room_id"] as? String)
     return try #require(RoomID(rawValue: rawRoomID))
+}
+
+/// Les appareils du compte, lus par l'API client brute avec un jeton propre, déconnecté ensuite
+/// (son propre appareil est exclu du résultat).
+func deviceIDs(on homeserver: URL, user: String, password: String) async throws -> [String] {
+    var login = URLRequest(url: homeserver.appending(path: "_matrix/client/v3/login"))
+    login.httpMethod = "POST"
+    login.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    login.httpBody = try JSONSerialization.data(withJSONObject: [
+        "type": "m.login.password",
+        "identifier": ["type": "m.id.user", "user": user],
+        "password": password,
+        "initial_device_display_name": "MatrixClientKit Harness (raw)",
+    ])
+    let loginObject = try await harnessJSON(for: login, step: "login")
+    let token = try #require(loginObject["access_token"] as? String)
+    let ownDevice = loginObject["device_id"] as? String
+
+    var list = URLRequest(url: homeserver.appending(path: "_matrix/client/v3/devices"))
+    list.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    let listed: Result<[String: Any], any Error>
+    do {
+        listed = .success(try await harnessJSON(for: list, step: "devices"))
+    } catch {
+        listed = .failure(error)
+    }
+
+    var logout = URLRequest(url: homeserver.appending(path: "_matrix/client/v3/logout"))
+    logout.httpMethod = "POST"
+    logout.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    logout.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    logout.httpBody = Data("{}".utf8)
+    _ = try? await URLSession.shared.data(for: logout)
+
+    let devices = try #require(try listed.get()["devices"] as? [[String: Any]])
+    return devices.compactMap { $0["device_id"] as? String }.filter { $0 != ownDevice }
 }
 
 /// Envoie une requête de l'API client brute et rend son corps JSON ; un statut autre que `200`

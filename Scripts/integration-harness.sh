@@ -11,6 +11,10 @@ COMPOSE=(docker compose -p mck-harness)
 USER_NAME="mck-user"
 USER_PASSWORD="mck-user-password"
 USER_EMAIL="mck-user@example.test"
+# Second compte, sur les deux Synapse à mot de passe : une reconnexion avec ses identifiants doit
+# être refusée sur la session de USER_NAME.
+OTHER_NAME="mck-other"
+OTHER_PASSWORD="mck-other-password"
 ADMIN_NAME="mck-admin"
 ADMIN_PASSWORD="mck-admin-password"
 OAUTH_USER="mck-oauth-user"
@@ -61,6 +65,7 @@ case "${1:-}" in
     for service in synapse-password synapse-expiring; do
       register "$service" "$ADMIN_NAME" "$ADMIN_PASSWORD" --admin
       register "$service" "$USER_NAME" "$USER_PASSWORD" --no-admin
+      register "$service" "$OTHER_NAME" "$OTHER_PASSWORD" --no-admin
     done
     # MAS n'a pas de healthcheck (compose ne l'attend pas) : sonde bornée, le temps des migrations.
     mas_ready=0
@@ -87,6 +92,7 @@ case "${1:-}" in
     for port in 8008 8009; do
       login_token "$port" "$ADMIN_NAME" "$ADMIN_PASSWORD" >/dev/null
       login_token "$port" "$USER_NAME" "$USER_PASSWORD" >/dev/null
+      login_token "$port" "$OTHER_NAME" "$OTHER_PASSWORD" >/dev/null
     done
     admin_token=$(login_token 8008 "$ADMIN_NAME" "$ADMIN_PASSWORD")
     bind_email 8008 "$admin_token"
@@ -107,6 +113,8 @@ case "${1:-}" in
     echo "export MCK_HARNESS_USER=$USER_NAME"
     echo "export MCK_HARNESS_PASSWORD=$USER_PASSWORD"
     echo "export MCK_HARNESS_EMAIL=$USER_EMAIL"
+    echo "export MCK_HARNESS_OTHER_USER=$OTHER_NAME"
+    echo "export MCK_HARNESS_OTHER_PASSWORD=$OTHER_PASSWORD"
     echo "export MCK_HARNESS_ADMIN_TOKEN_PASSWORD=$token_password"
     echo "export MCK_HARNESS_ADMIN_TOKEN_EXPIRING=$token_expiring"
     ;;

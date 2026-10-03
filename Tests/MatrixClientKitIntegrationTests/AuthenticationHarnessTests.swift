@@ -180,6 +180,93 @@ extension HarnessTests {
             }
         }
 
+        /// Les identifiants d'un autre compte sur la session en soft logout : refusés en
+        /// `.invalidCredentials`, l'ancienne session reste en soft logout et son store intact —
+        /// prouvé par une reconnexion du bon compte, ensuite, sur le même appareil.
+        @Test(.timeLimit(.minutes(2)))
+        func reauthenticationWithAnotherAccountIsRefused() async throws {
+            let configuration = try #require(HarnessConfiguration.current)
+            let otherUser = try #require(configuration.otherUser, "MCK_HARNESS_OTHER_USER is not exported")
+            let otherPassword = try #require(configuration.otherPassword, "MCK_HARNESS_OTHER_PASSWORD is not exported")
+            let directory = newHarnessDirectory()
+            defer { removeDirectory(directory) }
+
+            let client = Matrix.client(
+                homeserver: configuration.expiringHomeserver, storage: .local(directory: directory))
+            let old = try await client.login(
+                .password(
+                    username: configuration.user, password: configuration.password,
+                    deviceName: "Harness (other account)")
+            )
+            var current: any MatrixSession = old
+
+            do {
+                let states = old.sync.state
+                await old.sync.start()
+                let state = await waitUntilRunning(states)
+                try #require(state == .running, "sync reached \(String(describing: state))")
+                let softLoggedOut = await firstValue(of: old.authState, within: .seconds(60)) { $0 == .softLoggedOut }
+                try #require(softLoggedOut == .softLoggedOut, "the session was not soft-logged out within 60 s")
+                let storesBefore = storeDirectories(in: directory)
+
+                let outcome: Result<any MatrixSession, any Error>
+                do {
+                    outcome = .success(
+                        try await old.reauthenticate(
+                            .password(username: otherUser, password: otherPassword, deviceName: nil)
+                        )
+                    )
+                } catch {
+                    outcome = .failure(error)
+                }
+
+                switch outcome {
+                case let .success(replacement):
+                    await cleaningUp {
+                        await replacement.sync.stop()
+                        try? await replacement.logout()
+                    }
+                    Issue.record("reauthenticate succeeded with another account's credentials")
+                case let .failure(error):
+                    #expect(
+                        error as? MatrixError == .authentication(.invalidCredentials),
+                        "expected .authentication(.invalidCredentials), got \(error)")
+                }
+
+                let oldState = await firstValue(of: old.authState, within: .seconds(5)) { _ in true }
+                #expect(oldState == .softLoggedOut)
+                let storesAfter = storeDirectories(in: directory)
+                #expect(storesAfter == storesBefore, "stores before: \(storesBefore), after: \(storesAfter)")
+                #expect(storesAfter.count == 1, "stores: \(storesAfter)")
+                // L'appareil créé côté serveur pour l'autre compte (même identifiant) est déconnecté.
+                let otherDevices = try await deviceIDs(
+                    on: configuration.expiringHomeserver, user: otherUser, password: otherPassword)
+                #expect(!otherDevices.contains(old.deviceID.rawValue), "other account's devices: \(otherDevices)")
+
+                // Le store n'a pas été abîmé par la tentative refusée : le bon compte s'y reconnecte.
+                let new = try await old.reauthenticate(
+                    .password(username: configuration.user, password: configuration.password, deviceName: nil)
+                )
+                current = new
+                #expect(new.userID == old.userID)
+                #expect(new.deviceID == old.deviceID)
+                #expect(storeDirectories(in: directory) == storesBefore)
+            } catch {
+                let opened = current
+                await cleaningUp {
+                    await opened.sync.stop()
+                    try? await opened.logout()
+                }
+                throw error
+            }
+
+            let opened = current
+            await cleaningUp {
+                await opened.sync.stop()
+                try? await opened.logout()
+            }
+        }
+
         @Test(.timeLimit(.minutes(2)))
         func reauthenticationIsRefusedOutsideSoftLogout() async throws {
             let configuration = try #require(HarnessConfiguration.current)

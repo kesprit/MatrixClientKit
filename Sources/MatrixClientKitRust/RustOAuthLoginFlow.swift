@@ -122,6 +122,7 @@ final class RustOAuthLoginFlow: OAuthLoginFlow {
             gate.completionSucceeded()
             return session
         } catch {
+            let error = await attempt.refusingAnotherAccount(after: error, expecting: expectedUserID)
             attempt.fail()
             gate.completionFailed()
             throw OAuthMapper.map(error)

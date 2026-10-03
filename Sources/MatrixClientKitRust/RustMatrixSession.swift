@@ -210,7 +210,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     public func reauthenticate(_ credentials: Credentials) async throws -> any MatrixClientKitCore.MatrixSession {
         let attempt = try await beginReauthenticationAttempt()
         do {
-            try await attempt.authenticate(credentials, deviceID: deviceID)
+            try await attempt.authenticate(credentials, deviceID: deviceID, expecting: userID)
             let session = try await attempt.succeed(expecting: userID)
             lifecycle.markReplaced()
             return session

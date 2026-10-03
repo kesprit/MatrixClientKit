@@ -116,7 +116,7 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
     public func login(_ credentials: Credentials) async throws -> any MatrixClientKitCore.MatrixSession {
         let attempt = try await LoginAttempt.begin(restorer: restorer, target: .homeserver(homeserver), reusing: nil)
         do {
-            try await attempt.authenticate(credentials, deviceID: nil)
+            try await attempt.authenticate(credentials, deviceID: nil, expecting: nil)
             return try await attempt.succeed(expecting: nil)
         } catch {
             attempt.fail()
