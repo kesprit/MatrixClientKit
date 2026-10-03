@@ -90,6 +90,23 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
         )
     }
 
+    /// Signs this device in by showing a QR code that a device already signed in to the account
+    /// scans; see ``QRCodeLogin``.
+    public func loginWithQRCode(_ configuration: MatrixClientKitCore.OAuthConfiguration) -> any QRCodeLogin {
+        RustQRCodeLogin(restorer: restorer, configuration: configuration, mode: .display(.homeserver(homeserver)))
+    }
+
+    /// Signs this device in by scanning the QR code shown by a device already signed in to the
+    /// account. The code says which homeserver to use.
+    public static func loginWithQRCode(
+        scanned: Data,
+        configuration: MatrixClientKitCore.OAuthConfiguration,
+        storage: MatrixStorage
+    ) -> any QRCodeLogin {
+        RustQRCodeLogin(
+            restorer: SessionRestorer(storage: storage), configuration: configuration, mode: .scanned(scanned))
+    }
+
     /// Restaure la session persistée sans connaître l'adresse du homeserver, enregistrée avec elle.
     public static func restoreSession(storage: MatrixStorage) async throws -> (any MatrixClientKitCore.MatrixSession)? {
         try await SessionRestorer(storage: storage).restore()

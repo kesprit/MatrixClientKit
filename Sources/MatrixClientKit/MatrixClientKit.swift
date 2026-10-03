@@ -66,4 +66,16 @@ public enum Matrix: Sendable {
     public static func restoreSession(storage: MatrixStorage) async throws -> (any MatrixSession)? {
         try await RustMatrixClient.restoreSession(storage: storage)
     }
+
+    /// Signs this device in by scanning the QR code shown by a device already signed in to the
+    /// account. The code says which homeserver to use.
+    ///
+    /// To show a QR code on this device instead, use ``MatrixClient/loginWithQRCode(_:)``.
+    public static func loginWithQRCode(
+        scanned: Data,
+        configuration: OAuthConfiguration,
+        storage: MatrixStorage
+    ) -> any QRCodeLogin {
+        RustMatrixClient.loginWithQRCode(scanned: scanned, configuration: configuration, storage: storage)
+    }
 }
