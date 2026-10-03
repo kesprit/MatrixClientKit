@@ -1,3 +1,4 @@
+import Foundation
 import MatrixRustSDK
 import MatrixClientKitCore
 
@@ -10,7 +11,15 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     public let encryption: any EncryptionService
     public let notifications: any NotificationService
 
+    /// Le store local de la session, et l'adresse du serveur qui l'a émise.
+    let segment: StoreSegment
+    let homeserverURL: URL
+
     private let client: Client
+    /// Tenu pour toute la vie de la session : sans lui, le ramassage d'une connexion ultérieure
+    /// dans ce processus emporterait ce store dès que la session persistée en désigne un autre
+    /// (spec 0.4, §5.4).
+    private let lease: StoreLease
     /// Retenu pour la durée de la session : il porte le `SessionDelegate` dont le SDK se sert à
     /// chaque rafraîchissement de jeton.
     private let restorer: SessionRestorer
@@ -32,7 +41,10 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         sync: any SyncController,
         encryption: any EncryptionService,
         notifications: any NotificationService,
+        segment: StoreSegment,
+        homeserverURL: URL,
         client: Client,
+        lease: StoreLease,
         restorer: SessionRestorer,
         lifecycle: SessionLifecycle,
         authDelegate: AuthDelegate,
@@ -45,7 +57,10 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         self.sync = sync
         self.encryption = encryption
         self.notifications = notifications
+        self.segment = segment
+        self.homeserverURL = homeserverURL
         self.client = client
+        self.lease = lease
         self.restorer = restorer
         self.lifecycle = lifecycle
         self.authDelegate = authDelegate
@@ -65,7 +80,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     static func make(
         client: Client,
         restorer: SessionRestorer,
-        localStore: LocalStore
+        localStore: LocalStore,
+        lease: StoreLease
     ) async throws -> RustMatrixSession {
         do {
             let persistence = restorer.persistence
@@ -108,7 +124,10 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
                 sync: sync,
                 encryption: encryption,
                 notifications: notifications,
+                segment: localStore.segment,
+                homeserverURL: data.homeserverURL,
                 client: client,
+                lease: lease,
                 restorer: restorer,
                 lifecycle: lifecycle,
                 authDelegate: authDelegate,

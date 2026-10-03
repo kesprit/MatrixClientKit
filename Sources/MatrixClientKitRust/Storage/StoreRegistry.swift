@@ -9,12 +9,14 @@ import Synchronization
 /// pendant que la première session tourne encore. Un bail compté par répertoire répond à la seule
 /// question utile — « quelqu'un, ici, utilise-t-il ce store ? ». Compté, parce qu'une reconnexion
 /// tient brièvement deux baux sur le même store.
-final class StoreRegistry: Sendable {
-    static let shared = StoreRegistry()
+///
+/// Portée `package` pour figurer dans l'initialiseur `package` de ``SessionRestorer``.
+package final class StoreRegistry: Sendable {
+    package static let shared = StoreRegistry()
 
     private let counts = Mutex<[String: Int]>([:])
 
-    init() {}
+    package init() {}
 
     func lease(_ paths: StoragePaths) -> StoreLease {
         let key = Self.key(paths.storeDirectory)

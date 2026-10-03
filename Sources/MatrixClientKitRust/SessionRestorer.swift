@@ -2,6 +2,14 @@ import Foundation
 import MatrixRustSDK
 import MatrixClientKitCore
 
+/// Comment le builder désigne le homeserver.
+enum ClientTarget: Sendable, Hashable {
+    /// Adresse déjà résolue : celle d'une session persistée, ou d'un client créé par URL.
+    case homeserver(URL)
+    /// Nom de serveur, URL ou user ID à résoudre par `.well-known` (découverte, QR scanné).
+    case serverName(String)
+}
+
 /// Construit le client persistant d'un utilisateur et restaure la session enregistrée.
 ///
 /// Partagé par ``RustMatrixClient`` et par ``RustMatrixClient/restoreSession(storage:)`` : la
@@ -24,17 +32,26 @@ package final class SessionRestorer: Sendable {
     let persistence: SessionPersistence
     let role: ClientRole
     let lockPolicy: LockPolicy
+    /// Les baux de ce processus ; `.shared` hors des tests, pour que tous les stockages voient
+    /// les mêmes stores vivants.
+    let registry: StoreRegistry
 
     /// Le SDK s'en sert à chaque rafraîchissement de jeton : un delegate libéré ne persisterait
     /// plus rien, et l'utilisateur serait déconnecté au lancement suivant sans erreur visible.
     let sessionDelegate: SessionDelegate
 
-    convenience init(storage: MatrixStorage, role: ClientRole = .application, lockPolicy: LockPolicy = .automatic) {
+    convenience init(
+        storage: MatrixStorage,
+        role: ClientRole = .application,
+        lockPolicy: LockPolicy = .automatic,
+        registry: StoreRegistry = .shared
+    ) {
         self.init(
             storage: storage,
             secureStore: KeychainSecureStore(storage: storage),
             role: role,
-            lockPolicy: lockPolicy
+            lockPolicy: lockPolicy,
+            registry: registry
         )
     }
 
@@ -42,12 +59,14 @@ package final class SessionRestorer: Sendable {
         storage: MatrixStorage,
         secureStore: any SecureStore,
         role: ClientRole = .application,
-        lockPolicy: LockPolicy = .automatic
+        lockPolicy: LockPolicy = .automatic,
+        registry: StoreRegistry = .shared
     ) {
         self.storage = storage
         self.secureStore = secureStore
         self.role = role
         self.lockPolicy = lockPolicy
+        self.registry = registry
         let persistence = SessionPersistence(store: secureStore)
         self.persistence = persistence
         self.sessionDelegate = SessionDelegate(persistence: persistence)
@@ -67,8 +86,24 @@ package final class SessionRestorer: Sendable {
         LocalStore(storage: storage, segment: segment, secureStore: secureStore)
     }
 
+    var sweeper: OrphanedStoreSweeper {
+        OrphanedStoreSweeper(storage: storage, secureStore: secureStore, registry: registry)
+    }
+
+    /// Ramasse les stores orphelins, sauf dans l'extension (spec 0.3, §7 ; spec 0.4, §5.4).
+    func sweepOrphans(keeping kept: StoreSegment?) {
+        guard role == .application else { return }
+        sweeper.sweep(keeping: kept)
+    }
+
     /// Construit le client à store SQLite chiffré d'un utilisateur.
     func makeClient(homeserver: URL, localStore: LocalStore) async throws -> Client {
+        try await makeClient(target: .homeserver(homeserver), localStore: localStore)
+    }
+
+    /// Construit le client sur le store SQLite chiffré de `localStore`, pour un homeserver résolu
+    /// ou à résoudre.
+    func makeClient(target: ClientTarget, localStore: LocalStore) async throws -> Client {
         do {
             let paths = try localStore.paths()
             // La clé avant les répertoires : dans l'extension, une clé absente (déconnexion en
@@ -76,16 +111,22 @@ package final class SessionRestorer: Sendable {
             let key = try localStore.encryptionKey(createIfMissing: role == .application)
             try paths.createDirectoriesIfNeeded()
 
-            var builder = ClientBuilder()
-                .homeserverUrl(url: homeserver.absoluteString)
+            var builder: ClientBuilder
+            switch target {
+            case let .homeserver(url):
+                builder = ClientBuilder().homeserverUrl(url: url.absoluteString)
+            case let .serverName(name):
+                builder = ClientBuilder().serverNameOrHomeserverUrl(serverNameOrUrl: name)
+            }
+            builder =
+                builder
                 .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
                 .setSessionDelegate(sessionDelegate: sessionDelegate)
                 // Désactivé par défaut en amont : sans lui, un compte qui ne s'est jamais connecté
                 // ailleurs n'a pas d'identité cross-signing, et la vérification échoue toujours
-                // (spec 0.2, §2.8). Uniquement ici, jamais sur le client de poignée de main : son
-                // store en mémoire perdrait les clés privées aussitôt créées. Jamais non plus dans
-                // l'extension : amorcer une identité est une écriture de compte réservée à
-                // l'application (spec 0.3, §7).
+                // (spec 0.2, §2.8). Uniquement sur un store SQLite : un store en mémoire perdrait
+                // les clés privées aussitôt créées. Jamais dans l'extension : amorcer une identité
+                // est une écriture de compte réservée à l'application (spec 0.3, §7).
                 .autoEnableCrossSigning(autoEnableCrossSigning: role == .application)
                 .sqliteStore(
                     config: SqliteStoreBuilder(
@@ -114,15 +155,30 @@ package final class SessionRestorer: Sendable {
     func restore(
         makeClient: (URL, LocalStore) async throws -> Client
     ) async throws -> (any MatrixClientKitCore.MatrixSession)? {
-        guard let data = try persistence.load() else { return nil }
+        // Une lecture en échec ne ramasse rien : on ne sait pas quel store la session persistée
+        // désigne, et le ramassage pourrait l'emporter.
+        guard let data = try persistence.load() else {
+            sweepOrphans(keeping: nil)
+            return nil
+        }
 
         let localStore = makeLocalStore(for: StoreSegment(data))
+        // Le bail avant le ramassage et avant le client : un ramassage concurrent (une connexion
+        // dans ce processus) ne doit jamais emporter le store qu'on s'apprête à ouvrir.
+        let lease = registry.lease(try localStore.paths())
+        sweepOrphans(keeping: localStore.segment)
+
         // L'adresse persistée fait foi : c'est celle du serveur qui a émis la session, résolue
         // lors de la connexion.
         let client = try await makeClient(data.homeserverURL, localStore)
         do {
             try await client.restoreSession(session: SessionMapper.session(from: data))
-            return try await RustMatrixSession.make(client: client, restorer: self, localStore: localStore)
+            return try await RustMatrixSession.make(
+                client: client,
+                restorer: self,
+                localStore: localStore,
+                lease: lease
+            )
         } catch {
             let mapped = ErrorMapper.mapAuthentication(error)
 
