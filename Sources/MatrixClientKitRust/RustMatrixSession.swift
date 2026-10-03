@@ -152,13 +152,13 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         }
     }
 
-    /// Se reconnecte sur le même appareil après un soft logout (spec 0.4, §4.6, §5.5).
-    ///
-    /// L'amont pose une session une seule fois par client : la reconnexion construit un client
-    /// neuf sur le même store, avec le même appareil, et rend une nouvelle session. La
-    /// réservation passe avant l'arrêt de la sync : une seconde reconnexion concurrente, ou une
-    /// terminaison déjà revendiquée, est refusée sans rien toucher. En cas d'échec, la réservation
-    /// est rendue et la session reste en `.softLoggedOut`, intacte.
+    // Se reconnecte sur le même appareil après un soft logout (spec 0.4, §4.6, §5.5).
+    //
+    // L'amont pose une session une seule fois par client : la reconnexion construit un client
+    // neuf sur le même store, avec le même appareil, et rend une nouvelle session. La
+    // réservation passe avant l'arrêt de la sync : une seconde reconnexion concurrente, ou une
+    // terminaison déjà revendiquée, est refusée sans rien toucher. En cas d'échec, la réservation
+    // est rendue et la session reste en `.softLoggedOut`, intacte.
     public func reauthenticate(_ credentials: Credentials) async throws -> any MatrixClientKitCore.MatrixSession {
         let attempt = try await beginReauthenticationAttempt()
         do {
@@ -173,8 +173,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         }
     }
 
-    /// Variante OAuth de ``reauthenticate(_:)`` : la réservation est tenue pendant toute la vie du
-    /// flux, et rendue ou consommée à son issue.
+    // Variante OAuth de ``reauthenticate(_:)`` : la réservation est tenue pendant toute la vie du
+    // flux, et rendue ou consommée à son issue.
     public func beginOAuthReauthentication(
         _ configuration: MatrixClientKitCore.OAuthConfiguration
     ) async throws -> any OAuthLoginFlow {

@@ -70,3 +70,56 @@ import MatrixClientKitMocks
     #expect(!details.supportsOAuth)
     #expect(details.oauthPrompts.isEmpty)
 }
+
+@Test func mockClientReturnsTheConfiguredLoginDetails() async throws {
+    let client = MockMatrixClient()
+    client.loginDetailsResult = .success(SampleData.loginDetails(supportsOAuth: true, oauthPrompts: [.create]))
+    let details = try await client.loginDetails()
+    #expect(details.supportsOAuth)
+    #expect(details.oauthPrompts == [.create])
+}
+
+@Test func mockClientRecordsOAuthRequestsAndReturnsItsFlow() async throws {
+    let client = MockMatrixClient()
+    let flow = try await client.beginOAuthLogin(SampleData.oauthConfiguration(), prompt: .create, loginHint: "alice")
+    #expect(flow.authorizationURL == client.oauthFlow.authorizationURL)
+    #expect(
+        client.oauthRequests == [
+            .init(configuration: SampleData.oauthConfiguration(), prompt: .create, loginHint: "alice")
+        ])
+}
+
+@Test func mockClientOAuthCanFail() async {
+    let client = MockMatrixClient()
+    client.oauthLoginError = .authentication(.unsupportedLoginType)
+    await #expect(throws: MatrixError.authentication(.unsupportedLoginType)) {
+        _ = try await client.beginOAuthLogin(SampleData.oauthConfiguration())
+    }
+}
+
+@Test func mockClientHandsOutItsQRCodeLogin() {
+    let client = MockMatrixClient()
+    let login = client.loginWithQRCode(SampleData.oauthConfiguration())
+    #expect((login as? MockQRCodeLogin) === client.qrCodeLogin)
+}
+
+@Test func mockSessionReauthenticationIsConfigurableAndRecorded() async throws {
+    let session = MockMatrixSession()
+    session.reauthenticateResult = .success(MockMatrixSession(deviceID: "DEV1"))
+    let renewed = try await session.reauthenticate(.password(username: "alice", password: "p", deviceName: nil))
+    #expect(renewed.deviceID.rawValue == "DEV1")
+    #expect(session.reauthenticationAttempts.count == 1)
+}
+
+@Test func mockSessionRefusesReauthenticationByDefault() async {
+    let session = MockMatrixSession()
+    await #expect(throws: MatrixError.self) {
+        _ = try await session.reauthenticate(.password(username: "a", password: "p", deviceName: nil))
+    }
+}
+
+@Test func mockSessionHandsOutItsOAuthReauthenticationFlow() async throws {
+    let session = MockMatrixSession()
+    let flow = try await session.beginOAuthReauthentication(SampleData.oauthConfiguration())
+    #expect((flow as? MockOAuthLoginFlow) === session.oauthReauthenticationFlow)
+}

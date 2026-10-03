@@ -37,4 +37,33 @@ public protocol MatrixClient: Sendable {
     /// The session is restored with the homeserver address stored with it, which takes precedence
     /// over ``homeserver``.
     func restoreSession() async throws -> (any MatrixSession)?
+
+    /// What the homeserver accepts for signing in. Needs no session; call it to decide which
+    /// sign-in options to show.
+    func loginDetails() async throws -> LoginDetails
+
+    /// Starts signing in through the homeserver's OAuth authorization server.
+    ///
+    /// - Parameters:
+    ///   - prompt: ``OAuthPrompt/create`` to offer account creation — only when
+    ///     ``LoginDetails/oauthPrompts`` contains it.
+    ///   - loginHint: a user ID to prefill, for instance `@alice:matrix.org`.
+    /// - Throws: ``MatrixError/authentication(_:)`` with ``MatrixError/Authentication/unsupportedLoginType``
+    ///   when the homeserver does not support OAuth.
+    func beginOAuthLogin(
+        _ configuration: OAuthConfiguration,
+        prompt: OAuthPrompt?,
+        loginHint: String?
+    ) async throws -> any OAuthLoginFlow
+
+    /// Signs this device in by showing a QR code that a device already signed in to the account
+    /// scans. To scan a code instead, use `Matrix.loginWithQRCode(scanned:configuration:storage:)`.
+    func loginWithQRCode(_ configuration: OAuthConfiguration) -> any QRCodeLogin
+}
+
+extension MatrixClient {
+    /// Starts signing in through OAuth, without a prompt or a login hint.
+    public func beginOAuthLogin(_ configuration: OAuthConfiguration) async throws -> any OAuthLoginFlow {
+        try await beginOAuthLogin(configuration, prompt: nil, loginHint: nil)
+    }
 }
