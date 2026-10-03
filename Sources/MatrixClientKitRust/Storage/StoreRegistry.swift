@@ -33,12 +33,21 @@ final class StoreRegistry: Sendable {
         }
     }
 
+    /// Clé purement lexicale : ni résolution de lien symbolique, ni `standardizedFileURL`, qui
+    /// retire `/private` seulement quand le chemin existe. Un bail pris avant la création du
+    /// répertoire et un test fait après n'auraient sinon pas la même clé (`/var` contre
+    /// `/private/var`, racine en lien symbolique). Le ramassage reconstruit donc ses candidats
+    /// depuis la même racine que le bail.
     private static func key(_ directory: URL) -> String {
-        directory.standardizedFileURL.resolvingSymlinksInPath().path
+        directory.path
     }
 }
 
 /// Un bail sur un store. Libéré explicitement ou à la libération de son porteur.
+///
+/// - Important: le porteur (la session ou la tentative de connexion) doit le stocker dans une
+///   propriété. Une simple variable locale jamais relue peut voir sa durée de vie close par
+///   l'optimiseur, ce qui libérerait le bail trop tôt et exposerait un store vivant au ramassage.
 final class StoreLease: Sendable {
     private let key: String
     private let registry: StoreRegistry

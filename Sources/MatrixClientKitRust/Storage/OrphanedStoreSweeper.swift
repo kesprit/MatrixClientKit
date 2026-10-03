@@ -21,14 +21,29 @@ struct OrphanedStoreSweeper {
             )
         else { return }
 
-        for entry in entries {
+        for listed in entries {
+            let name = listed.lastPathComponent
+            // On ne réutilise pas l'URL listée : le système de fichiers peut la rendre sous une
+            // autre forme (`/private/var`, lien symbolique) que celle dont les baux ont été pris.
+            // Reconstruite depuis la même racine, elle suit le même calcul que `StoragePaths`.
+            let entry = root.appendingPathComponent(name, isDirectory: true)
             let isDirectory = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            let name = entry.lastPathComponent
-            guard isDirectory, name != kept?.directoryName, !registry.isLeased(entry) else { continue }
+            guard isDirectory, name != kept?.directoryName, !registry.isLeased(entry), looksLikeStore(entry)
+            else { continue }
 
             // Le nom du répertoire suffit à retrouver la clé : même mise en page pour les deux
             // segments, d'où `.session(name)` y compris pour un store legacy.
             try? LocalStore(storage: storage, segment: .session(name), secureStore: secureStore).purge()
+        }
+    }
+
+    /// Un contenu étranger posé sous la racine ne doit jamais être effacé : seul un répertoire
+    /// qui a la forme d'un store (`data` ou `cache`) est ramassé.
+    private func looksLikeStore(_ directory: URL) -> Bool {
+        ["data", "cache"].contains { name in
+            var isDirectory: ObjCBool = false
+            let path = directory.appendingPathComponent(name, isDirectory: true).path
+            return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
         }
     }
 }

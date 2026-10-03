@@ -4,9 +4,16 @@ import Foundation
 import MatrixClientKitCore
 
 private struct Fixture {
-    let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("mck-\(UUID().uuidString)")
+    let root: URL
     let secureStore = InMemorySecureStore()
     let registry = StoreRegistry()
+
+    init(
+        root: URL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("mck-\(UUID().uuidString)")
+    ) {
+        self.root = root
+    }
     var storage: MatrixStorage { .local(directory: root) }
 
     /// Crée un store sur disque (répertoires + clé) et le rend.
@@ -88,8 +95,10 @@ private struct Fixture {
     #expect(!fixture.registry.isLeased(try store.paths().storeDirectory))
 }
 
-@Test func aMissingRootIsNotAnError() {
-    Fixture().sweeper.sweep(keeping: nil)  // ne lève pas, ne crée rien
+@Test func aMissingRootIsNotAnError() throws {
+    let fixture = Fixture()
+    fixture.sweeper.sweep(keeping: nil)  // ne lève pas, ne crée rien
+    #expect(!FileManager.default.fileExists(atPath: try StoragePaths.root(for: fixture.storage).path))
 }
 
 @Test func filesBesideTheStoresAreLeftAlone() throws {
@@ -100,4 +109,41 @@ private struct Fixture {
     try Data("x".utf8).write(to: file)
     fixture.sweeper.sweep(keeping: nil)
     #expect(FileManager.default.fileExists(atPath: file.path))
+}
+
+// Le bail est pris avant que le répertoire existe, le ramassage passe après : les deux doivent
+// désigner le store par la même clé, quelle que soit la forme du chemin racine.
+@Test func aLeaseTakenBeforeTheDirectoryExistsProtectsTheStoreUnderAPrivateRoot() throws {
+    let fixture = Fixture(
+        root: URL(fileURLWithPath: "/private" + NSTemporaryDirectory())
+            .appendingPathComponent("mck-\(UUID().uuidString)")
+    )
+    let store = LocalStore(storage: fixture.storage, segment: .session("early"), secureStore: fixture.secureStore)
+    let lease = fixture.registry.lease(try store.paths())
+    _ = try fixture.makeStore(.session("early"))
+    fixture.sweeper.sweep(keeping: nil)
+    #expect(try fixture.exists(store))
+    withExtendedLifetime(lease) {}
+}
+
+@Test func aLeaseTakenBeforeTheDirectoryExistsProtectsTheStoreUnderASymlinkedRoot() throws {
+    let target = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("mck-real-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+    let link = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("mck-link-\(UUID().uuidString)")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+    let fixture = Fixture(root: link)
+    let store = LocalStore(storage: fixture.storage, segment: .session("early"), secureStore: fixture.secureStore)
+    let lease = fixture.registry.lease(try store.paths())
+    _ = try fixture.makeStore(.session("early"))
+    fixture.sweeper.sweep(keeping: nil)
+    #expect(try fixture.exists(store))
+    withExtendedLifetime(lease) {}
+}
+
+@Test func aForeignDirectoryWithoutStoreLayoutIsLeftAlone() throws {
+    let fixture = Fixture()
+    let foreign = try StoragePaths.root(for: fixture.storage).appendingPathComponent("foreign", isDirectory: true)
+    try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: true)
+    fixture.sweeper.sweep(keeping: nil)
+    #expect(FileManager.default.fileExists(atPath: foreign.path))
 }
