@@ -33,3 +33,16 @@ contacte directement) ; Synapse joint MAS par le réseau compose (`http://mas:80
   (`org.example:/callback` pour `https://example.org/`) ou une URI loopback `http://127.0.0.1/...`.
 - Ports 8010 et 8082 liés à 127.0.0.1 ; secrets (config MAS, secret partagé, mots de passe Postgres)
   sont tous des valeurs de TEST.
+
+## Suites à lancer séparément
+
+La suite `HarnessTests` (ce harnais) et la suite `IntegrationTests` (Tuwunel, variables
+`MATRIX_TEST_*`) sont chacune sérialisée, mais pas l'une par rapport à l'autre : le Keychain ne
+garde qu'une session persistée par processus. Lancer les deux l'une après l'autre, jamais ensemble :
+
+    eval "$(Scripts/integration-harness.sh env)" && swift test --filter HarnessTests
+    ./Scripts/check-integration-env.sh && swift test --filter IntegrationTests
+
+Le cas de soft logout attend jusqu'à 60 s que le jeton de 20 s de `synapse-expiring` soit refusé.
+Les appareils qu'il ouvre ne peuvent pas être déconnectés côté serveur (jeton expiré) : ils
+s'accumulent sur le compte de `synapse-expiring` jusqu'au prochain `down`.

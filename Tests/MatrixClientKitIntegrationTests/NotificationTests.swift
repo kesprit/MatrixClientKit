@@ -203,6 +203,9 @@ extension IntegrationTests {
             /// application relancée retrouve les siennes. Le format des entrées est celui du client,
             /// inchangé entre 0.2 et 0.3 ; ce qui est vérifié, c'est le store créé sans verrou.
             ///
+            /// Depuis la 0.4, le seeder rend aussi au store la mise en page 0.3 (empreinte du user ID,
+            /// aucun `storeID`) : le cas vérifie en plus que la restauration ouvre ce store en place.
+            ///
             /// macOS uniquement : lancer un exécutable (`Foundation.Process`) n'existe pas sur iOS.
             @Test(.timeLimit(.minutes(3)))
             func aStoreCreatedWithoutTheLockIsRestoredWithIt() async throws {
@@ -273,6 +276,18 @@ extension IntegrationTests {
 
                     #expect(state == .running, "sync reached \(String(describing: state))")
                     #expect(localRestored.userID.rawValue == seed.userID)
+
+                    // Le seeder a rangé le store comme un client 0.3 : sous l'empreinte du user ID,
+                    // sans tiret, là où un `storeID` est un UUID. La restauration doit l'ouvrir en
+                    // place, sans en créer un second.
+                    let container = try #require(
+                        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+                    )
+                    let stores = try FileManager.default.contentsOfDirectory(
+                        atPath: container.appending(path: "MatrixClientKit").path
+                    )
+                    #expect(stores.count == 1, "stores after restoration: \(stores)")
+                    #expect(stores.first.map { !$0.contains("-") } == true)
                 } catch {
                     await cleanup()
                     throw error

@@ -140,3 +140,31 @@ private func makeStore(_ segment: StoreSegment, for restorer: SessionRestorer) t
 
     #expect(FileManager.default.fileExists(atPath: orphanDirectory.path))
 }
+
+@Test func downgradingToTheLegacyLayoutMovesTheStoreAndItsKeyUnderTheUserDigest() throws {
+    let restorer = makeRestorer()
+    let modern = MatrixSessionData(
+        userID: UserID(rawValue: "@alice:persisted.example")!,
+        deviceID: DeviceID(rawValue: "DEV1")!,
+        homeserverURL: persistedHomeserver,
+        accessToken: "jeton",
+        refreshToken: nil,
+        oauthData: nil,
+        slidingSyncVersion: "native",
+        storeID: "modern"
+    )
+    try restorer.persistence.save(modern)
+    let modernDirectory = try makeStore(.session("modern"), for: restorer)
+    let key = try restorer.makeLocalStore(for: .session("modern")).encryptionKey()
+
+    try restorer.downgradeToLegacyLayout()
+
+    let legacy = StoreSegment.legacy(modern.userID)
+    let legacyDirectory = try restorer.makeLocalStore(for: legacy).paths().storeDirectory
+    #expect(!FileManager.default.fileExists(atPath: modernDirectory.path))
+    #expect(FileManager.default.fileExists(atPath: legacyDirectory.path))
+    #expect(try restorer.secureStore.data(forKey: "\(LocalStore.keyPrefix).\(legacy.directoryName)") == key)
+    #expect(try restorer.secureStore.data(forKey: "\(LocalStore.keyPrefix).modern") == nil)
+    #expect(try restorer.persistence.load()?.storeID == nil)
+    #expect(try restorer.persistence.load()?.deviceID == modern.deviceID)
+}

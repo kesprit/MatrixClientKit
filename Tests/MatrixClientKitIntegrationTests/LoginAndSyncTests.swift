@@ -82,6 +82,22 @@ extension IntegrationTests {
             await cleaningUp { removeDirectory(directory) }
         }
 
+        // Découverte réelle : seul le nom du serveur est fourni, le SDK résout le homeserver par
+        // `.well-known` (ou le contacte directement s'il n'en publie pas).
+        @Test(.timeLimit(.minutes(1)))
+        func discoveryResolvesTheServerName() async throws {
+            let configuration = try #require(IntegrationConfiguration.current)
+            let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appending(path: "mck-integration-\(UUID())")
+            defer { removeDirectory(directory) }
+            let serverName = try #require(configuration.homeserver.host())
+
+            let client = try await Matrix.client(server: serverName, storage: .local(directory: directory))
+            let details = try await client.loginDetails()
+
+            #expect(client.homeserver.host() == configuration.homeserver.host())
+            #expect(details.supportsPassword)
+        }
+
         @Test(.timeLimit(.minutes(1)))
         func sendingAMessageProducesALocalEcho() async throws {
             let configuration = try #require(IntegrationConfiguration.current)

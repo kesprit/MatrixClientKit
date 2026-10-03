@@ -2,7 +2,9 @@
 // le cas d'intégration `aStoreCreatedWithoutTheLockIsRestoredWithIt`. Le cas lance cet exécutable,
 // attend qu'il se termine, puis restaure le store avec le verrou : la fin du processus garantit que
 // le store est fermé avant que le client 0.3 l'ouvre, comme lors d'une vraie mise à jour de
-// l'application, qui est un relancement.
+// l'application, qui est un relancement. Avant de se terminer, le seeder rend au store la mise en
+// page 0.1–0.3 (répertoire et clé sous l'empreinte du user ID, aucun `storeID`) : le parent
+// restaure ainsi un store 0.3 avec le client 0.4.
 //
 // Tout vient de l'environnement, jamais de la ligne de commande (visible dans `ps`) :
 // `MATRIX_TEST_HOMESERVER`, `MATRIX_TEST_USERNAME`, `MATRIX_TEST_PASSWORD` et
@@ -149,11 +151,10 @@ terminationSource.setEventHandler { @Sendable in
 terminationSource.resume()
 
 let secrets = ExportableSecureStore()
-// Client 0.2 : `.unset` ne pose jamais `crossProcessLockConfig` sur le builder.
-let legacy = RustMatrixClient(
-    homeserver: homeserver,
-    restorer: SessionRestorer(storage: .appGroup(appGroup), secureStore: secrets, lockPolicy: .unset)
-)
+// Client 0.2 : `.unset` ne pose jamais `crossProcessLockConfig` sur le builder. Le restorer est
+// gardé pour rendre ensuite au store la mise en page 0.3 (voir plus bas).
+let restorer = SessionRestorer(storage: .appGroup(appGroup), secureStore: secrets, lockPolicy: .unset)
+let legacy = RustMatrixClient(homeserver: homeserver, restorer: restorer)
 
 let session: any MatrixSession
 do {
@@ -176,4 +177,14 @@ Report.prepare(LegacySeed(userID: session.userID.rawValue, secrets: secrets.snap
 guard state == .running else {
     finish(2, "sync reached \(String(describing: state)) instead of .running")
 }
+
+// Un client 0.4 range son store sous un `storeID` ; un client 0.3 le rangeait sous l'empreinte
+// du user ID, sans `storeID` persisté. Le parent doit restaurer ce second format : la session et
+// la clé sont réécrites sous leurs noms 0.3 avant d'être rendues.
+do {
+    try restorer.downgradeToLegacyLayout()
+} catch {
+    finish(1, "downgrade to the 0.3 layout failed: \(error)")
+}
+Report.prepare(LegacySeed(userID: session.userID.rawValue, secrets: secrets.snapshot))
 finish(0)

@@ -200,6 +200,29 @@ package final class SessionRestorer: Sendable {
         }
     }
 
+    /// Couture de test, pour l'exécutable `IntegrationLegacySeeder` uniquement : rend à la session
+    /// persistée la mise en page d'un store 0.1–0.3 — répertoire et entrée Keychain sous
+    /// l'empreinte du user ID, aucun `storeID` persisté. Le renommage garde les descripteurs SQLite
+    /// ouverts valides (même volume) ; le seeder se termine juste après.
+    package func downgradeToLegacyLayout() throws {
+        guard let data = try persistence.load(), let storeID = data.storeID else { return }
+        let modern = makeLocalStore(for: .session(storeID))
+        let legacy = makeLocalStore(for: .legacy(data.userID))
+        try FileManager.default.moveItem(at: modern.paths().storeDirectory, to: legacy.paths().storeDirectory)
+        if let key = try secureStore.data(forKey: "\(LocalStore.keyPrefix).\(storeID)") {
+            try secureStore.set(
+                key, forKey: "\(LocalStore.keyPrefix).\(StoreSegment.legacy(data.userID).directoryName)")
+            try secureStore.removeValue(forKey: "\(LocalStore.keyPrefix).\(storeID)")
+        }
+        try persistence.save(
+            MatrixSessionData(
+                userID: data.userID, deviceID: data.deviceID, homeserverURL: data.homeserverURL,
+                accessToken: data.accessToken, refreshToken: data.refreshToken, oauthData: data.oauthData,
+                slidingSyncVersion: data.slidingSyncVersion, storeID: nil
+            )
+        )
+    }
+
     /// Ouvre la session persistée pour résoudre des notifications, sans sync.
     ///
     /// Contrairement à ``restore()``, une authentification refusée n'efface rien : c'est à
