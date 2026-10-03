@@ -121,6 +121,44 @@ private func makeStore(_ segment: StoreSegment, for restorer: SessionRestorer) t
     #expect(FileManager.default.fileExists(atPath: keptDirectory.path))
 }
 
+@Test func upgradingFrom03KeepsTheLegacyStoreAndSweepsOnlyTheOrphan() async throws {
+    let registry = StoreRegistry()
+    let restorer = SessionRestorer(
+        storage: .local(
+            directory: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("mck-\(UUID().uuidString)")
+        ),
+        secureStore: InMemorySecureStore(),
+        registry: registry
+    )
+    // Le disque tel que le laisse la 0.3 : session persistée sans storeID, store et clé sous
+    // l'empreinte du user ID — plus un store UUID orphelin, d'une connexion 0.4 abandonnée.
+    let persisted = persistedSession()
+    try restorer.persistence.save(persisted)
+    let legacy = StoreSegment.legacy(persisted.userID)
+    let legacyStore = restorer.makeLocalStore(for: legacy)
+    let legacyKey = try legacyStore.encryptionKey()
+    let legacyDirectory = try makeStore(legacy, for: restorer)
+    let legacyPaths = try legacyStore.paths()
+    let orphan = StoreSegment.session("orphan")
+    let orphanDirectory = try makeStore(orphan, for: restorer)
+    var leasedWhileBuilding = false
+    var opened: StoreSegment?
+
+    _ = try? await restorer.restore { _, localStore in
+        opened = localStore.segment
+        leasedWhileBuilding = registry.isLeased(legacyDirectory)
+        throw MatrixError.storage(.unavailable)
+    }
+
+    #expect(opened == legacy)
+    #expect(leasedWhileBuilding)
+    #expect(FileManager.default.fileExists(atPath: legacyPaths.dataDirectory.path))
+    #expect(FileManager.default.fileExists(atPath: legacyPaths.cacheDirectory.path))
+    #expect(try restorer.secureStore.data(forKey: "\(LocalStore.keyPrefix).\(legacy.directoryName)") == legacyKey)
+    #expect(!FileManager.default.fileExists(atPath: orphanDirectory.path))
+    #expect(try restorer.secureStore.data(forKey: "\(LocalStore.keyPrefix).\(orphan.directoryName)") == nil)
+}
+
 @Test func restoringWithoutAPersistedSessionSweepsOrphans() async throws {
     let restorer = makeRestorer()
     let orphanDirectory = try makeStore(.session("orphan"), for: restorer)
