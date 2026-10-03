@@ -9,8 +9,24 @@ enum ErrorMapper {
         switch error {
         case let error as ClientError:
             return map(error)
+        case let error as ClientBuildError:
+            return map(error)
         case let error as MatrixError:
             return error
+        default:
+            return .unexpected(message: String(describing: error), details: nil)
+        }
+    }
+
+    /// Erreurs de construction du client, dont la découverte du homeserver (spec 0.4, §6).
+    static func map(_ error: ClientBuildError) -> MatrixError {
+        switch error {
+        case .ServerUnreachable:
+            return .network(.offline)
+        case let .InvalidServerName(message):
+            return .unexpected(message: "This is not a valid server name.", details: message)
+        case let .WellKnownLookupFailed(message), let .WellKnownDeserializationError(message):
+            return .unexpected(message: "The server's discovery information could not be read.", details: message)
         default:
             return .unexpected(message: String(describing: error), details: nil)
         }

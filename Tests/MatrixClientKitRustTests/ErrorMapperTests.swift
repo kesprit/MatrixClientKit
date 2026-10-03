@@ -111,3 +111,19 @@ private func mapApi(_ kind: ErrorKind, code: String = "M_UNKNOWN") -> MatrixErro
     )
     #expect(ErrorMapper.mapAuthentication(rateLimited) == .rateLimited(retryAfter: .milliseconds(500)))
 }
+
+@Test func anUnreachableServerIsOffline() {
+    #expect(ErrorMapper.map(ClientBuildError.ServerUnreachable(message: "x")) == .network(.offline))
+}
+
+@Test(arguments: [
+    ClientBuildError.InvalidServerName(message: "x"),
+    .WellKnownLookupFailed(message: "x"),
+    .WellKnownDeserializationError(message: "x"),
+])
+func discoveryFailuresAreUnexpected(_ error: ClientBuildError) {
+    guard case .unexpected = ErrorMapper.map(error) else {
+        Issue.record("attendu .unexpected")
+        return
+    }
+}

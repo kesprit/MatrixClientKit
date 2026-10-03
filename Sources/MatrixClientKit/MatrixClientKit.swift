@@ -18,6 +18,19 @@ import MatrixClientKitRust
 /// ```
 public enum Matrix: Sendable {
 
+    /// Creates a client from what a user typically types on a sign-in screen: a server name
+    /// (`matrix.org`), a homeserver URL, or a user ID (`@alice:matrix.org`).
+    ///
+    /// The homeserver is discovered through the server's `.well-known` information, which needs
+    /// the network: ``MatrixClient/homeserver`` then holds the resolved address.
+    ///
+    /// - Throws: ``MatrixError/network(_:)`` when the server cannot be reached;
+    ///   ``MatrixError/unexpected(message:details:)`` when the input is not a server, or its
+    ///   discovery information cannot be read.
+    public static func client(server: String, storage: MatrixStorage) async throws -> any MatrixClient {
+        try await RustMatrixClient.discover(server: server, storage: storage)
+    }
+
     /// Creates a client for a homeserver.
     ///
     /// - Parameters:
