@@ -45,6 +45,25 @@ import MatrixClientKitMocks
     #expect(login.didCancel)
 }
 
+@Test func mockQRCodeLoginThrowsCancellationErrorAfterCancel() async throws {
+    let login = MockQRCodeLogin()
+    login.cancel()
+
+    await #expect(throws: CancellationError.self) {
+        _ = try await login.start()
+    }
+}
+
+@Test func mockQRCodeLoginYieldsFailedStateAfterCancel() async {
+    let login = MockQRCodeLogin()
+    var iterator = login.state.makeAsyncIterator()
+
+    login.cancel()
+
+    let state = await iterator.next()
+    #expect(state == .failed(.cancelled))
+}
+
 @Test func sampleLoginDetailsDefaultToPasswordOnly() {
     let details = SampleData.loginDetails()
     #expect(details.supportsPassword)

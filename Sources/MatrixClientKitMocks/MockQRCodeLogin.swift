@@ -58,7 +58,10 @@ public final class MockQRCodeLogin: QRCodeLogin, @unchecked Sendable {
     }
 
     public func start() async throws -> any MatrixSession {
-        try startResult.get()
+        if lock.withLock({ _didCancel }) {
+            throw CancellationError()
+        }
+        return try startResult.get()
     }
 
     public func submitCheckCode(_ code: UInt8) async throws {
@@ -70,7 +73,13 @@ public final class MockQRCodeLogin: QRCodeLogin, @unchecked Sendable {
     }
 
     public func cancel() {
-        lock.withLock { _didCancel = true }
-        emit(.failed(.cancelled))
+        let continuationsToUpdate = lock.withLock {
+            _didCancel = true
+            current = .failed(.cancelled)
+            return continuations.values.map { $0 }
+        }
+        for continuation in continuationsToUpdate {
+            continuation.yield(.failed(.cancelled))
+        }
     }
 }
