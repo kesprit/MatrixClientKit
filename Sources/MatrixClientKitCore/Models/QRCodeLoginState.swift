@@ -41,6 +41,7 @@ public enum QRCodeLoginState: Sendable, Hashable {
     case syncingSecrets
     /// The session is ready: ``QRCodeLogin/start()`` returns it.
     case done
+    /// The login ended without a session, for the given reason: ``QRCodeLogin/start()`` throws.
     case failed(QRCodeLoginFailure)
 
     /// Whether the flow is over, successfully or not.
@@ -60,5 +61,6 @@ package enum QRCodeLoginEvent: Sendable, Hashable {
     case waitingForToken(userCode: String)
     case syncingSecrets
     case done
+    /// The login ended without a session, for the given reason: ``QRCodeLogin/start()`` throws.
     case failed(QRCodeLoginFailure)
 }
