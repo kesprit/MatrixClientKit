@@ -77,6 +77,19 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
         return LoginDetailsMapper.map(await client.homeserverLoginDetails(), fallback: homeserver)
     }
 
+    /// Starts an OAuth sign-in against the homeserver; see ``OAuthLoginFlow``.
+    public func beginOAuthLogin(
+        _ configuration: MatrixClientKitCore.OAuthConfiguration,
+        prompt: MatrixClientKitCore.OAuthPrompt?,
+        loginHint: String?
+    ) async throws -> any OAuthLoginFlow {
+        let attempt = try await LoginAttempt.begin(restorer: restorer, target: .homeserver(homeserver), reusing: nil)
+        return try await RustOAuthLoginFlow.begin(
+            attempt: attempt, configuration: configuration, prompt: prompt,
+            loginHint: loginHint, deviceID: nil, expecting: nil
+        )
+    }
+
     /// Restaure la session persistée sans connaître l'adresse du homeserver, enregistrée avec elle.
     public static func restoreSession(storage: MatrixStorage) async throws -> (any MatrixClientKitCore.MatrixSession)? {
         try await SessionRestorer(storage: storage).restore()
