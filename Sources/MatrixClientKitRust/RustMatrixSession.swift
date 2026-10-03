@@ -66,6 +66,10 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
 
     private var lifecycle: SessionLifecycle { live.lifecycle }
 
+    /// Couture de test : le client amont, pour jouer l'« appareil qui accorde » dans la suite
+    /// d'intégration de la connexion par QR. Portée `package`, jamais publique.
+    package var underlyingClient: Client { client }
+
     private init(
         userID: UserID,
         deviceID: DeviceID,
