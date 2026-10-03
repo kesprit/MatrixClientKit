@@ -58,8 +58,8 @@ public final class RustMatrixClient: MatrixClientKitCore.MatrixClient {
                 )
             }
 
-            let data = try SessionMapper.sessionData(from: handshake.session())
-            let localStore = restorer.makeLocalStore(for: data.userID)
+            let data = try SessionMapper.sessionData(from: handshake.session(), storeID: nil)
+            let localStore = restorer.makeLocalStore(for: .legacy(data.userID))
             let client = try await restorer.makeClient(homeserver: data.homeserverURL, localStore: localStore)
             try await client.restoreSession(session: SessionMapper.session(from: data))
 

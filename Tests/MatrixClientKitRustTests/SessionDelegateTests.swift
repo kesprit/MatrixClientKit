@@ -65,3 +65,43 @@ private func makeSession(
         try delegate.retrieveSessionFromKeychain(userId: "@alice:matrix.org")
     }
 }
+
+@Test func aRefreshedSessionKeepsItsStoreID() throws {
+    let persistence = SessionPersistence(store: InMemorySecureStore())
+    try persistence.save(
+        MatrixSessionData(
+            userID: UserID(rawValue: "@alice:matrix.org")!, deviceID: DeviceID(rawValue: "DEV1")!,
+            homeserverURL: URL(string: "https://matrix.org")!, accessToken: "old", refreshToken: "r",
+            oauthData: nil, slidingSyncVersion: "native", storeID: "store-1"
+        ))
+    let delegate = SessionDelegate(persistence: persistence)
+
+    delegate.saveSessionInKeychain(
+        session: Session(
+            accessToken: "new", refreshToken: "r2", userId: "@alice:matrix.org", deviceId: "DEV1",
+            homeserverUrl: "https://matrix.org", oauthData: nil, slidingSyncVersion: .native
+        ))
+
+    let saved = try #require(try persistence.load())
+    #expect(saved.accessToken == "new")
+    #expect(saved.storeID == "store-1")
+}
+
+@Test func aSessionOfAnotherDeviceDoesNotInheritTheStoreID() throws {
+    let persistence = SessionPersistence(store: InMemorySecureStore())
+    try persistence.save(
+        MatrixSessionData(
+            userID: UserID(rawValue: "@alice:matrix.org")!, deviceID: DeviceID(rawValue: "DEV1")!,
+            homeserverURL: URL(string: "https://matrix.org")!, accessToken: "old", refreshToken: nil,
+            oauthData: nil, slidingSyncVersion: "native", storeID: "store-1"
+        ))
+    let delegate = SessionDelegate(persistence: persistence)
+
+    delegate.saveSessionInKeychain(
+        session: Session(
+            accessToken: "new", refreshToken: nil, userId: "@alice:matrix.org", deviceId: "DEV2",
+            homeserverUrl: "https://matrix.org", oauthData: nil, slidingSyncVersion: .native
+        ))
+
+    #expect(try persistence.load()?.storeID == nil)
+}

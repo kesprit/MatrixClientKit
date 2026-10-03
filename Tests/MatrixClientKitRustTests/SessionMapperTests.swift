@@ -17,7 +17,7 @@ private func makeUpstreamSession() -> Session {
 }
 
 @Test func upstreamSessionConvertsToSessionData() throws {
-    let data = try SessionMapper.sessionData(from: makeUpstreamSession())
+    let data = try SessionMapper.sessionData(from: makeUpstreamSession(), storeID: nil)
 
     #expect(data.userID.rawValue == "@alice:matrix.org")
     #expect(data.deviceID.rawValue == "DEV1")
@@ -28,7 +28,7 @@ private func makeUpstreamSession() -> Session {
 }
 
 @Test func sessionDataConvertsBackToUpstreamSession() throws {
-    let data = try SessionMapper.sessionData(from: makeUpstreamSession())
+    let data = try SessionMapper.sessionData(from: makeUpstreamSession(), storeID: nil)
     let session = SessionMapper.session(from: data)
 
     #expect(session.accessToken == "token")
@@ -49,6 +49,11 @@ private func makeUpstreamSession() -> Session {
     )
 
     #expect(throws: MatrixError.self) {
-        _ = try SessionMapper.sessionData(from: session)
+        _ = try SessionMapper.sessionData(from: session, storeID: nil)
     }
+}
+
+@Test func theStoreIDIsCarriedIntoSessionData() throws {
+    let data = try SessionMapper.sessionData(from: makeUpstreamSession(), storeID: "x")
+    #expect(data.storeID == "x")
 }

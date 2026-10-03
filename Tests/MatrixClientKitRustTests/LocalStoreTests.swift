@@ -16,7 +16,7 @@ private func makeStore(
     userID: UserID = alice,
     secureStore: any SecureStore = InMemorySecureStore()
 ) -> LocalStore {
-    LocalStore(storage: .local(directory: root), userID: userID, secureStore: secureStore)
+    LocalStore(storage: .local(directory: root), segment: .legacy(userID), secureStore: secureStore)
 }
 
 @Test func theEncryptionKeyIsGeneratedOnceAndSurvivesRelaunch() throws {
@@ -79,7 +79,7 @@ private func makeStore(
 
     #expect(FileManager.default.fileExists(atPath: paths.dataDirectory.path) == false)
     #expect(FileManager.default.fileExists(atPath: paths.cacheDirectory.path) == false)
-    #expect(FileManager.default.fileExists(atPath: paths.userDirectory.path) == false)
+    #expect(FileManager.default.fileExists(atPath: paths.storeDirectory.path) == false)
     #expect(try secureStore.data(forKey: "\(LocalStore.keyPrefix).\(StoragePaths.segment(for: alice))") == nil)
 
     try? FileManager.default.removeItem(at: root)
@@ -115,7 +115,7 @@ private func makeStore(
     // L'orphelin doit être parti : le conserver condamnerait l'application à échouer à chaque
     // lancement, sans aucune API publique pour s'en sortir.
     #expect(FileManager.default.fileExists(atPath: database.path) == false)
-    #expect(FileManager.default.fileExists(atPath: paths.userDirectory.path) == false)
+    #expect(FileManager.default.fileExists(atPath: paths.storeDirectory.path) == false)
 }
 
 @Test func withoutCreationAMissingKeyThrowsAndTouchesNothing() throws {
@@ -137,4 +137,11 @@ private func makeStore(
 
     #expect(try secureStore.data(forKey: "\(LocalStore.keyPrefix).\(StoragePaths.segment(for: alice))") == nil)
     #expect(FileManager.default.fileExists(atPath: database.path))
+}
+
+@Test func aSessionSegmentHasItsOwnKeyEntry() throws {
+    let secureStore = InMemorySecureStore()
+    let store = LocalStore(storage: .local(directory: makeRoot()), segment: .session("abc-1"), secureStore: secureStore)
+    _ = try store.encryptionKey()
+    #expect(try secureStore.data(forKey: "\(LocalStore.keyPrefix).abc-1") != nil)
 }

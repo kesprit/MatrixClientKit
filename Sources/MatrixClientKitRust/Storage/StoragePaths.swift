@@ -1,24 +1,25 @@
 import Foundation
 import MatrixClientKitCore
 
-/// Résout les répertoires utilisés par le store SQLite du SDK, pour un utilisateur donné.
+/// Résout les répertoires utilisés par le store SQLite du SDK, pour un segment de store donné.
 ///
 /// - Important: l'amont documente que les chemins « **must** be unique per session as the SDK
 ///   stores aren't capable of handling multiple users ». Un chemin fixe partagé par tous les
 ///   comptes fait donc rouvrir le store — et le store crypto — du compte précédent lors d'une
 ///   connexion sous un autre identifiant : configuration non supportée, qui échoue sans erreur
-///   exploitable. D'où le segment par utilisateur.
+///   exploitable. D'où un segment par store : l'empreinte du user ID pour les sessions 0.1 à 0.3, un identifiant
+///   aléatoire par session ensuite — voir ``StoreSegment``.
 struct StoragePaths: Sendable {
-    /// Répertoire propre à l'utilisateur : contient ``dataDirectory`` et ``cacheDirectory``.
-    let userDirectory: URL
+    /// Répertoire propre au store : contient ``dataDirectory`` et ``cacheDirectory``.
+    let storeDirectory: URL
     let dataDirectory: URL
     let cacheDirectory: URL
 
     /// - Parameters:
     ///   - storage: emplacement racine choisi par l'application.
-    ///   - userID: utilisateur propriétaire du store. Le segment de chemin en est dérivé par
-    ///     empreinte : un identifiant Matrix brut (`@alice:matrix.org`) contient `@` et `:`, et
-    ///     deux identifiants ne différant que par la casse se retrouveraient dans le même
+    ///   - segment: store désigné. Pour une session legacy, le segment de chemin est dérivé du
+    ///     user ID par empreinte : un identifiant Matrix brut (`@alice:matrix.org`) contient `@` et
+    ///     `:`, et deux identifiants ne différant que par la casse se retrouveraient dans le même
     ///     répertoire sur un système de fichiers insensible à la casse.
     ///   - containerURL: résout l'URL du conteneur d'un app group. Injectable car ce
     ///     comportement diffère selon la plateforme : sur iOS, `FileManager` retourne `nil` pour un
@@ -28,28 +29,35 @@ struct StoragePaths: Sendable {
     ///     de l'hôte.
     init(
         storage: MatrixStorage,
-        userID: UserID,
+        segment: StoreSegment,
         containerURL: (String) -> URL? = { identifier in
             FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
         }
     ) throws {
-        let root: URL
+        storeDirectory = try Self.root(for: storage, containerURL: containerURL)
+            .appendingPathComponent(segment.directoryName, isDirectory: true)
+        dataDirectory = storeDirectory.appendingPathComponent("data", isDirectory: true)
+        cacheDirectory = storeDirectory.appendingPathComponent("cache", isDirectory: true)
+    }
+
+    /// `<conteneur ou répertoire>/MatrixClientKit` : le parent de tous les stores d'un stockage.
+    static func root(
+        for storage: MatrixStorage,
+        containerURL: (String) -> URL? = { identifier in
+            FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
+        }
+    ) throws -> URL {
+        let base: URL
         switch storage.location {
         case let .appGroup(identifier):
             guard let container = containerURL(identifier) else {
                 throw MatrixError.storage(.unavailable)
             }
-            root = container
+            base = container
         case let .local(directory):
-            root = directory
+            base = directory
         }
-
-        userDirectory = root.appendingPathComponent(
-            "MatrixClientKit/\(Self.segment(for: userID))",
-            isDirectory: true
-        )
-        dataDirectory = userDirectory.appendingPathComponent("data", isDirectory: true)
-        cacheDirectory = userDirectory.appendingPathComponent("cache", isDirectory: true)
+        return base.appendingPathComponent("MatrixClientKit", isDirectory: true)
     }
 
     /// Segment de chemin propre à un utilisateur, sûr pour le système de fichiers et stable d'un

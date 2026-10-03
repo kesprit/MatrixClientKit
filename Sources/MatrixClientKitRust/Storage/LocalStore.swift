@@ -2,7 +2,7 @@ import Foundation
 import Security
 import MatrixClientKitCore
 
-/// Tout ce que le package écrit localement pour un utilisateur : les répertoires du store SQLite
+/// Tout ce que le package écrit localement pour un store : les répertoires du store SQLite
 /// et la clé qui le chiffre.
 ///
 /// Regrouper les deux au même endroit n'est pas cosmétique : la clé et le store ne sont
@@ -19,22 +19,22 @@ struct LocalStore: Sendable {
     /// Longueur exigée par `SqliteStoreBuilder.key(key:)` pour une clé brute.
     static let keyByteCount = 32
 
-    let userID: UserID
+    let segment: StoreSegment
     private let storage: MatrixStorage
     private let secureStore: any SecureStore
 
-    init(storage: MatrixStorage, userID: UserID, secureStore: any SecureStore) {
+    init(storage: MatrixStorage, segment: StoreSegment, secureStore: any SecureStore) {
         self.storage = storage
-        self.userID = userID
+        self.segment = segment
         self.secureStore = secureStore
     }
 
     func paths() throws -> StoragePaths {
-        try StoragePaths(storage: storage, userID: userID)
+        try StoragePaths(storage: storage, segment: segment)
     }
 
     private var keychainKey: String {
-        "\(Self.keyPrefix).\(StoragePaths.segment(for: userID))"
+        "\(Self.keyPrefix).\(segment.directoryName)"
     }
 
     /// Relit la clé de chiffrement du store, ou en génère une à la première utilisation.
@@ -88,14 +88,14 @@ struct LocalStore: Sendable {
     /// Efface les répertoires d'un store dont la clé a disparu.
     private func purgeOrphanedStore() throws {
         let paths = try paths()
-        guard FileManager.default.fileExists(atPath: paths.userDirectory.path) else { return }
+        guard FileManager.default.fileExists(atPath: paths.storeDirectory.path) else { return }
 
         try remove(paths.dataDirectory)
         try remove(paths.cacheDirectory)
-        try? remove(paths.userDirectory)
+        try? remove(paths.storeDirectory)
     }
 
-    /// Efface le store local de cet utilisateur : répertoires d'abord, clé ensuite.
+    /// Efface le store local de cette session : répertoires d'abord, clé ensuite.
     ///
     /// - Important: l'ordre est la partie qui compte. Effacer la clé en premier puis échouer à
     ///   supprimer les répertoires laisserait sur disque un store chiffré dont plus personne ne
@@ -105,7 +105,7 @@ struct LocalStore: Sendable {
         let paths = try paths()
         try remove(paths.dataDirectory)
         try remove(paths.cacheDirectory)
-        try? remove(paths.userDirectory)
+        try? remove(paths.storeDirectory)
         try secureStore.removeValue(forKey: keychainKey)
     }
 

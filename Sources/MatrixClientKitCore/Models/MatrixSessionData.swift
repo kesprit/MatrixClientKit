@@ -24,6 +24,10 @@ package struct MatrixSessionData: Sendable, Hashable, Codable {
     /// Variante de sliding sync utilisée par la session : `"none"`, `"native"` ou
     /// `"discoverNative"`.
     package let slidingSyncVersion: String
+    /// Identifiant du store local de la session, tiré à la connexion (spec 0.4, §5.1). `nil` pour
+    /// une session ouverte par la 0.1 à la 0.3, dont le store vit sous l'empreinte du user ID —
+    /// le décodage synthétisé lit l'absence du champ comme `nil`.
+    package let storeID: String?
 
     package init(
         userID: UserID,
@@ -32,7 +36,8 @@ package struct MatrixSessionData: Sendable, Hashable, Codable {
         accessToken: String,
         refreshToken: String?,
         oauthData: String?,
-        slidingSyncVersion: String
+        slidingSyncVersion: String,
+        storeID: String? = nil
     ) {
         self.userID = userID
         self.deviceID = deviceID
@@ -41,6 +46,7 @@ package struct MatrixSessionData: Sendable, Hashable, Codable {
         self.refreshToken = refreshToken
         self.oauthData = oauthData
         self.slidingSyncVersion = slidingSyncVersion
+        self.storeID = storeID
     }
 }
 

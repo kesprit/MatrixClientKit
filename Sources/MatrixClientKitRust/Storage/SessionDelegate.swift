@@ -20,10 +20,19 @@ final class SessionDelegate: ClientSessionDelegate {
     }
 
     func saveSessionInKeychain(session: Session) {
+        // La `Session` amont ignore le store local : la fusion conserve celui de la session
+        // persistée, à condition qu'il s'agisse bien du même utilisateur sur le même appareil.
+        // Sans elle, le premier rafraîchissement de jeton ferait rouvrir au lancement suivant le
+        // chemin legacy — un compte vide, sans aucune erreur.
+        let current = try? persistence.load()
+        let storeID = current.flatMap { current in
+            current.userID.rawValue == session.userId && current.deviceID.rawValue == session.deviceId
+                ? current.storeID : nil
+        }
         // La signature amont ne permet pas de signaler une erreur. Échouer ici laisse la session
         // précédente en place, ce qui est le comportement le moins destructeur : l'ancien jeton
         // reste valide jusqu'à son expiration.
-        guard let data = try? SessionMapper.sessionData(from: session) else { return }
+        guard let data = try? SessionMapper.sessionData(from: session, storeID: storeID) else { return }
         try? persistence.save(data)
     }
 

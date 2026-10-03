@@ -70,7 +70,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         do {
             let persistence = restorer.persistence
             let session = try client.session()
-            let data = try SessionMapper.sessionData(from: session)
+            let data = try SessionMapper.sessionData(from: session, storeID: localStore.segment.storeID)
             let syncService = try await client.syncService().finish()
             let sync = RustSyncController(service: syncService)
 

@@ -5,7 +5,7 @@ import MatrixClientKitCore
 /// Convertit la session du SDK Rust vers les données persistées, et inversement.
 enum SessionMapper {
 
-    static func sessionData(from session: Session) throws -> MatrixSessionData {
+    static func sessionData(from session: Session, storeID: String?) throws -> MatrixSessionData {
         guard let userID = UserID(rawValue: session.userId) else {
             throw MatrixError.unexpected(
                 message: "The server returned an invalid user ID.",
@@ -32,7 +32,8 @@ enum SessionMapper {
             accessToken: session.accessToken,
             refreshToken: session.refreshToken,
             oauthData: session.oauthData,
-            slidingSyncVersion: slidingSyncIdentifier(session.slidingSyncVersion)
+            slidingSyncVersion: slidingSyncIdentifier(session.slidingSyncVersion),
+            storeID: storeID
         )
     }
 

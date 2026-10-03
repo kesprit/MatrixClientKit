@@ -63,8 +63,8 @@ package final class SessionRestorer: Sendable {
         }
     }
 
-    func makeLocalStore(for userID: UserID) -> LocalStore {
-        LocalStore(storage: storage, userID: userID, secureStore: secureStore)
+    func makeLocalStore(for segment: StoreSegment) -> LocalStore {
+        LocalStore(storage: storage, segment: segment, secureStore: secureStore)
     }
 
     /// Construit le client à store SQLite chiffré d'un utilisateur.
@@ -116,7 +116,7 @@ package final class SessionRestorer: Sendable {
     ) async throws -> (any MatrixClientKitCore.MatrixSession)? {
         guard let data = try persistence.load() else { return nil }
 
-        let localStore = makeLocalStore(for: data.userID)
+        let localStore = makeLocalStore(for: StoreSegment(data))
         // L'adresse persistée fait foi : c'est celle du serveur qui a émis la session, résolue
         // lors de la connexion.
         let client = try await makeClient(data.homeserverURL, localStore)
@@ -166,7 +166,7 @@ package final class SessionRestorer: Sendable {
             throw MatrixError.authentication(.missingToken)
         }
 
-        let localStore = makeLocalStore(for: data.userID)
+        let localStore = makeLocalStore(for: StoreSegment(data))
         let client = try await makeClient(data.homeserverURL, localStore)
         do {
             try await client.restoreSession(session: SessionMapper.session(from: data))
