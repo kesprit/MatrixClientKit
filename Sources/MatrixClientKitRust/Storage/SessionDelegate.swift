@@ -24,7 +24,17 @@ final class SessionDelegate: ClientSessionDelegate {
         // persistée, à condition qu'il s'agisse bien du même utilisateur sur le même appareil.
         // Sans elle, le premier rafraîchissement de jeton ferait rouvrir au lancement suivant le
         // chemin legacy — un compte vide, sans aucune erreur.
-        let current = try? persistence.load()
+        //
+        // Une lecture en échec (Keychain indisponible, charge utile illisible) n'équivaut pas à
+        // « rien de persisté » : écrire alors une session sans storeID ferait rouvrir le chemin
+        // legacy au lancement suivant, et le balayage des stores orphelins supprimerait le vrai.
+        // On laisse la session précédente en place, comme pour toute autre erreur ici.
+        let current: MatrixSessionData?
+        do {
+            current = try persistence.load()
+        } catch {
+            return
+        }
         let storeID = current.flatMap { current in
             current.userID.rawValue == session.userId && current.deviceID.rawValue == session.deviceId
                 ? current.storeID : nil

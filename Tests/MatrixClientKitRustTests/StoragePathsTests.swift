@@ -68,6 +68,10 @@ private let bob = UserID(rawValue: "@bob:matrix.org")!
     // Valeur épinglée par `theUserSegmentIsStableAcrossLaunches` : une session 0.3 doit
     // retrouver son store exactement là où la 0.3 l'a créé.
     #expect(paths.storeDirectory.lastPathComponent == "a5829e99c7bc42227c63db8609d87392")
+    #expect(
+        paths.storeDirectory.path
+            == root.appendingPathComponent("MatrixClientKit/a5829e99c7bc42227c63db8609d87392").path
+    )
 }
 
 @Test func newSessionSegmentsAreDistinctAndNeverLookLikeADigest() {

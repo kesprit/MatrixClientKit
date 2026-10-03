@@ -105,3 +105,21 @@ private func makeSession(
 
     #expect(try persistence.load()?.storeID == nil)
 }
+
+@Test func anUnreadablePersistedSessionIsLeftUntouchedByARefresh() throws {
+    let secureStore = InMemorySecureStore()
+    let garbage = Data([0xDE, 0xAD, 0xBE, 0xEF])
+    try secureStore.set(garbage, forKey: SessionPersistence.storageKey)
+    let delegate = SessionDelegate(persistence: SessionPersistence(store: secureStore))
+
+    delegate.saveSessionInKeychain(
+        session: Session(
+            accessToken: "new", refreshToken: nil, userId: "@alice:matrix.org", deviceId: "DEV1",
+            homeserverUrl: "https://matrix.org", oauthData: nil, slidingSyncVersion: .native
+        )
+    )
+
+    // Une lecture en échec n'est pas « rien de persisté » : écrire une session sans storeID
+    // ferait rouvrir le chemin legacy au lancement suivant.
+    #expect(try secureStore.data(forKey: SessionPersistence.storageKey) == garbage)
+}

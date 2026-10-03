@@ -145,3 +145,12 @@ private func makeStore(
     _ = try store.encryptionKey()
     #expect(try secureStore.data(forKey: "\(LocalStore.keyPrefix).abc-1") != nil)
 }
+
+@Test func theLegacyKeychainKeyIsByteIdenticalTo03() throws {
+    let secureStore = InMemorySecureStore()
+    _ = try makeStore(root: makeRoot(), secureStore: secureStore).encryptionKey()
+    // Littéral volontaire : une clé recalculée ne détecterait pas une dérive de la 0.3.
+    #expect(
+        try secureStore.data(forKey: "com.matrixclientkit.store-key.a5829e99c7bc42227c63db8609d87392") != nil
+    )
+}
