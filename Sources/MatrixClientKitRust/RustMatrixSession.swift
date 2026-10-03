@@ -155,14 +155,12 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     /// Se reconnecte sur le même appareil après un soft logout (spec 0.4, §4.6, §5.5).
     ///
     /// L'amont pose une session une seule fois par client : la reconnexion construit un client
-    /// neuf sur le même store, avec le même appareil, et rend une nouvelle session. En cas
-    /// d'échec, celle-ci reste en `.softLoggedOut`, intacte.
+    /// neuf sur le même store, avec le même appareil, et rend une nouvelle session. La
+    /// réservation passe avant l'arrêt de la sync : une seconde reconnexion concurrente, ou une
+    /// terminaison déjà revendiquée, est refusée sans rien toucher. En cas d'échec, la réservation
+    /// est rendue et la session reste en `.softLoggedOut`, intacte.
     public func reauthenticate(_ credentials: Credentials) async throws -> any MatrixClientKitCore.MatrixSession {
-        try lifecycle.requireSoftLoggedOut()
-        await lifecycle.stopSyncForReplacement()
-        let attempt = try await LoginAttempt.begin(
-            restorer: restorer, target: .homeserver(homeserverURL), reusing: segment
-        )
+        let attempt = try await beginReauthenticationAttempt()
         do {
             try await attempt.authenticate(credentials, deviceID: deviceID)
             let session = try await attempt.succeed(expecting: userID)
@@ -170,23 +168,44 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             return session
         } catch {
             attempt.fail()
+            lifecycle.releaseReauthentication()
             throw ErrorMapper.mapAuthentication(error)
         }
     }
 
+    /// Variante OAuth de ``reauthenticate(_:)`` : la réservation est tenue pendant toute la vie du
+    /// flux, et rendue ou consommée à son issue.
     public func beginOAuthReauthentication(
         _ configuration: MatrixClientKitCore.OAuthConfiguration
     ) async throws -> any OAuthLoginFlow {
-        try lifecycle.requireSoftLoggedOut()
-        await lifecycle.stopSyncForReplacement()
-        let attempt = try await LoginAttempt.begin(
-            restorer: restorer, target: .homeserver(homeserverURL), reusing: segment
-        )
+        let attempt = try await beginReauthenticationAttempt()
         let lifecycle = lifecycle
         return try await RustOAuthLoginFlow.begin(
             attempt: attempt, configuration: configuration, prompt: nil, loginHint: userID.rawValue,
-            deviceID: deviceID, expecting: userID, onSuccess: { lifecycle.markReplaced() }
+            deviceID: deviceID, expecting: userID,
+            onEnd: { succeeded in
+                if succeeded {
+                    lifecycle.markReplaced()
+                } else {
+                    lifecycle.releaseReauthentication()
+                }
+            }
         )
+    }
+
+    /// Réserve la session, arrête sa sync et ouvre une tentative sur son store. La réservation
+    /// est rendue si la tentative ne s'ouvre pas.
+    private func beginReauthenticationAttempt() async throws -> LoginAttempt {
+        try lifecycle.reserveForReauthentication()
+        await lifecycle.stopSyncForReplacement()
+        do {
+            return try await LoginAttempt.begin(
+                restorer: restorer, target: .homeserver(homeserverURL), reusing: segment
+            )
+        } catch {
+            lifecycle.releaseReauthentication()
+            throw error
+        }
     }
 
     /// Obtient le contrôleur de vérification le plus tôt possible.

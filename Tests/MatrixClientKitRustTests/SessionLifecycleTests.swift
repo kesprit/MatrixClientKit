@@ -240,59 +240,173 @@ func aLogoutConcurrentWithAnInFlightHardLogoutWaitsForItInsteadOfReturningEarly(
     #expect(lifecycle.current == .signedOut)
 }
 
-@Test func reauthenticationRequiresASoftLogout() {
-    let lifecycle = SessionLifecycle(stopSync: {}, erase: {})
-    #expect(throws: MatrixError.self) { try lifecycle.requireSoftLoggedOut() }
-    lifecycle.handleAuthError(isSoftLogout: true)
-    #expect(throws: Never.self) { try lifecycle.requireSoftLoggedOut() }
+// MARK: - Reconnexion (spec 0.4, §5.5)
+
+/// Cède la main assez de fois pour qu'une tâche qui n'attendrait pas la fin de la reconnexion
+/// ait largement le temps d'aller au bout.
+private func yieldABunch() async {
+    for _ in 0..<50 {
+        await Task.yield()
+    }
 }
 
-@Test func aFailedReauthenticationLeavesTheSessionSoftLoggedOut() async {
-    let erased = Mutex(0)
-    let lifecycle = SessionLifecycle(stopSync: {}, erase: { erased.withLock { $0 += 1 } })
+private func softLoggedOutLifecycle(journal: Journal) -> SessionLifecycle {
+    let lifecycle = makeLifecycle(journal: journal)
     lifecycle.handleAuthError(isSoftLogout: true)
+    return lifecycle
+}
 
-    // Une reconnexion qui échoue après l'arrêt de la sync n'appelle jamais `markReplaced()` :
-    // la session doit rester reconnectable, son store intact.
+@Test func reauthenticationRequiresASoftLogout() {
+    let lifecycle = makeLifecycle(journal: Journal())
+    #expect(throws: MatrixError.self) { try lifecycle.reserveForReauthentication() }
+    lifecycle.handleAuthError(isSoftLogout: true)
+    #expect(throws: Never.self) { try lifecycle.reserveForReauthentication() }
+}
+
+@Test func aSecondReservationIsRefused() throws {
+    let lifecycle = softLoggedOutLifecycle(journal: Journal())
+    try lifecycle.reserveForReauthentication()
+
+    // Deux reconnexions concurrentes construiraient deux clients sur un même store.
+    #expect(throws: MatrixError.self) { try lifecycle.reserveForReauthentication() }
+}
+
+@Test func aReleasedReservationCanBeTakenAgain() throws {
+    let lifecycle = softLoggedOutLifecycle(journal: Journal())
+    try lifecycle.reserveForReauthentication()
+    lifecycle.releaseReauthentication()
+
+    #expect(throws: Never.self) { try lifecycle.reserveForReauthentication() }
+}
+
+@Test func aFailedReauthenticationLeavesTheSessionSoftLoggedOutAndIntact() async throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
     await lifecycle.stopSyncForReplacement()
 
+    lifecycle.releaseReauthentication()
+
     #expect(lifecycle.current == .softLoggedOut)
-    #expect(throws: Never.self) { try lifecycle.requireSoftLoggedOut() }
-    #expect(erased.withLock { $0 } == 0)
+    #expect(!journal.all.contains { $0.hasPrefix("erase") })
+    #expect(throws: Never.self) { try lifecycle.reserveForReauthentication() }
 }
 
-@Test func aReplacedSessionEndsSignedOutWithoutErasing() async {
-    let erased = Mutex(0)
-    let lifecycle = SessionLifecycle(stopSync: {}, erase: { erased.withLock { $0 += 1 } })
-    lifecycle.handleAuthError(isSoftLogout: true)
+@Test func aReplacedSessionEndsSignedOutWithoutErasing() throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
 
     lifecycle.markReplaced()
 
     #expect(lifecycle.current == .signedOut)
-    #expect(erased.withLock { $0 } == 0)
+    #expect(!journal.all.contains { $0.hasPrefix("erase") })
 }
 
 @Test func logoutOnAReplacedSessionErasesNothingAndCallsNoServer() async throws {
-    let erased = Mutex(0)
-    let serverCalls = Mutex(0)
-    let lifecycle = SessionLifecycle(stopSync: {}, erase: { erased.withLock { $0 += 1 } })
-    lifecycle.handleAuthError(isSoftLogout: true)
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
     lifecycle.markReplaced()
 
-    try await lifecycle.logout { serverCalls.withLock { $0 += 1 } }
+    try await lifecycle.logout { journal.append("server") }
 
-    #expect(erased.withLock { $0 } == 0)
-    #expect(serverCalls.withLock { $0 } == 0)
+    #expect(journal.all.isEmpty)
 }
 
-@Test func aLateHardLogoutOnAReplacedSessionErasesNothing() async {
-    let erased = Mutex(0)
-    let lifecycle = SessionLifecycle(stopSync: {}, erase: { erased.withLock { $0 += 1 } })
-    lifecycle.handleAuthError(isSoftLogout: true)
+@Test func aLateHardLogoutOnAReplacedSessionErasesNothing() async throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
     lifecycle.markReplaced()
 
     await lifecycle.handleAuthError(isSoftLogout: false)?.value
 
-    #expect(erased.withLock { $0 } == 0)
+    #expect(journal.all.isEmpty)
     #expect(lifecycle.current == .signedOut)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aLogoutDuringAReauthenticationWaitsAndThenDoesNothingOnceReplaced() async throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
+
+    let logout = Task {
+        try await lifecycle.logout { journal.append("server") }
+        journal.append("logoutReturned")
+    }
+    await yieldABunch()
+
+    // Le store appartient peut-être déjà à la remplaçante : rien ne doit l'effacer avant l'issue.
+    #expect(journal.all.isEmpty)
+
+    lifecycle.markReplaced()
+    try await logout.value
+
+    #expect(journal.all == ["logoutReturned"])
+    #expect(lifecycle.current == .signedOut)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aHardLogoutDuringAReauthenticationWaitsAndThenDoesNothingOnceReplaced() async throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
+
+    let hardLogout = lifecycle.handleAuthError(isSoftLogout: false)
+    await yieldABunch()
+    #expect(journal.all.isEmpty)
+
+    lifecycle.markReplaced()
+    await hardLogout?.value
+
+    #expect(journal.all.isEmpty)
+    #expect(lifecycle.current == .signedOut)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func terminationsWaitingOnAFailedReauthenticationRunOnceItIsReleased() async throws {
+    let journal = Journal()
+    let lifecycle = softLoggedOutLifecycle(journal: journal)
+    try lifecycle.reserveForReauthentication()
+
+    let hardLogout = lifecycle.handleAuthError(isSoftLogout: false)
+    let logout = Task { try await lifecycle.logout { journal.append("server") } }
+    await yieldABunch()
+    #expect(journal.all.isEmpty)
+
+    lifecycle.releaseReauthentication()
+    await hardLogout?.value
+    try await logout.value
+
+    #expect(journal.all.filter { $0.hasPrefix("erase") }.count == 1)
+    #expect(journal.all.filter { $0 == "stopSync" }.count == 1)
+    #expect(lifecycle.current == .signedOut)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func aReservationIsRefusedWhileATerminationIsInFlight() async throws {
+    let journal = Journal()
+    let gate = Gate()
+    let lifecycle = SessionLifecycle(
+        stopSync: {
+            journal.append("stopSync")
+            await gate.wait()
+        },
+        erase: { journal.append("erase") }
+    )
+    lifecycle.handleAuthError(isSoftLogout: true)
+    let hardLogout = lifecycle.handleAuthError(isSoftLogout: false)
+    while !gate.isSuspended {
+        await Task.yield()
+    }
+
+    // L'état publié est encore `.softLoggedOut`, mais l'effacement est déjà promis.
+    #expect(lifecycle.current == .softLoggedOut)
+    #expect(throws: MatrixError.self) { try lifecycle.reserveForReauthentication() }
+
+    gate.release()
+    await hardLogout?.value
+    #expect(journal.all == ["stopSync", "erase"])
 }
