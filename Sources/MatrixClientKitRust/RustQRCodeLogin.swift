@@ -192,21 +192,7 @@ final class RustQRCodeLogin: QRCodeLogin {
         do {
             // Annulé pendant la construction du client : inutile d'ouvrir le canal.
             if gate.isCancelled { throw CancellationError() }
-            let handler = attempt.client.newLoginWithQrCodeHandler(
-                oauthConfiguration: OAuthMapper.configuration(configuration))
-            if let scannedData {
-                try await handler.scan(
-                    qrCodeData: scannedData,
-                    progressListener: ScannedListener { [weak self] progress in
-                        self?.progress(QRCodeMapper.event(progress))
-                    })
-            } else {
-                try await handler.generate(
-                    progressListener: GeneratedListener { [weak self] progress in
-                        if case let .qrScanned(sender) = progress { self?.checkCodeSender.withLock { $0 = sender } }
-                        self?.progress(QRCodeMapper.event(progress))
-                    })
-            }
+            try await exchange(on: attempt.client, scannedData: scannedData)
             // Les appels amont ignorent l'annulation Swift : on la constate à leur retour. Passé
             // ce point, `cancel()` est sans effet et la session sera rendue.
             guard gate.commit() else { throw CancellationError() }
@@ -224,6 +210,28 @@ final class RustQRCodeLogin: QRCodeLogin {
             if failure == .cancelled { throw CancellationError() }
             if let error = error as? MatrixError { throw error }
             throw MatrixError.unexpected(message: "QR-code login failed.", details: String(describing: error))
+        }
+    }
+
+    /// Le canal QR amont, de bout en bout. Fonction à part pour borner la vie du handler : il
+    /// retient, côté Rust, le client interne du SDK, et doit être libéré **avant** le `Client` de
+    /// la tentative — le dernier `Arc<ClientInner>` libéré hors du runtime Tokio fait paniquer la
+    /// fermeture des connexions SQLite (voir ``RustMatrixSession``, `Dependents`). Le handler
+    /// meurt au retour de cette fonction ; l'appelant se sert encore de la tentative ensuite.
+    private func exchange(on client: Client, scannedData: QrCodeData?) async throws {
+        let handler = client.newLoginWithQrCodeHandler(oauthConfiguration: OAuthMapper.configuration(configuration))
+        if let scannedData {
+            try await handler.scan(
+                qrCodeData: scannedData,
+                progressListener: ScannedListener { [weak self] progress in
+                    self?.progress(QRCodeMapper.event(progress))
+                })
+        } else {
+            try await handler.generate(
+                progressListener: GeneratedListener { [weak self] progress in
+                    if case let .qrScanned(sender) = progress { self?.checkCodeSender.withLock { $0 = sender } }
+                    self?.progress(QRCodeMapper.event(progress))
+                })
         }
     }
 }

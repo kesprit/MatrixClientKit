@@ -6,15 +6,16 @@ import MatrixClientKitCore
 public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     public let userID: UserID
     public let deviceID: DeviceID
-    public let rooms: any RoomService
-    public let sync: any SyncController
-    public let encryption: any EncryptionService
-    public let notifications: any NotificationService
+    public var rooms: any RoomService { live.rooms }
+    public var sync: any SyncController { live.sync }
+    public var encryption: any EncryptionService { live.encryption }
+    public var notifications: any NotificationService { live.notifications }
 
     /// Le store local de la session, et l'adresse du serveur qui l'a émise.
     let segment: StoreSegment
     let homeserverURL: URL
 
+    /// Libéré en **dernier**, par ``deinit`` : voir ``Dependents``.
     private let client: Client
     /// Tenu pour toute la vie de la session : sans lui, le ramassage d'une connexion ultérieure
     /// dans ce processus emporterait ce store dès que la session persistée en désigne un autre
@@ -23,16 +24,47 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     /// Retenu pour la durée de la session : il porte le `SessionDelegate` dont le SDK se sert à
     /// chaque rafraîchissement de jeton.
     private let restorer: SessionRestorer
-    private let lifecycle: SessionLifecycle
 
-    /// Retenus pour la durée de la session : un delegate libéré ne signalerait plus aucune
-    /// déconnexion serveur, et l'annulation du handle désabonnerait le delegate.
-    private let authDelegate: AuthDelegate
-    private let authDelegateHandle: TaskHandle?
+    /// Tout ce que la session retient et qui retient, côté Rust, le client interne du SDK
+    /// (`Arc<ClientInner>`) : services FFI, cycle de vie (sa closure d'arrêt vise le
+    /// `SyncService`), delegate et son handle, tâche de surveillance.
+    ///
+    /// Pourquoi un conteneur à part : le dernier `Arc<ClientInner>` doit tomber dans le runtime
+    /// Tokio, sans quoi la fermeture des connexions SQLite (`deadpool`) panique — « there is no
+    /// reactor running » — dans un destructeur, et le processus s'arrête (abort). Le `Drop` du
+    /// `Client` FFI entre dans ce runtime ; celui d'un `SyncService` ou d'un `RoomListService`,
+    /// libéré sur un fil Swift, non. Il faut donc que le `Client` parte en dernier. L'ordre de
+    /// destruction des propriétés stockées ne se pilote pas ; ``deinit`` libère donc ce conteneur
+    /// explicitement, client encore vivant. Constaté contre Synapse : `logout()` puis libération
+    /// de la session.
+    private struct Dependents: Sendable {
+        let rooms: any RoomService
+        let sync: any SyncController
+        let encryption: any EncryptionService
+        let notifications: any NotificationService
+        let lifecycle: SessionLifecycle
+        /// Retenus pour la durée de la session : un delegate libéré ne signalerait plus aucune
+        /// déconnexion serveur, et l'annulation du handle désabonnerait le delegate.
+        let authDelegate: AuthDelegate
+        let authDelegateHandle: TaskHandle?
+        /// Obtient le contrôleur de vérification dès que l'amont le permet (voir
+        /// ``watchForVerificationController(verification:encryption:)``).
+        let controllerWatcher: Task<Void, Never>
+    }
 
-    /// Obtient le contrôleur de vérification dès que l'amont le permet (voir
-    /// ``watchForVerificationController(verification:encryption:)``).
-    private let controllerWatcher: Task<Void, Never>
+    /// Écrit seulement par l'initialiseur et par ``deinit``, qui ont tous deux un accès exclusif :
+    /// aucune lecture concurrente n'est possible, d'où `nonisolated(unsafe)`.
+    nonisolated(unsafe) private var dependents: Dependents?
+
+    private var live: Dependents {
+        guard let dependents else {
+            // Inatteignable : `dependents` n'est vidé que par `deinit`.
+            preconditionFailure("RustMatrixSession used after deinitialization")
+        }
+        return dependents
+    }
+
+    private var lifecycle: SessionLifecycle { live.lifecycle }
 
     private init(
         userID: UserID,
@@ -53,24 +85,30 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     ) {
         self.userID = userID
         self.deviceID = deviceID
-        self.rooms = rooms
-        self.sync = sync
-        self.encryption = encryption
-        self.notifications = notifications
         self.segment = segment
         self.homeserverURL = homeserverURL
         self.client = client
         self.lease = lease
         self.restorer = restorer
-        self.lifecycle = lifecycle
-        self.authDelegate = authDelegate
-        self.authDelegateHandle = authDelegateHandle
-        self.controllerWatcher = controllerWatcher
+        self.dependents = Dependents(
+            rooms: rooms,
+            sync: sync,
+            encryption: encryption,
+            notifications: notifications,
+            lifecycle: lifecycle,
+            authDelegate: authDelegate,
+            authDelegateHandle: authDelegateHandle,
+            controllerWatcher: controllerWatcher
+        )
     }
 
     deinit {
-        controllerWatcher.cancel()
-        authDelegateHandle?.cancel()
+        // Les dépendants d'abord, le client ensuite : voir ``Dependents``.
+        withExtendedLifetime(client) {
+            dependents?.controllerWatcher.cancel()
+            dependents?.authDelegateHandle?.cancel()
+            dependents = nil
+        }
     }
 
     public var authState: AsyncStream<AuthState> {
@@ -110,8 +148,11 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
                 }
             )
 
+            // Référence faible : le cycle de vie peut survivre à la session (closure d'un flux OAuth
+            // de reconnexion), et ne doit pas faire du `SyncService` le dernier détenteur du client
+            // interne (voir ``Dependents``). La session libérée, plus rien n'est à arrêter.
             let lifecycle = SessionLifecycle(
-                stopSync: { await syncService.stop() },
+                stopSync: { [weak syncService] in await syncService?.stop() },
                 erase: { try eraseLocalData(persistence: persistence, localStore: localStore) }
             )
             let authDelegate = AuthDelegate(lifecycle: lifecycle)
