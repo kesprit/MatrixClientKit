@@ -5,10 +5,10 @@ code — then sign in again after the server ended the session.
 
 ## Overview
 
-Every sign-in path ends the same way: you get a ``MatrixSession``. Which paths a homeserver accepts
-differs: matrix.org and others delegate authentication to Matrix Authentication Service and accept
-OAuth only for new accounts, while a plain Synapse still accepts a password. Ask the server first
-with ``MatrixClient/loginDetails()``, then offer the matching methods.
+Every sign-in path ends the same way: you get a ``MatrixSession``. Which methods a homeserver
+accepts varies: a server that delegates authentication to Matrix Authentication Service offers
+OAuth, while a plain Synapse may accept a password. Ask the server first with
+``MatrixClient/loginDetails()``, then offer the matching methods.
 
 This article uses one storage and one OAuth configuration throughout:
 

@@ -41,11 +41,12 @@ follows [SemVer](https://semver.org/).
   signing in over another session left behind in 0.3.
 - The cross-signing identity of an account that has none is created at sign-in, not at the next
   launch.
-- A failed token-refresh read never rewrites the stored session.
 - `AuthState.softLoggedOut` and `.signedOut` document the new reauthentication.
 
 ### Fixed
 
+- A failed read of the stored session during a token refresh no longer overwrites its store
+  identifier.
 - Releasing a session after it had signed out could crash the process (a Rust panic, "there is no
   reactor running"): the FFI client was freed before the objects that still held it. The defect
   dates back to 0.2 and 0.3. It is fixed for sessions, the notification resolver and the
@@ -80,7 +81,7 @@ follows [SemVer](https://semver.org/).
 - Against Synapse v1.162.0 delegated to Matrix Authentication Service 1.26.0: `loginDetails()`,
   OAuth sign-in, single-use of a flow, its cancellation and the restoration of the session, and
   QR-code login in both directions, the new session being verified.
-- **Not run for this release:** the suite against a real homeserver (Tuwunel, `matrix.ekreen.uk`),
+- **Not run for this release:** the suite against a real homeserver (Tuwunel),
   because its credentials were unavailable. It was only compiled. Server-name discovery against a
   real server's `.well-known` is therefore not exercised.
 
