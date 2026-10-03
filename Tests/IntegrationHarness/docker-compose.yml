@@ -1,0 +1,40 @@
+# Harnais d'intégration de MatrixClientKit — lancé à la main, jamais en CI.
+# Toutes les clés et tous les secrets de ce répertoire sont des valeurs de TEST, sans valeur hors
+# de ce harnais local.
+name: mck-harness
+
+services:
+  synapse-password:
+    image: ghcr.io/element-hq/synapse:v1.162.0
+    entrypoint: []
+    command: ["sh", "-c", "test -f /data/signing.key || python -m synapse.app.homeserver -c /config/homeserver.yaml --generate-keys; exec python -m synapse.app.homeserver -c /config/homeserver.yaml"]
+    ports: ["8008:8008"]
+    volumes:
+      - ./synapse-password:/config:ro
+      - synapse-password-data:/data
+    environment:
+      SYNAPSE_CONFIG_PATH: /config/homeserver.yaml
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8008/health')"]
+      interval: 2s
+      retries: 60
+
+  # Même image, jeton d'accès à durée de vie courte : provoque le soft logout (Q1).
+  synapse-expiring:
+    image: ghcr.io/element-hq/synapse:v1.162.0
+    entrypoint: []
+    command: ["sh", "-c", "test -f /data/signing.key || python -m synapse.app.homeserver -c /config/homeserver.yaml --generate-keys; exec python -m synapse.app.homeserver -c /config/homeserver.yaml"]
+    ports: ["8009:8008"]
+    volumes:
+      - ./synapse-expiring:/config:ro
+      - synapse-expiring-data:/data
+    environment:
+      SYNAPSE_CONFIG_PATH: /config/homeserver.yaml
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8008/health')"]
+      interval: 2s
+      retries: 60
+
+volumes:
+  synapse-password-data:
+  synapse-expiring-data:

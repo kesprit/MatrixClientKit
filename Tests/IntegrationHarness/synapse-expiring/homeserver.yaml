@@ -1,0 +1,36 @@
+server_name: "localhost"
+public_baseurl: "http://localhost:8009/"
+pid_file: /data/homeserver.pid
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    x_forwarded: false
+    resources:
+      - names: [client]
+        compress: false
+database:
+  name: sqlite3
+  args:
+    database: /data/homeserver.db
+media_store_path: /data/media_store
+signing_key_path: /data/signing.key
+report_stats: false
+trusted_key_servers: []
+suppress_key_server_warning: true
+enable_registration: false
+# Secret de TEST : sert à créer les comptes par `register_new_matrix_user`.
+registration_shared_secret: "mck-harness-registration-secret"
+macaroon_secret_key: "mck-harness-macaroon-secret"
+form_secret: "mck-harness-form-secret"
+# Le harnais enchaîne connexions et déconnexions : sans relâchement, Synapse renvoie
+# M_LIMIT_EXCEEDED au milieu de la suite.
+rc_login:
+  address: { per_second: 1000, burst_count: 1000 }
+  account: { per_second: 1000, burst_count: 1000 }
+  failed_attempts: { per_second: 1000, burst_count: 1000 }
+rc_message: { per_second: 1000, burst_count: 1000 }
+log_config: null
+# Q1 : un jeton d'accès sans refresh token expire au bout de 20 s ; Synapse répond alors
+# M_UNKNOWN_TOKEN avec soft_logout: true.
+nonrefreshable_access_token_lifetime: 20s

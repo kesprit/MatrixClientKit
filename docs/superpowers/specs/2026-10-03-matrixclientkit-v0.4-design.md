@@ -72,6 +72,17 @@ qu'un utilisateur déconnecté en douceur par son serveur retrouve sa session sa
    et chaque reconnexion se font sur un client neuf.
 8. **Présence** (pour la feuille de route) : seul `Client.setPresence(presence:immediate:)` existe ;
    l'observation de la présence des autres n'est pas exposée.
+9. **Reconnexion, constat d'exploration (Synapse `v1.162.0`, harnais §8.2).**
+   - *Q1, soft logout.* Le SDK Rust ne demande **pas** de refresh token à la connexion par mot de
+     passe (`session().refreshToken == nil`). `nonrefreshable_access_token_lifetime: 20s` suffit :
+     Synapse répond `M_UNKNOWN_TOKEN` avec `soft_logout: true` et le SDK appelle
+     `ClientDelegate.didReceiveAuthError(isSoftLogout: true)` une vingtaine de secondes après la
+     connexion, sync démarrée.
+   - *Q2, coexistence.* Un second `Client` sur le **même** store SQLite, connecté avec le même
+     `deviceId` pendant que le premier (sync arrêtée) est encore en mémoire, fonctionne : la
+     connexion réussit, `deviceId()` est identique, la sync atteint `running`, et un message
+     chiffré envoyé avant le soft logout est déchiffré par le second client. Le repli de §5.5
+     (« l'ancienne session doit être libérée ») n'est pas nécessaire.
 
 ## 3. Constat d'environnement
 
