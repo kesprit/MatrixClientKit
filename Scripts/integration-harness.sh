@@ -62,11 +62,21 @@ case "${1:-}" in
       register "$service" "$ADMIN_NAME" "$ADMIN_PASSWORD" --admin
       register "$service" "$USER_NAME" "$USER_PASSWORD" --no-admin
     done
+    # MAS n'a pas de healthcheck (compose ne l'attend pas) : sonde bornée, le temps des migrations.
+    mas_ready=0
+    for _ in $(seq 60); do
+      if curl -fsS -o /dev/null "http://127.0.0.1:8082/.well-known/openid-configuration" 2>/dev/null; then
+        mas_ready=1
+        break
+      fi
+      sleep 1
+    done
+    [[ "$mas_ready" == 1 ]] || { echo "MAS injoignable sur $MAS_URL après 60 s" >&2; exit 1; }
     register_oauth
     # Le Synapse délégué annonce MAS (issuer joignable depuis l'hôte), sert le rendez-vous MSC4108
     # (tout sauf 404 : un POST sans corps valide répond 400) et le compte OAuth existe.
-    curl -fsS "$OAUTH_HOMESERVER/_matrix/client/v1/auth_metadata" \
-      | grep -q "\"issuer\":\"$MAS_URL/\"" \
+    auth_metadata=$(curl -fsS "$OAUTH_HOMESERVER/_matrix/client/v1/auth_metadata")
+    grep -q "\"issuer\":\"$MAS_URL/\"" <<<"$auth_metadata" \
       || { echo "auth_metadata de $OAUTH_HOMESERVER n'annonce pas l'issuer $MAS_URL/" >&2; exit 1; }
     rendezvous=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
       "$OAUTH_HOMESERVER/_matrix/client/unstable/org.matrix.msc4108/rendezvous")

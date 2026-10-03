@@ -35,7 +35,7 @@ services:
       interval: 2s
       retries: 60
 
-  # Base commune à MAS et au Synapse délégué. Pas de volume : état éphémère, recréé par `up`.
+  # Base commune à MAS et au Synapse délégué. Pas de volume nommé : état éphémère (volume anonyme, effacé par `down -v`), recréé par `up`.
   postgres:
     image: postgres:16-alpine
     environment:
@@ -49,7 +49,8 @@ services:
 
   # Matrix Authentication Service : fournisseur OAuth du Synapse délégué. Joignable depuis l'hôte
   # (le SDK le contacte directement) sur 8082 ; le 8080 de l'hôte est souvent occupé.
-  # L'image porte son propre healthcheck ; `up` vérifie en plus auth_metadata côté Synapse.
+  # L'image n'a pas de healthcheck (ni curl) : compose ne l'attend pas, `integration-harness.sh up`
+  # sonde /.well-known/openid-configuration avant de s'en servir.
   mas:
     image: ghcr.io/element-hq/matrix-authentication-service:1.26.0
     command: ["server", "--config", "/config/config.yaml"]
