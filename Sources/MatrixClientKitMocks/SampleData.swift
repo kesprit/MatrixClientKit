@@ -93,4 +93,29 @@ public enum SampleData: Sendable {
             language: "en"
         )
     }
+
+    /// Builds ``LoginDetails`` for a password-only homeserver by default.
+    public static func loginDetails(
+        homeserver: URL = URL(string: "https://matrix.example.org")!,
+        supportsPassword: Bool = true,
+        supportsOAuth: Bool = false,
+        oauthPrompts: Set<OAuthPrompt> = []
+    ) -> LoginDetails {
+        LoginDetails(
+            homeserver: homeserver,
+            supportsPassword: supportsPassword,
+            supportsOAuth: supportsOAuth,
+            supportsSSO: false,
+            oauthPrompts: oauthPrompts
+        )
+    }
+
+    /// A ready-made ``OAuthConfiguration`` for `com.example.app`.
+    public static func oauthConfiguration() -> OAuthConfiguration {
+        OAuthConfiguration(
+            clientName: "Example",
+            redirectURI: URL(string: "com.example.app:/callback")!,
+            clientURI: URL(string: "https://example.com")!
+        )
+    }
 }
