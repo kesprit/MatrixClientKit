@@ -20,29 +20,34 @@ final class SessionDelegate: ClientSessionDelegate {
     }
 
     func saveSessionInKeychain(session: Session) {
-        // La `Session` amont ignore le store local : la fusion conserve celui de la session
-        // persistée, à condition qu'il s'agisse bien du même utilisateur sur le même appareil.
-        // Sans elle, le premier rafraîchissement de jeton ferait rouvrir au lancement suivant le
-        // chemin legacy — un compte vide, sans aucune erreur.
+        // Le package ne persiste qu'une session : la plus récente connexion réussie, que
+        // `LoginAttempt.succeed` enregistre lui-même avec son storeID. Le delegate ne fait que
+        // tenir cette entrée à jour, et seulement si le rafraîchissement la concerne — même
+        // utilisateur, même appareil. Tout autre cas n'écrit rien :
+        // - une autre session vivante (une connexion plus ancienne, non persistée) écraserait
+        //   l'entrée persistée par ses propres jetons, sans storeID : le lancement suivant
+        //   rouvrirait le chemin legacy et le balayage supprimerait les deux vrais stores ;
+        // - rien de persisté : une session neuve n'est enregistrée que par `succeed`, qui relit
+        //   les jetons après coup, un rafraîchissement qui la devance n'est donc pas perdu ;
+        // - une lecture en échec (Keychain indisponible, charge utile illisible) n'équivaut pas à
+        //   « rien de persisté » : on laisse la session précédente en place.
         //
-        // Une lecture en échec (Keychain indisponible, charge utile illisible) n'équivaut pas à
-        // « rien de persisté » : écrire alors une session sans storeID ferait rouvrir le chemin
-        // legacy au lancement suivant, et le balayage des stores orphelins supprimerait le vrai.
-        // On laisse la session précédente en place, comme pour toute autre erreur ici.
-        let current: MatrixSessionData?
+        // La `Session` amont ignore le store local : la fusion conserve celui de l'entrée persistée,
+        // sans quoi le premier rafraîchissement ferait rouvrir le chemin legacy — un compte vide.
+        let current: MatrixSessionData
         do {
-            current = try persistence.load()
+            guard let loaded = try persistence.load() else { return }
+            current = loaded
         } catch {
             return
         }
-        let storeID = current.flatMap { current in
-            current.userID.rawValue == session.userId && current.deviceID.rawValue == session.deviceId
-                ? current.storeID : nil
+        guard current.userID.rawValue == session.userId, current.deviceID.rawValue == session.deviceId else {
+            return
         }
         // La signature amont ne permet pas de signaler une erreur. Échouer ici laisse la session
         // précédente en place, ce qui est le comportement le moins destructeur : l'ancien jeton
         // reste valide jusqu'à son expiration.
-        guard let data = try? SessionMapper.sessionData(from: session, storeID: storeID) else { return }
+        guard let data = try? SessionMapper.sessionData(from: session, storeID: current.storeID) else { return }
         try? persistence.save(data)
     }
 
