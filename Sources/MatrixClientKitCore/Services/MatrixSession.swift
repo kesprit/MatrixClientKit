@@ -27,6 +27,10 @@ public protocol MatrixSession: Sendable {
     /// Local data is erased even when the server call fails, and the error is then thrown. After
     /// ``AuthState/softLoggedOut``, the server is expected to reject the call: the local cleanup
     /// still happens and nothing is thrown. After ``AuthState/signedOut``, this does nothing.
+    ///
+    /// Only one session is saved for the next launch: the most recent successful sign-in. Ending
+    /// an older session still open in the process erases that session's own data but keeps the
+    /// saved one; the same holds when the homeserver ends it.
     func logout() async throws
 
     /// Signs in again on the same device after ``AuthState/softLoggedOut``, keeping its

@@ -157,7 +157,10 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             // interne (voir ``Dependents``). La session libérée, plus rien n'est à arrêter.
             let lifecycle = SessionLifecycle(
                 stopSync: { [weak syncService] in await syncService?.stop() },
-                erase: { try eraseLocalData(persistence: persistence, localStore: localStore) }
+                erase: {
+                    try eraseLocalData(
+                        persistence: persistence, localStore: localStore, userID: data.userID, deviceID: data.deviceID)
+                }
             )
             let authDelegate = AuthDelegate(lifecycle: lifecycle)
             let authDelegateHandle = try client.setDelegate(delegate: authDelegate)
@@ -289,13 +292,27 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         }
     }
 
-    /// Efface la session persistée puis le store local. Les deux effacements sont tentés même si
-    /// le premier échoue — une session effacée dont le store crypto resterait sur disque est
-    /// précisément ce que la purge existe pour éviter ; la première erreur est relayée.
-    private static func eraseLocalData(persistence: SessionPersistence, localStore: LocalStore) throws {
+    /// Efface la session persistée si c'est celle-ci, puis le store local. Les deux effacements
+    /// sont tentés même si le premier échoue — une session effacée dont le store crypto resterait
+    /// sur disque est précisément ce que la purge existe pour éviter ; la première erreur est
+    /// relayée.
+    ///
+    /// L'entrée persistée est celle de la plus récente connexion réussie, pas forcément celle-ci :
+    /// une session plus ancienne encore vivante dans le processus (déconnectée par l'application
+    /// ou par le serveur) n'efface que son propre store. Effacer l'entrée de la plus récente
+    /// déconnecterait son utilisateur, et le lancement suivant balaierait son store. Une lecture
+    /// en échec n'efface rien : on ne sait pas qui l'entrée désigne.
+    static func eraseLocalData(
+        persistence: SessionPersistence,
+        localStore: LocalStore,
+        userID: UserID,
+        deviceID: DeviceID
+    ) throws {
         var firstError: (any Error)?
         do {
-            try persistence.clear()
+            if let persisted = try persistence.load(), persisted.userID == userID, persisted.deviceID == deviceID {
+                try persistence.clear()
+            }
         } catch {
             firstError = error
         }
