@@ -195,7 +195,13 @@ final class RustQRCodeLogin: QRCodeLogin {
             try await exchange(on: attempt.client, scannedData: scannedData)
             // Les appels amont ignorent l'annulation Swift : on la constate à leur retour. Passé
             // ce point, `cancel()` est sans effet et la session sera rendue.
-            guard gate.commit() else { throw CancellationError() }
+            guard gate.commit() else {
+                // Annulé après l'échange : l'appareil existe déjà côté serveur, connecté. L'abandon
+                // de la tentative n'efface que le store local ; sans cette déconnexion, au mieux,
+                // un appareil fantôme resterait dans la liste des sessions du compte.
+                try? await attempt.client.logout()
+                throw CancellationError()
+            }
             let session = try await attempt.succeed(expecting: nil)
             // Forcé, sans le réducteur : l'amont peut sauter une étape (`.syncingSecrets` sans
             // secrets à recevoir), et `.done` n'y serait pas accepté depuis tout état.
