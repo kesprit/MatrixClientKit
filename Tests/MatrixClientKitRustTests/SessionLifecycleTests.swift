@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Synchronization
 import MatrixRustSDK
 import MatrixClientKitCore
 @testable import MatrixClientKitRust
@@ -236,5 +237,62 @@ func aLogoutConcurrentWithAnInFlightHardLogoutWaitsForItInsteadOfReturningEarly(
 
     #expect(!journal.all.contains("server"))
     #expect(journal.all.filter { $0.hasPrefix("erase") }.count == 1)
+    #expect(lifecycle.current == .signedOut)
+}
+
+@Test func reauthenticationRequiresASoftLogout() {
+    let lifecycle = SessionLifecycle(stopSync: {}, erase: {})
+    #expect(throws: MatrixError.self) { try lifecycle.requireSoftLoggedOut() }
+    lifecycle.handleAuthError(isSoftLogout: true)
+    #expect(throws: Never.self) { try lifecycle.requireSoftLoggedOut() }
+}
+
+@Test func aFailedReauthenticationLeavesTheSessionSoftLoggedOut() async {
+    let erased = Mutex(0)
+    let lifecycle = SessionLifecycle(stopSync: {}, erase: { erased.withLock { $0 += 1 } })
+    lifecycle.handleAuthError(isSoftLogout: true)
+
+    // Une reconnexion qui échoue après l'arrêt de la sync n'appelle jamais `markReplaced()` :
+    // la session doit rester reconnectable, son store intact.
+    await lifecycle.stopSyncForReplacement()
+
+    #expect(lifecycle.current == .softLoggedOut)
+    #expect(throws: Never.self) { try lifecycle.requireSoftLoggedOut() }
+    #expect(erased.withLock { $0 } == 0)
+}
+
+@Test func aReplacedSessionEndsSignedOutWithoutErasing() async {
+    let erased = Mutex(0)
+    let lifecycle = SessionLifecycle(stopSync: {}, erase: { erased.withLock { $0 += 1 } })
+    lifecycle.handleAuthError(isSoftLogout: true)
+
+    lifecycle.markReplaced()
+
+    #expect(lifecycle.current == .signedOut)
+    #expect(erased.withLock { $0 } == 0)
+}
+
+@Test func logoutOnAReplacedSessionErasesNothingAndCallsNoServer() async throws {
+    let erased = Mutex(0)
+    let serverCalls = Mutex(0)
+    let lifecycle = SessionLifecycle(stopSync: {}, erase: { erased.withLock { $0 += 1 } })
+    lifecycle.handleAuthError(isSoftLogout: true)
+    lifecycle.markReplaced()
+
+    try await lifecycle.logout { serverCalls.withLock { $0 += 1 } }
+
+    #expect(erased.withLock { $0 } == 0)
+    #expect(serverCalls.withLock { $0 } == 0)
+}
+
+@Test func aLateHardLogoutOnAReplacedSessionErasesNothing() async {
+    let erased = Mutex(0)
+    let lifecycle = SessionLifecycle(stopSync: {}, erase: { erased.withLock { $0 += 1 } })
+    lifecycle.handleAuthError(isSoftLogout: true)
+    lifecycle.markReplaced()
+
+    await lifecycle.handleAuthError(isSoftLogout: false)?.value
+
+    #expect(erased.withLock { $0 } == 0)
     #expect(lifecycle.current == .signedOut)
 }

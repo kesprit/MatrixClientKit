@@ -152,6 +152,43 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         }
     }
 
+    /// Se reconnecte sur le même appareil après un soft logout (spec 0.4, §4.6, §5.5).
+    ///
+    /// L'amont pose une session une seule fois par client : la reconnexion construit un client
+    /// neuf sur le même store, avec le même appareil, et rend une nouvelle session. En cas
+    /// d'échec, celle-ci reste en `.softLoggedOut`, intacte.
+    public func reauthenticate(_ credentials: Credentials) async throws -> any MatrixClientKitCore.MatrixSession {
+        try lifecycle.requireSoftLoggedOut()
+        await lifecycle.stopSyncForReplacement()
+        let attempt = try await LoginAttempt.begin(
+            restorer: restorer, target: .homeserver(homeserverURL), reusing: segment
+        )
+        do {
+            try await attempt.authenticate(credentials, deviceID: deviceID)
+            let session = try await attempt.succeed(expecting: userID)
+            lifecycle.markReplaced()
+            return session
+        } catch {
+            attempt.fail()
+            throw ErrorMapper.mapAuthentication(error)
+        }
+    }
+
+    public func beginOAuthReauthentication(
+        _ configuration: MatrixClientKitCore.OAuthConfiguration
+    ) async throws -> any OAuthLoginFlow {
+        try lifecycle.requireSoftLoggedOut()
+        await lifecycle.stopSyncForReplacement()
+        let attempt = try await LoginAttempt.begin(
+            restorer: restorer, target: .homeserver(homeserverURL), reusing: segment
+        )
+        let lifecycle = lifecycle
+        return try await RustOAuthLoginFlow.begin(
+            attempt: attempt, configuration: configuration, prompt: nil, loginHint: userID.rawValue,
+            deviceID: deviceID, expecting: userID, onSuccess: { lifecycle.markReplaced() }
+        )
+    }
+
     /// Obtient le contrôleur de vérification le plus tôt possible.
     ///
     /// Le delegate doit être posé avant qu'une demande entrante n'arrive, faute de quoi elle est

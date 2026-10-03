@@ -13,6 +13,7 @@ final class SessionLifecycle: Sendable {
     /// terminaison est déjà en cours l'attend au lieu de rejouer le travail, et la retrouve déjà
     /// terminée si la session est déjà `.signedOut`.
     private let termination = Mutex<Task<Void, Never>?>(nil)
+    private let isReplaced = Mutex(false)
     private let stopSync: @Sendable () async -> Void
     private let erase: @Sendable () throws -> Void
 
@@ -41,6 +42,7 @@ final class SessionLifecycle: Sendable {
     /// récupère, les autres reçoivent `nil` comme avant.
     @discardableResult
     func handleAuthError(isSoftLogout: Bool) -> Task<Void, Never>? {
+        if isReplaced.withLock({ $0 }) { return nil }
         if isSoftLogout {
             broadcaster.update { $0 == .signedIn ? .softLoggedOut : $0 }
             return nil
@@ -71,6 +73,7 @@ final class SessionLifecycle: Sendable {
     ///   avant la fin de l'autre terminaison exposerait un état encore périmé (`current` pas
     ///   encore `.signedOut`) à un appelant qui croirait la déconnexion terminée.
     func logout(server: @Sendable () async throws -> Void) async throws {
+        if isReplaced.withLock({ $0 }) { return }
         // Un simple relais : `stream` ne porte aucune valeur, sa seule fin (`continuation.finish`
         // ci-dessous) signale que le travail réel — fait par le revendicateur, plus bas — est
         // terminé, qu'il ait réussi ou levé une erreur. Ce relais n'est jamais construit ni gardé
@@ -118,6 +121,30 @@ final class SessionLifecycle: Sendable {
         } catch {
             throw ErrorMapper.map(error)
         }
+    }
+
+    /// Garde de ``RustMatrixSession/reauthenticate(_:)`` : seule une session en soft logout se
+    /// reconnecte sur le même appareil.
+    func requireSoftLoggedOut() throws {
+        guard current == .softLoggedOut, !isReplaced.withLock({ $0 }) else {
+            throw MatrixError.unexpected(
+                message: "Only a session the homeserver soft-logged out can sign in again.",
+                details: "\(current)"
+            )
+        }
+    }
+
+    /// Arrête la sync avant de céder le store à une reconnexion.
+    func stopSyncForReplacement() async {
+        await stopSync()
+    }
+
+    /// La session a été remplacée par une reconnexion (spec 0.4, §5.5) : son store appartient
+    /// désormais à la remplaçante. Plus rien ne l'efface — ni `logout()`, ni un hard logout
+    /// tardif —, et elle publie `.signedOut`.
+    func markReplaced() {
+        isReplaced.withLock { $0 = true }
+        broadcaster.update { _ in .signedOut }
     }
 
     /// Revendique la terminaison si elle ne l'est pas déjà, sous le même verrou que la lecture —
