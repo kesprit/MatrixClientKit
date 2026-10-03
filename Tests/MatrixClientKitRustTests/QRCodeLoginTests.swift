@@ -1,5 +1,7 @@
 import Testing
 import Foundation
+import Synchronization
+import MatrixRustSDK
 @testable import MatrixClientKitRust
 import MatrixClientKitCore
 
@@ -12,12 +14,19 @@ private func newRoot() -> URL {
     URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("mck-\(UUID().uuidString)")
 }
 
-private func makeLogin(root: URL, mode: RustQRCodeLogin.Mode = .scanned(unreadable)) -> RustQRCodeLogin {
+private let homeserver = ClientTarget.homeserver(URL(string: "https://matrix.invalid")!)
+
+private func makeLogin(
+    root: URL,
+    mode: RustQRCodeLogin.Mode = .scanned(unreadable),
+    makeClient: RustQRCodeLogin.MakeClient? = nil
+) -> RustQRCodeLogin {
     RustQRCodeLogin(
         restorer: SessionRestorer(storage: .local(directory: root), secureStore: InMemorySecureStore()),
         configuration: OAuthConfiguration(
             redirectURI: URL(string: "com.example.app:/callback")!, clientURI: URL(string: "https://example.com")!),
-        mode: mode
+        mode: mode,
+        makeClient: makeClient
     )
 }
 
@@ -46,7 +55,7 @@ private func unexpectedMessage(of error: MatrixError?) -> String? {
 
 @Test func cancellingBeforeStartingMakesStartThrowCancellation() async {
     let root = newRoot()
-    let login = makeLogin(root: root, mode: .display(.homeserver(URL(string: "https://matrix.invalid")!)))
+    let login = makeLogin(root: root, mode: .display(homeserver))
 
     login.cancel()
 
@@ -62,4 +71,64 @@ private func unexpectedMessage(of error: MatrixError?) -> String? {
     let error = await #expect(throws: MatrixError.self) { try await login.submitCheckCode(42) }
 
     #expect(unexpectedMessage(of: error) == "No check code is expected now.")
+}
+
+@Test func cancellingWhileTheClientIsBuiltPurgesTheStore() async throws {
+    // Le flux et le répertoire du store, connus seulement une fois le client en construction.
+    let login = Mutex<RustQRCodeLogin?>(nil)
+    let storeDirectory = Mutex<URL?>(nil)
+    let made = makeLogin(root: newRoot(), mode: .display(homeserver)) { _, localStore in
+        storeDirectory.withLock { $0 = try? localStore.paths().storeDirectory }
+        login.withLock { $0 }?.cancel()
+        // Un client factice : le flux doit s'arrêter avant tout appel amont.
+        return Client(noHandle: .init())
+    }
+    login.withLock { $0 = made }
+
+    await #expect(throws: CancellationError.self) { try await made.start() }
+
+    let directory = try #require(storeDirectory.withLock { $0 })
+    #expect(!FileManager.default.fileExists(atPath: directory.path))
+    #expect(await made.state.first { _ in true } == .failed(.cancelled))
+}
+
+// MARK: - Phases
+
+@Test func theGateRefusesASecondStart() throws {
+    let gate = QRCodeLoginGate<Int>()
+    #expect(try gate.start { 1 } == 1)
+    #expect(throws: QRCodeLoginGate<Int>.Refusal.alreadyStarted) { try gate.start { 2 } }
+}
+
+@Test func theGateRefusesAStartAfterCancellation() {
+    let gate = QRCodeLoginGate<Int>()
+    guard case .cancelled(run: nil) = gate.cancel() else {
+        Issue.record("annulation refusée avant le démarrage")
+        return
+    }
+    #expect(throws: QRCodeLoginGate<Int>.Refusal.cancelled) { try gate.start { 1 } }
+    #expect(gate.isCancelled)
+}
+
+@Test func cancellingARunningLoginHandsBackTheRunAndForbidsTheCommit() throws {
+    let gate = QRCodeLoginGate<Int>()
+    _ = try gate.start { 7 }
+
+    guard case .cancelled(run: 7) = gate.cancel() else {
+        Issue.record("le déroulé en cours n'est pas rendu")
+        return
+    }
+    #expect(!gate.commit())
+}
+
+@Test func cancellingIsRefusedOnceTheSessionIsBeingBuilt() throws {
+    let gate = QRCodeLoginGate<Int>()
+    _ = try gate.start { 7 }
+    #expect(gate.commit())
+
+    guard case .refused = gate.cancel() else {
+        Issue.record("annulation acceptée pendant la construction de la session")
+        return
+    }
+    #expect(!gate.isCancelled)
 }

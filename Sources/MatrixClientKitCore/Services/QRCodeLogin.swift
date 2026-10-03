@@ -12,6 +12,10 @@ public protocol QRCodeLogin: Sendable {
 
     /// Runs the login. Call it once.
     ///
+    /// After ``cancel()``, this method may return only when the exchange in progress with the
+    /// other device ends; it then throws `CancellationError`. Called after ``cancel()``, it throws
+    /// at once.
+    ///
     /// - Throws: `CancellationError` after ``cancel()``; ``MatrixError`` otherwise — ``state``
     ///   then holds the ``QRCodeLoginFailure``.
     func start() async throws -> any MatrixSession
@@ -20,6 +24,11 @@ public protocol QRCodeLogin: Sendable {
     /// ``QRCodeLoginState/enterCheckCode``.
     func submitCheckCode(_ code: UInt8) async throws
 
-    /// Abandons the login. ``state`` ends in ``QRCodeLoginFailure/cancelled``.
+    /// Abandons the login.
+    ///
+    /// ``state`` reads ``QRCodeLoginState/failed(_:)`` with ``QRCodeLoginFailure/cancelled`` at
+    /// once, even though ``start()`` may still be waiting for the exchange with the other device
+    /// to end. Once the session is being built, this method has no effect: ``start()`` returns
+    /// the session and ``state`` ends in ``QRCodeLoginState/done``.
     func cancel()
 }
