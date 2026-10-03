@@ -349,11 +349,15 @@ uniquement** (jamais avec le rôle extension, qui ne purge jamais rien — spec 
 tout store de `MatrixClientKit/` qui n'est :
 
 - ni celui de la session persistée,
-- ni inscrit au registre des tentatives en cours de ce processus.
+- ni sous bail dans ce processus (tentative en cours ou session vivante).
 
-Le registre est un ensemble de segments protégé par un `Mutex`, partagé par tous les
-`RustMatrixClient` du processus. Les clés Keychain orphelines (préfixe
-`com.matrixclientkit.store-key.`) sont supprimées par le même passage, après leurs répertoires.
+Le registre compte des baux par répertoire de store, sous un `Mutex` partagé par tout le
+processus : une tentative de connexion en cours **et** chaque session vivante en tiennent un. Une
+session vivante dont l'entrée Keychain a été écrasée par une autre connexion reste ainsi protégée.
+La clé Keychain d'un store est supprimée avec son répertoire, jamais par simple préfixe : le
+service Keychain est commun à tous les `MatrixStorage` de l'application, et un ramassage par
+préfixe effacerait les clés des stores d'un autre stockage. Une clé sans répertoire reste en place,
+inoffensive.
 
 Le ramassage est au mieux : un échec est ignoré et retenté au passage suivant ; il ne fait jamais
 échouer une connexion ou une restauration.
@@ -411,9 +415,9 @@ Un `QrCodeData.fromBytes` en échec (QR illisible ou d'un autre type) donne
 | `QRCodeLoginReducer` | Core | Fonction pure : événement de progrès (type Core propre au package) → `QRCodeLoginState`, transitions illégales ignorées, états terminaux absorbants |
 | `StoreSegment`, `StoragePaths`, `LocalStore` | Rust | Segment legacy ou session (§5.1) |
 | `LoginAttempt` | Rust | Séquence unique de connexion (§5.2) |
-| `LoginAttemptRegistry` | Rust | Segments en cours, `Mutex` partagé |
+| `StoreRegistry`, `StoreLease` | Rust | Baux comptés sur les stores ouverts (tentatives et sessions vivantes), `Mutex` partagé |
 | `OrphanedStoreSweeper` | Rust | Ramassage (§5.4), injectable pour les tests |
-| `RustOAuthLoginFlow`, `RustQRCodeLogin` | Rust | Implémentations ; le QR passe par `ffiStream` pour ses progrès |
+| `RustOAuthLoginFlow`, `RustQRCodeLogin` | Rust | Implémentations ; les progrès QR arrivent par un listener passé à un appel `async`, sans `TaskHandle` : ils alimentent un `StateBroadcaster` via le réducteur, comme la vérification de session |
 | `OAuthMapper`, `QRCodeMapper`, `LoginDetailsMapper` | Rust/Bridge | Mappage amont ↔ Core |
 | `SessionLifecycle` | Rust | Nouvel état interne « remplacée » (§5.5) |
 | `Matrix.client(server:storage:)`, `Matrix.loginWithQRCode(scanned:configuration:storage:)` | Umbrella | Fabriques |
