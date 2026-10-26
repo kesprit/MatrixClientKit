@@ -59,13 +59,15 @@ final class SendHandleRegistry<Handle: Sendable>: Sendable {
         case .clear:
             return [.removeAll]
         case let .reset(entries):
-            return [.removeAll] + entries.compactMap { entry in
-                entry.handle.map { .track(itemID: entry.id, $0) }
-            }
+            return [.removeAll]
+                + entries.compactMap { entry in
+                    entry.handle.map { .track(itemID: entry.id, $0) }
+                }
         default:
-            return leaving.map { .untrack(itemID: $0) } + carriedEntries(of: diff).map { entry in
-                entry.handle.map { .track(itemID: entry.id, $0) } ?? .untrack(itemID: entry.id)
-            }
+            return leaving.map { .untrack(itemID: $0) }
+                + carriedEntries(of: diff).map { entry in
+                    entry.handle.map { .track(itemID: entry.id, $0) } ?? .untrack(itemID: entry.id)
+                }
         }
     }
 

@@ -51,8 +51,11 @@ extension HarnessTests {
                 )
                 try await upload.waitUntilQueued()
 
-                let snapshot = await recorder.waitUntil(within: .seconds(30)) { sentMessage(named: filename, in: $0) != nil }
-                let message = try #require(snapshot.flatMap { sentMessage(named: filename, in: $0) }, "the image never reached .sent")
+                let snapshot = await recorder.waitUntil(within: .seconds(30)) {
+                    sentMessage(named: filename, in: $0) != nil
+                }
+                let message = try #require(
+                    snapshot.flatMap { sentMessage(named: filename, in: $0) }, "the image never reached .sent")
                 let media = try #require(message.media)
 
                 // L'écho `.sending` n'est pas exigé : `.bufferingNewest(1)` peut l'avoir sauté.
@@ -99,7 +102,9 @@ extension HarnessTests {
                     )
                 )
                 try await upload.waitUntilQueued()
-                let snapshot = await recorder.waitUntil(within: .seconds(30)) { sentMessage(named: filename, in: $0) != nil }
+                let snapshot = await recorder.waitUntil(within: .seconds(30)) {
+                    sentMessage(named: filename, in: $0) != nil
+                }
                 let media = try #require(snapshot.flatMap { sentMessage(named: filename, in: $0)?.media })
 
                 let thumbnail = try await session.media.thumbnail(of: media.source, width: 32, height: 32)
@@ -252,7 +257,9 @@ extension HarnessTests {
                     // Inatteignable avec `RustAttachmentUpload` : `cancel()` précède l'attente et
                     // l'annulation l'emporte toujours. Gardé pour une implémentation qui
                     // laisserait gagner une mise en file antérieure.
-                    let sent = await recorder.waitUntil(within: .seconds(30)) { sentMessage(named: filename, in: $0) != nil }
+                    let sent = await recorder.waitUntil(within: .seconds(30)) {
+                        sentMessage(named: filename, in: $0) != nil
+                    }
                     #expect(sent != nil, "waitUntilQueued() returned but the media never reached .sent")
                 case let .failure(error) where error is CancellationError:
                     // Mise en file battue par l'annulation : aucun écho n'apparaît. Sinon, l'écho
@@ -364,9 +371,11 @@ extension HarnessTests {
                     items.contains { $0.message?.body == refused }
                 }
                 let reopenedItem = try #require(
-                    reopenedSnapshot?.first { $0.message?.body == refused }, "the failed echo is missing after reopening")
+                    reopenedSnapshot?.first { $0.message?.body == refused },
+                    "the failed echo is missing after reopening")
                 let reopenedHandle = try #require(
-                    reopened.sendHandle(for: reopenedItem), "no handle for a failed echo seen through the initial reset")
+                    reopened.sendHandle(for: reopenedItem), "no handle for a failed echo seen through the initial reset"
+                )
 
                 // Abandon : l'écho disparaît des deux timelines.
                 #expect(try await reopenedHandle.cancel())
@@ -466,7 +475,9 @@ extension HarnessTests {
                 let png = try makePNG(width: 16, height: 16)
                 let filename = "lifetime-\(UUID()).png"
                 let upload = try await openedTimeline.send(
-                    Attachment(source: .data(png, filename: filename), kind: .image(dimensions: nil, blurhash: nil), mimeType: "image/png")
+                    Attachment(
+                        source: .data(png, filename: filename), kind: .image(dimensions: nil, blurhash: nil),
+                        mimeType: "image/png")
                 )
                 try await upload.waitUntilQueued()
                 attachmentUpload = upload

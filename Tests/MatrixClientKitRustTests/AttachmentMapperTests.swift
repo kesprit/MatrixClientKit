@@ -11,7 +11,9 @@ import MatrixClientKitCore
         return url
     }
 
-    private func imageKind() -> MatrixClientKitCore.Attachment.Kind { .image(dimensions: MediaDimensions(width: 4, height: 3), blurhash: "LEHV6n") }
+    private func imageKind() -> MatrixClientKitCore.Attachment.Kind {
+        .image(dimensions: MediaDimensions(width: 4, height: 3), blurhash: "LEHV6n")
+    }
 
     @Test func imageFromFileReadsSize() throws {
         let url = try tempFile(bytes: 10)
@@ -67,7 +69,8 @@ import MatrixClientKitCore
     }
 
     @Test func fileKindMaps() throws {
-        let attachment = MatrixClientKitCore.Attachment(source: .data(Data(count: 2), filename: "d.pdf"), kind: .file, mimeType: "application/pdf")
+        let attachment = MatrixClientKitCore.Attachment(
+            source: .data(Data(count: 2), filename: "d.pdf"), kind: .file, mimeType: "application/pdf")
         guard case let .file(_, info) = try MediaMapper.uploadRequest(for: attachment) else {
             Issue.record("expected .file")
             return
@@ -91,7 +94,8 @@ import MatrixClientKitCore
     }
 
     @Test func audioIgnoresThumbnail() throws {
-        let thumb = MatrixClientKitCore.Attachment.Thumbnail(source: .data(Data(count: 3), filename: "t.jpg"), mimeType: "image/jpeg")
+        let thumb = MatrixClientKitCore.Attachment.Thumbnail(
+            source: .data(Data(count: 3), filename: "t.jpg"), mimeType: "image/jpeg")
         let attachment = MatrixClientKitCore.Attachment(
             source: .data(Data(count: 5), filename: "a.ogg"), kind: .audio(duration: .seconds(3)),
             mimeType: "audio/ogg", thumbnail: thumb)

@@ -77,13 +77,14 @@ public enum SampleData: Sendable {
         size: Int? = 2048,
         dimensions: MediaDimensions? = nil
     ) -> MediaAttachment {
-        let (defaultName, mimeType): (String, String) = switch kind {
-        case .image: ("photo.jpg", "image/jpeg")
-        case .video: ("clip.mp4", "video/mp4")
-        case .audio: ("song.mp3", "audio/mpeg")
-        case .voice: ("voice.ogg", "audio/ogg")
-        case .file: ("document.pdf", "application/pdf")
-        }
+        let (defaultName, mimeType): (String, String) =
+            switch kind {
+            case .image: ("photo.jpg", "image/jpeg")
+            case .video: ("clip.mp4", "video/mp4")
+            case .audio: ("song.mp3", "audio/mpeg")
+            case .voice: ("voice.ogg", "audio/ogg")
+            case .file: ("document.pdf", "application/pdf")
+            }
         return MediaAttachment(
             kind: kind,
             source: source,
@@ -91,7 +92,8 @@ public enum SampleData: Sendable {
             caption: caption,
             mimeType: mimeType,
             size: size,
-            dimensions: dimensions ?? (kind == .image || kind == .video ? MediaDimensions(width: 640, height: 480) : nil)
+            dimensions: dimensions
+                ?? (kind == .image || kind == .video ? MediaDimensions(width: 640, height: 480) : nil)
         )
     }
 

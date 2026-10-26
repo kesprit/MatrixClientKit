@@ -146,7 +146,8 @@ enum MediaMapper {
         case let .image(dimensions, blurhash):
             let thumbnail = try thumbnail(attachment.thumbnail, fileManager: fileManager)
             let info = ImageInfo(
-                height: dimensions.map { UInt64(clamping: $0.height) }, width: dimensions.map { UInt64(clamping: $0.width) },
+                height: dimensions.map { UInt64(clamping: $0.height) },
+                width: dimensions.map { UInt64(clamping: $0.width) },
                 mimetype: mimeType, size: size, thumbnailInfo: thumbnail?.info, thumbnailSource: nil,
                 blurhash: blurhash, isAnimated: nil)
             return .image(params, thumbnail: thumbnail?.source, info)
