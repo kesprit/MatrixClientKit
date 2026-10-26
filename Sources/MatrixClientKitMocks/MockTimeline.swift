@@ -70,14 +70,16 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
         set { lock.withLock { _attachmentSendError = newValue } }
     }
 
-    /// The upload ``send(_:)-(Attachment)`` returns. A fresh one by default; set it to keep a
-    /// reference on what the code under test receives.
+    /// The upload ``send(_:)-(Attachment)`` returns. Created once with the mock: the same
+    /// instance is returned on every call until you replace it — set a new one between sends to
+    /// tell them apart.
     public var nextAttachmentUpload: MockAttachmentUpload {
         get { lock.withLock { _nextAttachmentUpload } }
         set { lock.withLock { _nextAttachmentUpload = newValue } }
     }
 
-    /// The handle a message send returns. A fresh one by default.
+    /// The handle a message send returns. Created once with the mock: the same instance is
+    /// returned on every call until you replace it.
     public var nextSendHandle: MockSendHandle {
         get { lock.withLock { _nextSendHandle } }
         set { lock.withLock { _nextSendHandle = newValue } }
@@ -122,6 +124,7 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
 
     /// Records `attachment`, then returns ``nextAttachmentUpload`` — or throws
     /// ``attachmentSendError``, in which case nothing is recorded.
+    @discardableResult
     public func send(_ attachment: Attachment) async throws -> any AttachmentUpload {
         if let error = attachmentSendError { throw error }
         return lock.withLock {

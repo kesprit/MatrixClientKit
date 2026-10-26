@@ -22,13 +22,15 @@ public protocol Timeline: Sendable {
 
     /// Sends a media. Its local echo appears in ``items`` at once, with ``Message/uploadProgress``.
     ///
-    /// A thumbnail, when given, is validated like the main file.
+    /// The thumbnail of an image or a video, when given, is validated like the main file; for any
+    /// other kind it is ignored (see ``Attachment/thumbnail``).
     ///
     /// - Returns: a handle to cancel the upload while it is being prepared, or wait until it is
     ///   queued. Once queued, the media is cancelled or retried like a message, through
     ///   ``sendHandle(for:)`` on its local echo.
     /// - Throws: ``MatrixError/notFound(_:)`` with `.media`, before any upstream call, when a
-    ///   local file (the media or its thumbnail) is missing.
+    ///   local file (the media, or the thumbnail of an image or a video) is missing.
+    @discardableResult
     func send(_ attachment: Attachment) async throws -> any AttachmentUpload
 
     /// The handle of the local echo `item` carries, or `nil` for a remote or already sent item.

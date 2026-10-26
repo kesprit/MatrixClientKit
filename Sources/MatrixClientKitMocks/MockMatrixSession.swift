@@ -62,7 +62,7 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
         sync: MockSyncController = MockSyncController(),
         encryption: MockEncryptionService = MockEncryptionService(),
         notifications: MockNotificationService = MockNotificationService(),
-        media: any MediaService = MockMediaService()
+        media: MockMediaService = MockMediaService()
     ) {
         self.userID = UserID(rawValue: userID) ?? UserID(rawValue: "@alice:matrix.org")!
         self.deviceID = DeviceID(rawValue: deviceID) ?? DeviceID(rawValue: "DEV1")!

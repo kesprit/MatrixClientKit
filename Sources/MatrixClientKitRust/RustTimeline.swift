@@ -122,6 +122,7 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
         }
     }
 
+    @discardableResult
     public func send(
         _ attachment: MatrixClientKitCore.Attachment
     ) async throws -> any MatrixClientKitCore.AttachmentUpload {
