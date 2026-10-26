@@ -122,6 +122,22 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
         }
     }
 
+    /// Sends a media; its local echo appears in ``items`` at once.
+    ///
+    /// - Throws: `.notFound(.media)` — before any upstream call — if a local file is missing.
+    public func send(
+        _ attachment: MatrixClientKitCore.Attachment
+    ) async throws -> any MatrixClientKitCore.AttachmentUpload {
+        // La requête (taille du fichier comprise) se construit sans verrou et avant l'amont.
+        let request = try MediaMapper.uploadRequest(for: attachment)
+        do {
+            let handle = try timeline.start(request)
+            return RustAttachmentUpload(handle: handle, lifetime: lifetime)
+        } catch {
+            throw ErrorMapper.map(error)
+        }
+    }
+
     /// The send handle of the local echo `item` carries, or `nil` for a remote or already sent
     /// item.
     ///

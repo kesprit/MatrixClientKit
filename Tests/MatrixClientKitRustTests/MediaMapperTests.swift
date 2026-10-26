@@ -124,6 +124,33 @@ private let encryptedJSON = """
         #expect(try MediaMapper.upstreamSource(from: source).url() == "mxc://e/a")
     }
 
+    @Test func upstreamSourceWithCorruptJSONFailsWhenEncrypted() {
+        let source = MatrixClientKitCore.MediaSource(url: "mxc://e/a", isEncrypted: true, upstreamJSON: "{nope")
+        #expect {
+            try MediaMapper.upstreamSource(from: source)
+        } throws: { error in
+            guard case .unexpected = error as? MatrixError else { return false }
+            return true
+        }
+    }
+
+    @Test func nonFiniteOrHugeDurationsDoNotTrap() throws {
+        func video(_ duration: TimeInterval) throws -> MediaAttachment {
+            let info = VideoInfo(
+                duration: duration, height: 1, width: 2, mimetype: "video/mp4", size: 5, thumbnailInfo: nil,
+                thumbnailSource: nil, blurhash: nil)
+            let content = VideoMessageContent(
+                filename: "m.mp4", caption: nil, formattedCaption: nil, source: try plain(), info: info)
+            return try #require(MediaMapper.attachment(from: .video(content: content)))
+        }
+        #expect(try video(.nan).duration == nil)
+        #expect(try video(.infinity).duration == nil)
+        #expect(try video(-.infinity).duration == nil)
+        #expect(try video(-5).duration == .zero)
+        let huge = try #require(try video(1e300).duration)
+        #expect(huge > .seconds(1_000_000))
+    }
+
     @Test func progressMaps() {
         let state = EventSendState.notSentYet(
             progress: MediaUploadProgress(index: 0, progress: AbstractProgress(current: 30, total: 100)))
