@@ -29,10 +29,10 @@ import MatrixClientKitMocks
         #expect(UploadProgress(completedBytes: 300, totalBytes: 200).fractionCompleted == 1)
     }
 
-    @Test func messageInitDefaultsMediaToNil() {
-        let message = SampleData.message("hi").message
-        #expect(message?.media == nil)
-        #expect(message?.uploadProgress == nil)
+    @Test func messageInitDefaultsMediaToNil() throws {
+        let message = try #require(SampleData.message("hi").message)
+        #expect(message.media == nil)
+        #expect(message.uploadProgress == nil)
     }
 
     @Test func roomAvatarFromURL() {
