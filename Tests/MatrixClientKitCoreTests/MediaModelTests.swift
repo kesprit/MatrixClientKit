@@ -23,6 +23,31 @@ import MatrixClientKitMocks
         #expect(try JSONDecoder().decode(MediaSource.self, from: data) == source)
     }
 
+    @Test func mediaSourceCodableFormatIsFrozen() throws {
+        let source = MediaSource(url: "mxc://e/x", isEncrypted: true, upstreamJSON: "{\"k\":1}")
+        let data = try JSONEncoder().encode(source)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(Set(object.keys) == ["url", "isEncrypted", "upstreamJSON"])
+        let legacy = Data(#"{"url":"mxc://e/y","isEncrypted":false}"#.utf8)
+        #expect(try JSONDecoder().decode(MediaSource.self, from: legacy) == MediaSource(url: "mxc://e/y"))
+    }
+
+    @Test func mediaSourceDescriptionsHideTheKeys() {
+        let secret = #"{"key":{"k":"SECRET-KEY"},"iv":"SECRET-IV","hashes":{"sha256":"SECRET-HASH"}}"#
+        let source = MediaSource(url: "mxc://e/x", isEncrypted: true, upstreamJSON: secret)
+        var dumped = ""
+        dump(source, to: &dumped)
+        let renderings = [
+            source.description, source.debugDescription, String(describing: source),
+            String(reflecting: source), "\(source)", dumped,
+        ]
+        for rendering in renderings {
+            #expect(!rendering.contains("SECRET"))
+            #expect(rendering.contains("mxc://e/x"))
+        }
+        #expect(Mirror(reflecting: source).children.map(\.label) == ["url", "isEncrypted"])
+    }
+
     @Test func uploadProgressFraction() {
         #expect(UploadProgress(completedBytes: 50, totalBytes: 200).fractionCompleted == 0.25)
         #expect(UploadProgress(completedBytes: 10, totalBytes: 0).fractionCompleted == 0)

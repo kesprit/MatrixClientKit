@@ -75,6 +75,21 @@ import MatrixClientKitCore
         #expect(info.size == 2 && info.mimetype == "application/pdf")
     }
 
+    /// `sendFile` amont n'envoie pas de vignette : elle est ignorée sans être validée.
+    @Test func fileIgnoresThumbnailWithoutValidatingIt() throws {
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let thumb = MatrixClientKitCore.Attachment.Thumbnail(source: .file(missing), mimeType: "image/jpeg")
+        let attachment = MatrixClientKitCore.Attachment(
+            source: .data(Data(count: 2), filename: "d.pdf"), kind: .file, mimeType: "application/pdf",
+            thumbnail: thumb)
+        guard case let .file(_, info) = try MediaMapper.uploadRequest(for: attachment) else {
+            Issue.record("expected .file")
+            return
+        }
+        #expect(info.thumbnailInfo == nil && info.thumbnailSource == nil)
+        #expect(info.size == 2 && info.mimetype == "application/pdf")
+    }
+
     @Test func audioIgnoresThumbnail() throws {
         let thumb = MatrixClientKitCore.Attachment.Thumbnail(source: .data(Data(count: 3), filename: "t.jpg"), mimeType: "image/jpeg")
         let attachment = MatrixClientKitCore.Attachment(

@@ -10,6 +10,8 @@ private final class FakeJoinHandle: JoinHandleDriving, @unchecked Sendable {
     private var _joinCount = 0
     var error: (any Error)?
     var onJoin: (@Sendable () -> Void)?
+    /// Suspend `join()` le temps voulu, pour que d'autres appels le rejoignent pendant qu'il court.
+    var suspension: (@Sendable () async -> Void)?
 
     var cancelCount: Int { lock.withLock { _cancelCount } }
     var joinCount: Int { lock.withLock { _joinCount } }
@@ -19,6 +21,7 @@ private final class FakeJoinHandle: JoinHandleDriving, @unchecked Sendable {
     func join() async throws {
         lock.withLock { _joinCount += 1 }
         onJoin?()
+        await suspension?()
         if let error { throw error }
     }
 }
@@ -69,6 +72,42 @@ private final class FakeJoinHandle: JoinHandleDriving, @unchecked Sendable {
             guard case .permission = error as? MatrixError else { return false }
             return true
         }
+    }
+
+    /// `join()` amont attend un `JoinHandle` tokio, qui panique si on l'attend de nouveau une fois
+    /// terminé : un seul appel amont, quel que soit le nombre d'attentes.
+    @Test func waitingTwiceJoinsUpstreamOnce() async throws {
+        let driver = FakeJoinHandle()
+        let upload = makeUpload(driver)
+        try await upload.waitUntilQueued()
+        try await upload.waitUntilQueued()
+        #expect(driver.joinCount == 1)
+    }
+
+    @Test func concurrentWaitsShareOneUpstreamJoin() async throws {
+        let driver = FakeJoinHandle()
+        driver.suspension = { for _ in 0..<50 { await Task.yield() } }
+        let upload = makeUpload(driver)
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 0..<4 { group.addTask { try await upload.waitUntilQueued() } }
+            try await group.waitForAll()
+        }
+        #expect(driver.joinCount == 1)
+    }
+
+    @Test func aJoinErrorIsRethrownToEveryWait() async {
+        let driver = FakeJoinHandle()
+        driver.error = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDDEN", msg: "no", details: nil)
+        let upload = makeUpload(driver)
+        for _ in 0..<2 {
+            await #expect {
+                try await upload.waitUntilQueued()
+            } throws: { error in
+                guard case .permission = error as? MatrixError else { return false }
+                return true
+            }
+        }
+        #expect(driver.joinCount == 1)
     }
 
     @Test func releasesHandleBeforeClient() {

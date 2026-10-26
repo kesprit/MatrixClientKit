@@ -131,7 +131,8 @@ enum MediaMapper {
     /// Traduit une pièce jointe du domaine en requête d'envoi amont.
     ///
     /// Lève `.notFound(.media)` — avant tout appel amont — si la source `.file` n'est pas un
-    /// fichier local lisible.
+    /// fichier local lisible, ou la vignette d'une image ou d'une vidéo. Les autres genres
+    /// ignorent la vignette.
     static func uploadRequest(
         for attachment: MatrixClientKitCore.Attachment,
         fileManager: FileManager = .default
@@ -163,9 +164,9 @@ enum MediaMapper {
             let info = AudioInfo(duration: duration.map(seconds(from:)), size: size, mimetype: mimeType)
             return .voice(params, info, waveform: waveform.map { min(max($0, 0), 1) })
         case .file:
-            let thumbnail = try thumbnail(attachment.thumbnail, fileManager: fileManager)
-            let info = FileInfo(
-                mimetype: mimeType, size: size, thumbnailInfo: thumbnail?.info, thumbnailSource: nil)
+            // `sendFile` amont n'a pas de paramètre de vignette : comme pour l'audio et le vocal,
+            // elle est ignorée sans être validée, plutôt que lue puis jetée.
+            let info = FileInfo(mimetype: mimeType, size: size, thumbnailInfo: nil, thumbnailSource: nil)
             return .file(params, info)
         }
     }

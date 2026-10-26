@@ -11,6 +11,8 @@ enum ErrorMapper {
             return map(error)
         case let error as ClientBuildError:
             return map(error)
+        case let error as RoomError:
+            return map(error)
         case let error as MatrixError:
             return error
         default:
@@ -29,6 +31,19 @@ enum ErrorMapper {
             return .unexpected(message: "The server's discovery information could not be read.", details: message)
         default:
             return .unexpected(message: String(describing: error), details: nil)
+        }
+    }
+
+    /// Erreurs des envois de pièces jointes : en 26.09.07, seuls les `send*` de média de la
+    /// timeline et le `join()` de leur handle lèvent `RoomError`. Le message amont, illisible
+    /// pour un utilisateur, passe dans les détails.
+    static func map(_ error: RoomError) -> MatrixError {
+        switch error {
+        case let .InvalidAttachmentData(message), let .InvalidAttachmentMimeType(message),
+            let .InvalidMediaInfo(message), let .TimelineUnavailable(message),
+            let .InvalidThumbnailData(message), let .InvalidRepliedToEventId(message),
+            let .FailedSendingAttachment(message):
+            return .unexpected(message: "The attachment could not be sent.", details: message)
         }
     }
 

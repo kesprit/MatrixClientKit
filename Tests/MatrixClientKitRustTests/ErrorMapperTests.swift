@@ -127,3 +127,18 @@ func discoveryFailuresAreUnexpected(_ error: ClientBuildError) {
         return
     }
 }
+
+@Test(arguments: [
+    RoomError.InvalidAttachmentData(message: "upstream says"),
+    .InvalidAttachmentMimeType(message: "upstream says"),
+    .InvalidMediaInfo(message: "upstream says"),
+    .TimelineUnavailable(message: "upstream says"),
+    .InvalidThumbnailData(message: "upstream says"),
+    .InvalidRepliedToEventId(message: "upstream says"),
+    .FailedSendingAttachment(message: "upstream says"),
+])
+func roomErrorsBecomeAReadableUnexpectedError(_ error: RoomError) {
+    #expect(
+        ErrorMapper.map(error)
+            == .unexpected(message: "The attachment could not be sent.", details: "upstream says"))
+}
