@@ -36,7 +36,7 @@ final class RustAttachmentUpload: AttachmentUpload {
         if first { handle.cancel() }
     }
 
-    func waitUntilSent() async throws {
+    func waitUntilQueued() async throws {
         if cancelled.withLock({ $0 }) { throw CancellationError() }
         do {
             try await handle.join()

@@ -32,8 +32,8 @@ import MatrixClientKitMocks
     @Test func attachmentUploadCancelThenWaitThrowsCancellation() async {
         let upload = MockAttachmentUpload()
         upload.cancel()
-        await #expect(throws: CancellationError.self) { try await upload.waitUntilSent() }
-        await #expect(throws: CancellationError.self) { try await upload.waitUntilSent() }
+        await #expect(throws: CancellationError.self) { try await upload.waitUntilQueued() }
+        await #expect(throws: CancellationError.self) { try await upload.waitUntilQueued() }
         #expect(upload.cancelCount == 1)
     }
 

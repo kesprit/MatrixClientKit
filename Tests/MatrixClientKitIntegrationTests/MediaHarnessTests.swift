@@ -49,7 +49,7 @@ extension HarnessTests {
                         )
                     )
                 )
-                try await upload.waitUntilSent()
+                try await upload.waitUntilQueued()
 
                 let snapshot = await recorder.waitUntil(within: .seconds(30)) { sentMessage(named: filename, in: $0) != nil }
                 let message = try #require(snapshot.flatMap { sentMessage(named: filename, in: $0) }, "the image never reached .sent")
@@ -99,7 +99,7 @@ extension HarnessTests {
                         mimeType: "image/png"
                     )
                 )
-                try await upload.waitUntilSent()
+                try await upload.waitUntilQueued()
                 let snapshot = await recorder.waitUntil(within: .seconds(30)) { sentMessage(named: filename, in: $0) != nil }
                 let media = try #require(snapshot.flatMap { sentMessage(named: filename, in: $0)?.media })
 
@@ -166,7 +166,7 @@ extension HarnessTests {
 
                 for entry in cases {
                     let upload = try await timeline.send(entry.attachment)
-                    try await upload.waitUntilSent()
+                    try await upload.waitUntilQueued()
                 }
                 let snapshot = await recorder.waitUntil(within: .seconds(30)) { items in
                     cases.allSatisfy { sentMessage(named: $0.filename, in: items) != nil }
@@ -188,8 +188,12 @@ extension HarnessTests {
             }
         }
 
-        /// `cancel()` juste après l'envoi : soit `waitUntilSent()` lève `CancellationError` et
-        /// l'écho disparaît sans jamais être envoyé, soit l'envoi a abouti et le média est `sent`.
+        /// `cancel()` juste après l'envoi : soit `waitUntilQueued()` lève `CancellationError` et
+        /// l'écho disparaît sans jamais être envoyé, soit le média était déjà en file et part.
+        ///
+        /// L'annulation l'emporte dans `waitUntilQueued()` même si elle arrive juste après la mise
+        /// en file : l'écho existe alors et c'est par son handle d'envoi qu'on l'abandonne, comme
+        /// le documente ``AttachmentUpload/cancel()``.
         @Test(.timeLimit(.minutes(2)))
         func cancelledUploadIsConsistent() async throws {
             try await withMediaSession(encrypted: false) { session, roomID, _ in
@@ -201,7 +205,7 @@ extension HarnessTests {
                 let filename = "large-\(UUID()).bin"
                 let upload = try await timeline.send(
                     Attachment(
-                        source: .data(Data(repeating: 0xA5, count: 8 * 1024 * 1024), filename: filename),
+                        source: .data(randomData(count: 8 * 1024 * 1024), filename: filename),
                         kind: .file,
                         mimeType: "application/octet-stream"
                     )
@@ -210,7 +214,7 @@ extension HarnessTests {
 
                 let outcome: Result<Void, any Error>
                 do {
-                    try await upload.waitUntilSent()
+                    try await upload.waitUntilQueued()
                     outcome = .success(())
                 } catch {
                     outcome = .failure(error)
@@ -219,25 +223,27 @@ extension HarnessTests {
                 switch outcome {
                 case .success:
                     let sent = await recorder.waitUntil(within: .seconds(30)) { sentMessage(named: filename, in: $0) != nil }
-                    #expect(sent != nil, "waitUntilSent() returned but the media never reached .sent")
+                    #expect(sent != nil, "waitUntilQueued() returned but the media never reached .sent")
                 case let .failure(error) where error is CancellationError:
-                    try await expectGone(
-                        recorder, "the cancelled upload",
-                        matching: { $0.message?.media?.filename == filename })
+                    // Mise en file battue par l'annulation : aucun écho. Sinon, l'écho est là et
+                    // s'abandonne par son handle.
+                    try await Task.sleep(for: .milliseconds(500))
+                    if let echo = recorder.latest?.first(where: { $0.message?.media?.filename == filename }) {
+                        try await cancelThroughEcho(echo, of: filename, in: timeline, recorder: recorder)
+                    } else {
+                        try await expectGone(
+                            recorder, "the cancelled upload",
+                            matching: { $0.message?.media?.filename == filename })
+                    }
                 case let .failure(error):
-                    Issue.record("waitUntilSent() threw \(error) after cancel()")
+                    Issue.record("waitUntilQueued() threw \(error) after cancel()")
                 }
             }
         }
 
-        /// `cancel()` pendant l'envoi, écho visible et progression en cours : la doc promet l'arrêt de
-        /// l'envoi et le retrait de l'écho.
-        ///
-        /// Constaté contre le SDK 26.09.07 : le `SendAttachmentJoinHandle` amont rend la main de
-        /// `join()` dès que le média est **mis en file**, pas une fois envoyé, et son `cancel()` n'a
-        /// plus d'effet ensuite — l'envoi aboutit alors que `waitUntilSent()` lève
-        /// `CancellationError`. Écart connu (rapport de la tâche 9 de la 0.5) : `withKnownIssue`
-        /// échoue dès que l'écart disparaît, pour retirer cette marque.
+        /// Un média en file, pendant son upload : `sendHandle(for:)` sur son écho, puis `cancel()`.
+        /// `true` → l'écho disparaît et le média n'atteint jamais `sent` ; `false` → il est envoyé.
+        /// Données aléatoires : rien ne se compresse ni ne se déduplique côté serveur.
         @Test(.timeLimit(.minutes(2)))
         func cancelDuringUploadStopsIt() async throws {
             try await withMediaSession(encrypted: false) { session, roomID, _ in
@@ -248,23 +254,21 @@ extension HarnessTests {
                 let filename = "uploading-\(UUID()).bin"
                 let upload = try await timeline.send(
                     Attachment(
-                        source: .data(Data(repeating: 0x5A, count: 32 * 1024 * 1024), filename: filename),
+                        source: .data(randomData(count: 16 * 1024 * 1024), filename: filename),
                         kind: .file,
                         mimeType: "application/octet-stream"
                     )
                 )
+                try await upload.waitUntilQueued()
                 let uploading = await recorder.waitUntil(within: .seconds(30)) { items in
                     items.contains { $0.message?.media?.filename == filename && $0.message?.uploadProgress != nil }
                 }
-                try #require(uploading != nil, "no upload progress observed: \(describe(recorder.latest))")
-                upload.cancel()
+                let echo = try #require(
+                    uploading?.first { $0.message?.media?.filename == filename },
+                    "no upload progress observed: \(describe(recorder.latest))")
+                #expect(echo.message?.sendState == .sending)
 
-                await #expect(throws: CancellationError.self) { try await upload.waitUntilSent() }
-                await withKnownIssue("an upload cancelled after it was queued is sent anyway") {
-                    try await expectGone(
-                        recorder, "the upload cancelled while in progress", within: .seconds(10),
-                        matching: { $0.message?.media?.filename == filename })
-                }
+                try await cancelThroughEcho(echo, of: filename, in: timeline, recorder: recorder)
             }
         }
 
@@ -427,7 +431,7 @@ extension HarnessTests {
                 let upload = try await openedTimeline.send(
                     Attachment(source: .data(png, filename: filename), kind: .image(dimensions: nil, blurhash: nil), mimeType: "image/png")
                 )
-                try await upload.waitUntilSent()
+                try await upload.waitUntilQueued()
                 let snapshot = await openedRecorder.waitUntil(within: .seconds(30)) {
                     sentMessage(named: filename, in: $0) != nil
                 }
@@ -617,6 +621,28 @@ private func describe(_ items: [TimelineItem]?) -> String {
     return items.compactMap(\.message)
         .map { "\($0.media?.filename ?? $0.body) [\($0.sendState)]" }
         .joined(separator: ", ")
+}
+
+/// Abandonne un média en file par le handle d'envoi de son écho, et vérifie l'état final : écho
+/// disparu et jamais `sent` si l'abandon a pris, média `sent` sinon.
+private func cancelThroughEcho(
+    _ echo: TimelineItem, of filename: String, in timeline: any Timeline, recorder: TimelineRecorder
+) async throws {
+    let handle = try #require(timeline.sendHandle(for: echo), "no send handle for the queued media's echo")
+    if try await handle.cancel() {
+        try await expectGone(
+            recorder, "the media cancelled through its echo", matching: { $0.message?.media?.filename == filename })
+    } else {
+        let sent = await recorder.waitUntil(within: .seconds(30)) { sentMessage(named: filename, in: $0) != nil }
+        #expect(sent != nil, "cancel() returned false but the media never reached .sent")
+    }
+}
+
+/// `count` octets aléatoires.
+private func randomData(count: Int) -> Data {
+    var data = Data(count: count)
+    data.withUnsafeMutableBytes { arc4random_buf($0.baseAddress, count) }
+    return data
 }
 
 /// Un PNG RGBA de `width` × `height`, construit en mémoire : Synapse a besoin d'une vraie image

@@ -24,7 +24,9 @@ public protocol Timeline: Sendable {
     ///
     /// A thumbnail, when given, is validated like the main file.
     ///
-    /// - Returns: a handle to cancel the upload or wait for its end.
+    /// - Returns: a handle to cancel the upload while it is being prepared, or wait until it is
+    ///   queued. Once queued, the media is cancelled or retried like a message, through
+    ///   ``sendHandle(for:)`` on its local echo.
     /// - Throws: ``MatrixError/notFound(_:)`` with `.media`, before any upstream call, when a
     ///   local file (the media or its thumbnail) is missing.
     func send(_ attachment: Attachment) async throws -> any AttachmentUpload

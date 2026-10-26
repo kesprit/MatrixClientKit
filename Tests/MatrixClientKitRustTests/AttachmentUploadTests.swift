@@ -41,14 +41,14 @@ private final class FakeJoinHandle: JoinHandleDriving, @unchecked Sendable {
         let upload = makeUpload(driver)
         upload.cancel()
         for _ in 0..<2 {
-            await #expect(throws: CancellationError.self) { try await upload.waitUntilSent() }
+            await #expect(throws: CancellationError.self) { try await upload.waitUntilQueued() }
         }
         #expect(driver.joinCount == 0)
     }
 
     @Test func waitJoinsUpstream() async throws {
         let driver = FakeJoinHandle()
-        try await makeUpload(driver).waitUntilSent()
+        try await makeUpload(driver).waitUntilQueued()
         #expect(driver.joinCount == 1)
     }
 
@@ -56,7 +56,7 @@ private final class FakeJoinHandle: JoinHandleDriving, @unchecked Sendable {
         let driver = FakeJoinHandle()
         let upload = makeUpload(driver)
         driver.onJoin = { upload.cancel() }
-        await #expect(throws: CancellationError.self) { try await upload.waitUntilSent() }
+        await #expect(throws: CancellationError.self) { try await upload.waitUntilQueued() }
     }
 
     @Test func joinErrorIsMapped() async {
@@ -64,7 +64,7 @@ private final class FakeJoinHandle: JoinHandleDriving, @unchecked Sendable {
         driver.error = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDDEN", msg: "no", details: nil)
         let upload = makeUpload(driver)
         await #expect {
-            try await upload.waitUntilSent()
+            try await upload.waitUntilQueued()
         } throws: { error in
             guard case .permission = error as? MatrixError else { return false }
             return true

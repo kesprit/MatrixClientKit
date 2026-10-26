@@ -165,12 +165,19 @@ func send(_ attachment: Attachment) async throws -> any AttachmentUpload
 
 ```swift
 public protocol AttachmentUpload: Sendable {
-    /// Stops the upload if it has not finished; the local echo is removed.
+    /// Stops the upload while it is being prepared, before it is queued. Once queued, cancel or
+    /// retry it through ``Timeline/sendHandle(for:)`` on its local echo.
     func cancel()
-    /// Returns once the media is sent. Throws `CancellationError` after ``cancel()``.
-    func waitUntilSent() async throws
+    /// Returns once the media is in the send queue and its local echo is in ``Timeline/items``.
+    /// Throws `CancellationError` if ``cancel()`` was called before that.
+    func waitUntilQueued() async throws
 }
 ```
+
+*Révision (tâche 9, constat contre le SDK 26.09.07) :* le `SendAttachmentJoinHandle` amont rend
+la main de `join()` dès la mise en file, pas à l'envoi, et son `cancel()` n'a plus d'effet ensuite.
+D'où `waitUntilQueued()` (anciennement `waitUntilSent()`) ; l'annulation d'un média en file passe
+par le handle d'envoi de son écho (§3.4).
 
 La taille transmise dans les infos est lue sur le fichier (attributs) ou sur `Data.count`. Un
 fichier introuvable lève `MatrixError.notFound(.media)` **avant** tout appel amont.
@@ -241,7 +248,7 @@ amont. Les dimensions de vignette négatives ou nulles sont ramenées à 1.
 | Fichier local de la pièce jointe introuvable ou illisible | `.notFound(.media)` |
 | Média absent du serveur (`M_NOT_FOUND`) | `.notFound(.media)` |
 | Média trop gros (`M_TOO_LARGE`) | `.unexpected` avec un message explicite (règle de gel des cas) |
-| Annulation d'un `AttachmentUpload` | `CancellationError` depuis `waitUntilSent()` |
+| Annulation d'un `AttachmentUpload` | `CancellationError` depuis `waitUntilQueued()` |
 | Autres erreurs amont | `ErrorMapper` existant |
 
 Un échec d'envoi après la mise en file reste visible dans l'écho local
@@ -291,9 +298,11 @@ le processus de test ne doit pas s'arrêter.
   l'écho local apparaît, passe à `sent`, l'élément porte `media` ; `content(of:)` rend les mêmes
   octets ; `thumbnail(of:)` rend des données ; `file(of:)` écrit un fichier lisible.
 - Envoi d'un fichier depuis `Data`, d'un audio, d'un message vocal : le `kind` reçu correspond.
-- `AttachmentUpload.cancel()` juste après l'envoi : `waitUntilSent()` lève `CancellationError`
+- `AttachmentUpload.cancel()` juste après l'envoi : `waitUntilQueued()` lève `CancellationError`
   ou l'envoi a déjà abouti — les deux issues sont acceptées, mais l'état final de la timeline doit
   correspondre.
+- Média en file, pendant l'upload : `sendHandle(for:)` sur son écho puis `cancel()` — si `true`,
+  l'écho disparaît et le média n'atteint jamais `sent` ; si `false`, il est envoyé.
 - `SendHandle.cancel()` sur un texte : si `true`, l'écho disparaît ; si `false`, le message est
   envoyé.
 - `sendHandle(for:)` rend un handle pour un écho local, `nil` pour un élément envoyé.
