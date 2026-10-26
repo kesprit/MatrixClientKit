@@ -33,7 +33,11 @@ test suite runs without pulling in the Rust binary, and starts at its usual spee
 | `MockQRCodeLogin` | ``QRCodeLogin`` | `emit(_:)`, `startResult`, `submitError`, `submittedCheckCodes`, `didCancel` |
 | `MockRoomService` | ``RoomService`` | `emit(_:)`, `finish()` |
 | `MockSyncController` | ``SyncController`` | `emit(_:)`, `finish()`, `startCallCount` |
-| `MockTimeline` | ``Timeline`` | `emit(_:)`, `finish()`, `sentMessages`, `sendError`, `paginationError` |
+| `MockTimeline` | ``Timeline`` | `emit(_:)`, `finish()`, `sentMessages`, `sendError`, `paginationError`, `sentAttachments`, `attachmentSendError`, `nextAttachmentUpload`, `nextSendHandle`, `sendHandles` |
+| `MockMediaService` | ``MediaService`` | `contents`, `error`, `maxUploadSizeResult`, `thumbnailRequests` |
+| `MockMediaFile` | ``MediaFile`` | built from a `url` |
+| `MockAttachmentUpload` | ``AttachmentUpload`` | `waitError`, `cancelCount` |
+| `MockSendHandle` | ``SendHandle`` | `cancelResult`, `cancelError`, `retryError`, `cancelCount`, `retryCount` |
 | `MockEncryptionService` | ``EncryptionService`` | `emitVerificationStatus(_:)`, `emitRecoveryState(_:)`, `emitBackupState(_:)`, `finish()`, injected results and errors |
 | `MockSessionVerification` | ``SessionVerification`` | `emit(_:)`, `finish()`, `setError(_:for:)`, `calls` |
 | `MockNotificationService` | ``NotificationService`` | `registeredPushers`, `unregisteredPushers`, `setSettings(_:for:)`, injected errors |
@@ -128,6 +132,27 @@ check *what* your code sent:
 
 ```swift
 #expect(timeline.sentMessages == [.text("hi")])
+```
+
+## Media
+
+`MockMediaService` serves the bytes you put in `contents`, keyed by ``MediaSource``, and records
+the thumbnails asked for. `SampleData.mediaAttachment(...)`, `SampleData.imageMessage(...)` and
+`SampleData.imageAttachment()` build the values around them. A message send hands back a
+`MockSendHandle`, a media send a `MockAttachmentUpload`; `MockTimeline.sendHandles` decides which
+handle `sendHandle(for:)` finds for an item. See <doc:Media>.
+
+```swift
+@Test func aFailedMediaCanBeRetried() async throws {
+    let timeline = MockTimeline()
+    let item = SampleData.imageMessage(isOwn: true)
+    let handle = MockSendHandle()
+    timeline.sendHandles = [item.id: handle]
+
+    try await timeline.sendHandle(for: item)?.retry()
+
+    #expect(handle.retryCount == 1)
+}
 ```
 
 ## A whole session

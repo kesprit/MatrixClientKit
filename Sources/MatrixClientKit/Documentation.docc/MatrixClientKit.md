@@ -9,29 +9,32 @@ MatrixClientKit wraps the official Matrix Rust SDK behind a modern Swift API: `a
 **snapshots** — you receive the complete, current state and never apply a diff yourself.
 
 See <doc:GettingStarted> for a first end-to-end flow, <doc:Authentication> to sign in against any
-homeserver, <doc:VerificationAndRecovery> to handle
-device trust, <doc:PushNotifications> to receive push notifications through a notification service
+homeserver, <doc:Media> to show and send images, videos, audio and files,
+<doc:VerificationAndRecovery> to handle device trust, <doc:PushNotifications> to receive push notifications through a notification service
 extension, and <doc:TestingWithMocks> to test an application that depends on the package.
 
-## What v0.4 covers
+## What v0.5 covers
 
 This page can be read on its own — the Swift Package Index renders it without the repository's
 README — so the limits of this milestone are restated here.
 
-v0.4 covers authentication against any current homeserver — server discovery from a name,
+v0.5 adds media and the send handle: received images, videos, audio, voice messages and files
+(content, thumbnails, temporary files), sending attachments with upload progress, and cancelling or
+retrying a send from its local echo. It builds on v0.4, which covers authentication against any current homeserver — server discovery from a name,
 `loginDetails()`, password, email, OAuth and QR-code login, and signing in again on the same device
 after a soft logout — persisted sessions (restorable from storage alone), syncing,
 the room list, timelines, sending text messages, device verification by emoji comparison, recovery
 and key backup, notification of a session ended by the server, push notifications through a
 notification service extension, and per-room notification settings.
 
-End-to-end encryption is **active**: the Rust SDK handles it, with no opt-in. What v0.4 does **not**
+End-to-end encryption is **active**: the Rust SDK handles it, with no opt-in. What v0.5 does **not**
 expose:
 
 - QR-code verification — the bundled Rust SDK does not expose it;
 - verification of other users, and resetting a lost cryptographic identity;
 - account-wide notification settings (mentions, invitations, calls, keywords);
-- media, read receipts, typing indicators, presence and profiles;
+- read receipts, typing indicators, presence and profiles;
+- producing thumbnails, blurhashes or waveforms for the media you send, and a media cache;
 - registering an account with a password, legacy single sign-on, granting a QR-code login from
   this device, and managing the account through the authorization server.
 
@@ -53,6 +56,7 @@ Two behaviours to know before depending on this version:
 
 - <doc:GettingStarted>
 - <doc:Authentication>
+- <doc:Media>
 - <doc:VerificationAndRecovery>
 - <doc:PushNotifications>
 - <doc:TestingWithMocks>
@@ -87,6 +91,18 @@ Two behaviours to know before depending on this version:
 - ``Message``
 - ``SendState``
 - ``MessageContent``
+
+### Media
+
+- ``MediaService``
+- ``MediaFile``
+- ``MediaSource``
+- ``MediaAttachment``
+- ``MediaDimensions``
+- ``Attachment``
+- ``AttachmentUpload``
+- ``SendHandle``
+- ``UploadProgress``
 
 ### Syncing
 

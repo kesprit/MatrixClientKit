@@ -3,6 +3,64 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
 follows [SemVer](https://semver.org/).
 
+## [0.5.0] - 2026-10-26
+
+### Breaking
+
+- `Timeline` requires two new members, `send(_: Attachment)` and `sendHandle(for:)`, and
+  `send(_: MessageContent)` now returns an `any SendHandle` (marked `@discardableResult`: callers
+  are unaffected). `MatrixSession` requires `media`. An application that implements these protocols
+  itself — typically in a test double — must adapt, or use `MockTimeline` / `MockMatrixSession`.
+
+### Added
+
+- Received media: `Message.media` (a `MediaAttachment`: kind, file name, caption, MIME type, size,
+  `MediaDimensions`, duration, thumbnail, blurhash) and `MediaSource`, an opaque, `Codable`
+  reference to a media on the homeserver. `RoomSummary.avatar` exposes a room's avatar as a
+  `MediaSource`.
+- `MatrixSession.media`, a `MediaService`: `content(of:)`, `thumbnail(of:width:height:)`,
+  `file(of:filename:mimeType:)` (a `MediaFile` written to a temporary file, kept with
+  `persist(to:)`) and `maxUploadSize()`.
+- Sending media: `Attachment` (image, video, audio, voice message or file, from a local file or
+  bytes, with an optional caption and thumbnail) and `Timeline.send(_: Attachment)`, which returns an
+  `AttachmentUpload` with `cancel()` and `waitUntilQueued()`. The local echo carries
+  `Message.uploadProgress` (`UploadProgress`) while it uploads.
+- `SendHandle` (`cancel()`, `retry()`), returned by `Timeline.send(_: MessageContent)` and found
+  again from any local echo, media included, with `Timeline.sendHandle(for:)` — the path of the
+  "retry" and "give up" buttons of a failed message.
+- `MockMediaService`, `MockMediaFile`, `MockAttachmentUpload`, `MockSendHandle`, the new members of
+  `MockTimeline` and `MockMatrixSession`, and `SampleData.mediaSource(_:)`,
+  `SampleData.mediaAttachment(...)`, `SampleData.imageAttachment(...)` and
+  `SampleData.imageMessage(...)`.
+- The DocC article *Media*.
+
+### Fixed
+
+- A service, a room handle or a timeline that the application keeps after a logout, or after
+  releasing its session, no longer crashes the process (a Rust panic, "there is no reactor
+  running"): every object that depends on the FFI client now keeps it alive and frees its own
+  upstream object first, so the client is always freed last, whatever order the application lets go
+  of its references. This replaces the known limitation of 0.4.0.
+- The room list could be freed while its upstream task was still running, which intermittently
+  stopped the process (SIGSEGV) when a `rooms.list(filter:)` loop ended right after a value —
+  including when the upstream SDK refused the filter. The object is now released only once the
+  task has finished. The defect dates back to 0.1.
+
+### Behaviours to know
+
+- **`AttachmentUpload.cancel()` only stops the preparation.** Once the media is queued, cancel or
+  retry it through `Timeline.sendHandle(for:)` on its local echo. A `cancel()` arriving right after
+  queueing still makes `waitUntilQueued()` throw `CancellationError`, although the upload goes on.
+- **`waitUntilQueued()` returns at queueing, not at delivery.** Follow the local echo's
+  `Message.sendState` for the outcome.
+- **`sendHandle(for:)` only knows the items that a subscription to `Timeline.items` has seen** —
+  always true of a displayed item.
+- **Thumbnails, blurhashes, durations and waveforms of the media you send are produced by your
+  application.** The package neither decodes nor encodes media.
+- **`RoomService.list` shows at most 50 rooms in this version.**
+- **Upload progress and send handles rely on the upstream SDK's progress reporting**, which the
+  package turns on for you.
+
 ## [0.4.0] - 2026-10-03
 
 ### Breaking

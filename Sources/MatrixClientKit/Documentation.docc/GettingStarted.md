@@ -76,7 +76,8 @@ try await timeline.paginateBackwards(count: 20)
 try await timeline.send(.text("hello"))
 ```
 
-The local echo of the message you sent shows up in `timeline.items` on its own.
+The local echo of the message you sent shows up in `timeline.items` on its own. For images, files
+and the other media, and for cancelling or retrying a send, see <doc:Media>.
 
 Note that ``RoomService/room(_:)`` resolves against the synced room list, not against the server:
 right after signing in, wait for the room to appear in ``RoomService/list(filter:)`` before asking
