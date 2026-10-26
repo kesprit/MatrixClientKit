@@ -64,6 +64,9 @@ public struct RoomSummary: Sendable, Hashable, Identifiable {
         self.membership = membership
     }
 
+    /// The room's avatar as a media source, when one is set. Pass it to ``MediaService``.
+    public var avatar: MediaSource? { avatarURL.flatMap { MediaSource(url: $0.absoluteString) } }
+
     /// True when the room has unread notifications or mentions.
     public var hasUnread: Bool { notificationCount > 0 || highlightCount > 0 }
 }

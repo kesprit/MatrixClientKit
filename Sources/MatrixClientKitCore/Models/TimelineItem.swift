@@ -49,6 +49,10 @@ public struct Message: Sendable, Hashable {
     public let isEdited: Bool
     /// The message's delivery state.
     public let sendState: SendState
+    /// The media the message carries; `nil` for a text message.
+    public let media: MediaAttachment?
+    /// The upload progress; `nil` except while a media sent from this device is uploading.
+    public let uploadProgress: UploadProgress?
 
     public init(
         eventID: EventID?,
@@ -58,7 +62,9 @@ public struct Message: Sendable, Hashable {
         timestamp: Date,
         isOwn: Bool,
         isEdited: Bool,
-        sendState: SendState
+        sendState: SendState,
+        media: MediaAttachment? = nil,
+        uploadProgress: UploadProgress? = nil
     ) {
         self.eventID = eventID
         self.sender = sender
@@ -68,6 +74,8 @@ public struct Message: Sendable, Hashable {
         self.isOwn = isOwn
         self.isEdited = isEdited
         self.sendState = sendState
+        self.media = media
+        self.uploadProgress = uploadProgress
     }
 }
 
