@@ -5,8 +5,11 @@ import MatrixClientKitCore
 public final class MockMediaService: MediaService, @unchecked Sendable {
     /// A call to ``thumbnail(of:width:height:)``.
     public struct ThumbnailRequest: Sendable, Hashable {
+        /// The source whose thumbnail was asked for.
         public let source: MediaSource
+        /// The width asked for, in pixels.
         public let width: Int
+        /// The height asked for, in pixels.
         public let height: Int
     }
 

@@ -8,21 +8,24 @@ follows [SemVer](https://semver.org/).
 ### Breaking
 
 - `Timeline` requires two new members, `send(_: Attachment)` and `sendHandle(for:)`, and
-  `send(_: MessageContent)` now returns an `any SendHandle` (marked `@discardableResult`: callers
-  are unaffected). `MatrixSession` requires `media`. An application that implements these protocols
+  `send(_: MessageContent)` now returns an `any SendHandle`. Both sends are marked
+  `@discardableResult`, so most callers are unaffected; a closure whose type is spelled out, such
+  as a `Task<Void, Error>` that ends with `try await timeline.send(...)`, must now discard the
+  result (`_ = try await ...`). `MatrixSession` requires `media`. An application that implements these protocols
   itself — typically in a test double — must adapt, or use `MockTimeline` / `MockMatrixSession`.
 
 ### Added
 
 - Received media: `Message.media` (a `MediaAttachment`: kind, file name, caption, MIME type, size,
   `MediaDimensions`, duration, thumbnail, blurhash) and `MediaSource`, an opaque, `Codable`
-  reference to a media on the homeserver. `RoomSummary.avatar` exposes a room's avatar as a
+  reference to a media on the homeserver. Its `description`, `debugDescription` and reflection
+  (`dump`, the debugger) show only the URL and whether the media is encrypted, never the keys. `RoomSummary.avatar` exposes a room's avatar as a
   `MediaSource`.
 - `MatrixSession.media`, a `MediaService`: `content(of:)`, `thumbnail(of:width:height:)`,
   `file(of:filename:mimeType:)` (a `MediaFile` written to a temporary file, kept with
   `persist(to:)`) and `maxUploadSize()`.
 - Sending media: `Attachment` (image, video, audio, voice message or file, from a local file or
-  bytes, with an optional caption and thumbnail) and `Timeline.send(_: Attachment)`, which returns an
+  bytes, with an optional caption and, for an image or a video, a thumbnail) and `Timeline.send(_: Attachment)`, which returns an
   `AttachmentUpload` with `cancel()` and `waitUntilQueued()`. The local echo carries
   `Message.uploadProgress` (`UploadProgress`) while it uploads.
 - `SendHandle` (`cancel()`, `retry()`), returned by `Timeline.send(_: MessageContent)` and found
@@ -52,14 +55,26 @@ follows [SemVer](https://semver.org/).
   retry it through `Timeline.sendHandle(for:)` on its local echo. A `cancel()` arriving right after
   queueing still makes `waitUntilQueued()` throw `CancellationError`, although the upload goes on.
 - **`waitUntilQueued()` returns at queueing, not at delivery.** Follow the local echo's
-  `Message.sendState` for the outcome.
+  `Message.sendState` for the outcome. It may be called several times, concurrently too: every
+  call reports the same outcome.
+- **Releasing an `AttachmentUpload` cancels nothing**, and neither does cancelling the Swift task
+  that awaits `waitUntilQueued()`: only `cancel()` stops the upload.
+- **The `Codable` encoding of an encrypted `MediaSource` contains its decryption keys.** Store it
+  as sensitive data, for instance when you use it as a cache key.
+- **An `Attachment.thumbnail` is sent for images and videos only**; for audio, voice messages and
+  files it is ignored, and its file is not even read.
+- **`MediaFile.url` is stale once `persist(to:)` returned `true`**: the file is at the
+  destination.
+- **Attachment send failures reported by the upstream SDK** (invalid MIME type, invalid
+  thumbnail…) surface as `MatrixError.unexpected` with the message "The attachment could not be
+  sent." and the upstream detail.
 - **`sendHandle(for:)` only knows the items that a subscription to `Timeline.items` has seen** —
   always true of a displayed item.
 - **Thumbnails, blurhashes, durations and waveforms of the media you send are produced by your
   application.** The package neither decodes nor encodes media.
 - **`RoomService.list` shows at most 50 rooms in this version.**
-- **Upload progress and send handles rely on the upstream SDK's progress reporting**, which the
-  package turns on for you.
+- **Upload progress relies on the upstream SDK's progress reporting**, which the package turns on
+  for you. Send handles do not depend on it.
 
 ## [0.4.0] - 2026-10-03
 

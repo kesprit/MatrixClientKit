@@ -59,6 +59,12 @@ final class HandleBox: @unchecked Sendable {
     /// Tokio (`SIGSEGV`, constaté contre Synapse en interrompant `rooms.list` juste après une
     /// valeur). Une tâche qui ne se termine pas dans `timeout` garde l'objet à jamais : une fuite
     /// vaut mieux qu'une libération sous ses pieds.
+    ///
+    /// - Warning: la fuite n'est pas bornée à l'objet. Il retient, par sa ``ClientLifetime``, le
+    ///   `Client` FFI, donc son store SQLite ouvert (et le verrou inter-processus qu'il tient)
+    ///   pour toute la vie du processus : une déconnexion ou un effacement local qui suivrait ne
+    ///   libère alors ni le client ni ses fichiers. Cas constaté nulle part à ce jour ; le délai
+    ///   de 10 s couvre largement la fin d'un `poll` Tokio.
     static func release(
         _ object: AnyObject,
         after handle: any TaskHandleProtocol,

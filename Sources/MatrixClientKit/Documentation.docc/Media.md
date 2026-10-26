@@ -11,7 +11,9 @@ through ``MatrixSession/media``, a ``MediaService``; sending one goes through th
 
 - ``MediaSource`` says where a media lives on the homeserver. It is opaque: you never build the
   request yourself, you hand the source back to the ``MediaService``. It is `Codable`, so it makes a
-  good key for your own cache.
+  good key for your own cache — but the encoding of an encrypted source contains its decryption
+  keys: store it as sensitive data, as you would the media itself. Its descriptions and `dump` show
+  only the URL and whether it is encrypted, so logging a source does not leak them.
 - ``MediaAttachment`` describes a received media: its ``MediaAttachment/kind``, file name, caption,
   MIME type, size, dimensions, duration, thumbnail and blurhash.
 - ``Attachment`` describes a media you send.
@@ -84,6 +86,7 @@ func save(_ media: MediaAttachment, to destination: URL, session: any MatrixSess
         // The file could not be kept; the temporary one is still deleted on release.
         return
     }
+    // From here on, the file is at `destination`: `file.url` no longer points to it.
 }
 ```
 
@@ -109,13 +112,15 @@ func sendPhoto(at url: URL, timeline: any Timeline) async throws {
 Everything the recipients use to preview the media — a thumbnail, its dimensions, a blurhash, a
 voice message's waveform and duration — is **produced by your application** and given in the
 ``Attachment``: the package neither decodes nor encodes media. Without a thumbnail, recipients get
-the media alone.
+the media alone. Only images and videos carry one: ``Attachment/thumbnail`` is ignored for audio,
+voice messages and files.
 
 Before building a large attachment, ``MediaService/maxUploadSize()`` tells you the largest upload
 the homeserver accepts.
 
 ``Timeline/send(_:)-(Attachment)`` throws ``MatrixError/notFound(_:)`` with `.media`, before any
-upstream call, when a local file — the media or its thumbnail — does not exist.
+upstream call, when a local file — the media, or the thumbnail of an image or a video — does not
+exist.
 
 ### Show the progress
 
@@ -140,7 +145,11 @@ The ``AttachmentUpload`` that ``Timeline/send(_:)-(Attachment)`` returns control
 - ``AttachmentUpload/cancel()`` stops the preparation; the local echo never appears, or is removed.
 - ``AttachmentUpload/waitUntilQueued()`` returns once the media is in the send queue and its local
   echo is in ``Timeline/items``. That is not delivery: follow the echo's ``Message/sendState`` for
-  that.
+  that. You may call it several times, from several tasks: every call reports the same outcome.
+
+Releasing the ``AttachmentUpload`` cancels nothing, and neither does cancelling the Swift task that
+awaits ``AttachmentUpload/waitUntilQueued()``: the upload goes on. Only
+``AttachmentUpload/cancel()`` stops it.
 
 Once queued, the media is a local echo like any message, and is controlled the same way, through
 a ``SendHandle`` obtained from the echo with ``Timeline/sendHandle(for:)``. This is the path of the
@@ -181,7 +190,8 @@ item you display.
 - ``AttachmentUpload/cancel()`` only stops the preparation; to cancel or retry a queued media, use
   ``Timeline/sendHandle(for:)`` on its local echo.
 - ``AttachmentUpload/waitUntilQueued()`` is not delivery.
-- Upload progress, and with it the send handle, rely on the upstream SDK's progress reporting,
-  which the package turns on for you.
+- Upload progress relies on the upstream SDK's progress reporting, which the package turns on for
+  you. Send handles do not depend on it.
+- The encoding of an encrypted ``MediaSource`` carries its keys: store it as sensitive data.
 
 To test code that shows or sends media without a homeserver, see <doc:TestingWithMocks>.

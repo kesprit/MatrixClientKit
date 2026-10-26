@@ -82,6 +82,11 @@ reconstruire la `MediaSource` FFI sans perte (clés de chiffrement comprises). `
 une application d'en faire une clé de cache persistante. *Décision de rédaction :* `url` reste une
 `String` (une URL `mxc://` n'a pas d'usage comme `URL` Foundation).
 
+*Révision (revue finale) :* l'encodage `Codable` d'une source chiffrée contient sa clé, son IV et
+ses empreintes : la DocC le signale (donnée sensible à stocker comme telle). `description`,
+`debugDescription` et le miroir (`dump`, débogueur) ne montrent que `url` et `isEncrypted` ; les
+`CodingKeys` sont explicites pour figer le format (`url`, `isEncrypted`, `upstreamJSON`).
+
 `RoomSummary` gagne `public var avatar: MediaSource?`, calculé depuis `avatarURL`.
 
 ### 3.2 Médias reçus
@@ -151,10 +156,15 @@ public struct Attachment: Sendable, Hashable {
     public var kind: Kind
     public var mimeType: String
     public var caption: String?
-    /// Used for images, videos and files; ignored for audio and voice.
+    /// Used for images and videos; ignored, without being read, for audio, voice messages and files.
     public var thumbnail: Thumbnail?
 }
 ```
+
+*Révision (revue finale) :* `sendFile` amont (26.09.07) ne prend pas de source de vignette ; une
+vignette donnée pour `.file` était validée (fichier lu) puis jetée, et un fichier de vignette absent
+faisait échouer l'envoi pour rien. Elle est désormais ignorée sans validation, comme pour l'audio et
+le vocal ; seules l'image et la vidéo valident et envoient leur vignette.
 
 `Timeline` gagne :
 

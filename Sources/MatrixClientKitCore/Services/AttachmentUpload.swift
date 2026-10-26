@@ -1,4 +1,6 @@
 /// A media being uploaded by ``Timeline/send(_:)``.
+///
+/// Releasing this value cancels nothing: the upload goes on. Only ``cancel()`` stops it.
 public protocol AttachmentUpload: Sendable {
     /// Stops the upload while it is being prepared, before it is queued; its local echo then
     /// never appears, or is removed.
@@ -13,5 +15,9 @@ public protocol AttachmentUpload: Sendable {
     /// ``cancel()`` arriving right after the media was queued still makes this throw
     /// `CancellationError`, although the upload goes on — cancel it through
     /// ``Timeline/sendHandle(for:)``.
+    ///
+    /// It is safe to call several times, sequentially or concurrently: every call reports the
+    /// same outcome. Cancelling the Swift task that awaits it does not cancel the upload, and does
+    /// not end the wait early; call ``cancel()`` for that.
     func waitUntilQueued() async throws
 }
