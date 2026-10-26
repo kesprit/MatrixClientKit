@@ -161,10 +161,13 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             )
 
             // Référence faible : le cycle de vie peut survivre à la session (closure d'un flux OAuth
-            // de reconnexion), et ne doit pas faire du `SyncService` le dernier détenteur du client
-            // interne (voir ``Dependents``). La session libérée, plus rien n'est à arrêter.
+            // de reconnexion). La session libérée, plus rien n'est à arrêter. La closure vise le
+            // contrôleur Swift, jamais le `SyncService` FFI : la référence forte temporaire tenue
+            // pendant l'`await` ferait sinon du `SyncService` le dernier détenteur du client
+            // interne, libéré hors du runtime Tokio. Le contrôleur, lui, libère son service à
+            // travers sa ``ClientLifetime``, client encore vivant.
             let lifecycle = SessionLifecycle(
-                stopSync: { [weak syncService] in await syncService?.stop() },
+                stopSync: { [weak sync] in await sync?.stop() },
                 erase: {
                     try eraseLocalData(
                         persistence: persistence, localStore: localStore, userID: data.userID, deviceID: data.deviceID)

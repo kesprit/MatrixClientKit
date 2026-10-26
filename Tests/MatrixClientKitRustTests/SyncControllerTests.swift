@@ -67,31 +67,18 @@ private final class FakeSyncService: SyncServiceDriving, @unchecked Sendable {
 
 /// Service témoin qui consigne sa libération dans le journal partagé avec le client témoin.
 private final class LoggingSyncService: SyncServiceDriving, @unchecked Sendable {
-    private let log: ReleaseLog
-    init(log: ReleaseLog) { self.log = log }
+    private let log: DeinitLog
+    init(log: DeinitLog) { self.log = log }
     deinit { log.append("service") }
     func start() async {}
     func stop() async {}
     func observeState(_ listener: any SyncServiceStateObserver) -> any TaskHandleProtocol { FakeTaskHandle() }
 }
 
-private final class LoggingClient: Sendable {
-    private let log: ReleaseLog
-    init(log: ReleaseLog) { self.log = log }
-    deinit { log.append("client") }
-}
-
-private final class ReleaseLog: @unchecked Sendable {
-    private let lock = NSLock()
-    private var entries: [String] = []
-    func append(_ entry: String) { lock.withLock { entries.append(entry) } }
-    var all: [String] { lock.withLock { entries } }
-}
-
 // Un contrôleur gardé par l'application après la session libère son service avant le client.
 @Test func aControllerKeptAfterTheSessionReleasesItsServiceBeforeTheClient() {
-    let log = ReleaseLog()
-    var lifetime: ClientLifetime? = ClientLifetime(client: LoggingClient(log: log))
+    let log = DeinitLog()
+    var lifetime: ClientLifetime? = ClientLifetime(client: DeinitWitness("client", log: log))
     var controller: RustSyncController? = RustSyncController(service: LoggingSyncService(log: log), lifetime: lifetime!)
 
     lifetime = nil

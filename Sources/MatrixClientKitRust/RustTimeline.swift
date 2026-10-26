@@ -57,6 +57,8 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
             // Une seule assignation : annuler uniquement la tâche laisserait le listener déjà
             // enregistré en vie côté amont — il faut aussi annuler le handle, d'où la boîte
             // pour couvrir le cas où la terminaison arrive avant que le handle n'existe.
+            // Pas de `withExtendedLifetime(self)` ici, contrairement à `RustRoomService` : la boîte
+            // ne retient qu'un `TaskHandle`, qui ne retient pas le client interne côté Swift.
             continuation.onTermination = { _ in
                 task.cancel()
                 box.cancel()
