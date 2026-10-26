@@ -55,9 +55,8 @@ extension HarnessTests {
                 let message = try #require(snapshot.flatMap { sentMessage(named: filename, in: $0) }, "the image never reached .sent")
                 let media = try #require(message.media)
 
-                #expect(
-                    recorder.everSaw { $0.message?.media?.filename == filename && $0.message?.sendState == .sending },
-                    "the local echo was never observed")
+                // L'écho `.sending` n'est pas exigé : `.bufferingNewest(1)` peut l'avoir sauté.
+                #expect(message.sendState == .sent)
                 #expect(message.eventID != nil)
                 #expect(message.uploadProgress == nil)
                 #expect(media.kind == .image)
@@ -121,7 +120,6 @@ extension HarnessTests {
                 let releasedURL = try #require(released?.url)
                 #expect(FileManager.default.fileExists(atPath: releasedURL.path))
                 released = nil
-                #expect(released == nil)
                 #expect(
                     !FileManager.default.fileExists(atPath: releasedURL.path),
                     "the temporary file outlived its MediaFile: \(releasedURL.path)")
@@ -222,13 +220,19 @@ extension HarnessTests {
 
                 switch outcome {
                 case .success:
+                    // Inatteignable avec `RustAttachmentUpload` : `cancel()` précède l'attente et
+                    // l'annulation l'emporte toujours. Gardé pour une implémentation qui
+                    // laisserait gagner une mise en file antérieure.
                     let sent = await recorder.waitUntil(within: .seconds(30)) { sentMessage(named: filename, in: $0) != nil }
                     #expect(sent != nil, "waitUntilQueued() returned but the media never reached .sent")
                 case let .failure(error) where error is CancellationError:
-                    // Mise en file battue par l'annulation : aucun écho. Sinon, l'écho est là et
-                    // s'abandonne par son handle.
-                    try await Task.sleep(for: .milliseconds(500))
-                    if let echo = recorder.latest?.first(where: { $0.message?.media?.filename == filename }) {
+                    // Mise en file battue par l'annulation : aucun écho n'apparaît. Sinon, l'écho
+                    // finit par être là et s'abandonne par son handle. Sondé jusqu'à 3 s plutôt
+                    // que lu une fois : l'écho peut arriver après une lecture trop précoce.
+                    let withEcho = await recorder.waitUntil(within: .seconds(3)) { items in
+                        items.contains { $0.message?.media?.filename == filename }
+                    }
+                    if let echo = withEcho?.first(where: { $0.message?.media?.filename == filename }) {
                         try await cancelThroughEcho(echo, of: filename, in: timeline, recorder: recorder)
                     } else {
                         try await expectGone(
@@ -401,6 +405,8 @@ extension HarnessTests {
 
             var session: (any MatrixSession)? = try await signedInSession(
                 configuration, directory: directory, deviceName: "Harness (lifetime)")
+            // Sonde faible : prouve que la session est vraiment libérée avant ses dépendants.
+            weak var sessionProbe: AnyObject? = session.map { $0 as AnyObject }
             var room: (any RoomHandle)?
             var timeline: (any Timeline)?
             var items: AsyncStream<[TimelineItem]>?
@@ -461,6 +467,10 @@ extension HarnessTests {
             }
             session = nil
             try await Task.sleep(for: .seconds(1))
+            for _ in 0..<40 where sessionProbe != nil {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            #expect(sessionProbe == nil, "the session is still alive: the dependents would not be the last holders")
 
             // La session est partie : le `Client` FFI ne vit plus que par ce qui reste ici.
             #expect(timeline != nil && room != nil && media != nil && mediaFile != nil && items != nil)
@@ -508,7 +518,6 @@ extension HarnessTests {
 
                     // Libérée en plein flot de diffs, flux toujours itéré par l'enregistreur.
                     released = nil
-                    #expect(released == nil)
 
                     try await burst.value
                     let delivered = await senderRecorder.waitUntil(within: .seconds(30)) { items in
