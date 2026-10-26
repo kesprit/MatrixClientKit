@@ -14,6 +14,8 @@ public protocol RoomService: Sendable {
     ///
     /// Every call opens an independent subscription, with its own lifetime.
     ///
+    /// - Note: known limitation of this version: the list shows at most 50 rooms.
+    ///
     /// - Important: this stream has no error channel. If the upstream subscription fails, or if
     ///   the requested filter cannot be applied, the stream **ends without producing a single
     ///   value** — delivering an unfiltered list would answer a different question from the one
