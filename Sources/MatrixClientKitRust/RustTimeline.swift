@@ -16,15 +16,30 @@ private final class ItemsListener: TimelineListener {
 
 /// Implémentation de ``Timeline`` adossée au SDK Rust.
 public final class RustTimeline: MatrixClientKitCore.Timeline {
-    private let timeline: MatrixRustSDK.Timeline
+    private let lifetime: ClientLifetime
+    /// Retient le client interne du SDK : libéré par ``deinit`` à travers ``lifetime``, client
+    /// encore vivant (voir ``ClientLifetime``). Écrit seulement par l'initialiseur et par
+    /// ``deinit``, d'où `nonisolated(unsafe)`.
+    nonisolated(unsafe) private var ffiTimeline: MatrixRustSDK.Timeline?
 
-    init(timeline: MatrixRustSDK.Timeline) {
-        self.timeline = timeline
+    init(timeline: MatrixRustSDK.Timeline, lifetime: ClientLifetime) {
+        self.lifetime = lifetime
+        self.ffiTimeline = timeline
+    }
+
+    deinit {
+        lifetime.release(&ffiTimeline)
+    }
+
+    private var timeline: MatrixRustSDK.Timeline {
+        guard let ffiTimeline else {
+            // Inatteignable : `ffiTimeline` n'est vidé que par `deinit`.
+            preconditionFailure("RustTimeline used after deinitialization")
+        }
+        return ffiTimeline
     }
 
     public var items: AsyncStream<[MatrixClientKitCore.TimelineItem]> {
-        let timeline = timeline
-
         // Flux brut de diffs, en .unbounded : chaque diff se compose avec le précédent.
         let diffs = AsyncStream<[CollectionDiff<MatrixClientKitCore.TimelineItem>]>(
             bufferingPolicy: .unbounded
@@ -34,7 +49,9 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
                 let listener = ItemsListener { updates in
                     continuation.yield(updates.map(TimelineMapper.diff(from:)))
                 }
-                box.store(await timeline.addListener(listener: listener))
+                // `self` plutôt que la timeline FFI : la tâche ne doit pas en devenir le dernier
+                // détenteur (voir ``ClientLifetime``).
+                box.store(await self.timeline.addListener(listener: listener))
             }
 
             // Une seule assignation : annuler uniquement la tâche laisserait le listener déjà

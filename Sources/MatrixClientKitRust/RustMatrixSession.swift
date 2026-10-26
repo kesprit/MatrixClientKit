@@ -131,8 +131,12 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             let data = try SessionMapper.sessionData(from: session, storeID: localStore.segment.storeID)
             // Sans cela l'amont ne renseigne jamais `notSentYet(progress:)`.
             client.enableSendQueueUploadProgress(enable: true)
+            // Une seule pour toute la session : chaque service, handle de room ou timeline la
+            // retient, et le `Client` FFI survit ainsi à ceux que l'application garde après la
+            // session (voir ``ClientLifetime``).
+            let clientLifetime = ClientLifetime(client: client)
             let syncService = try await client.syncService().finish()
-            let sync = RustSyncController(service: syncService)
+            let sync = RustSyncController(service: syncService, lifetime: clientLifetime)
 
             let verification = RustSessionVerification(
                 ownUserID: data.userID,
@@ -140,7 +144,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             )
             let encryption = RustEncryptionService(
                 encryption: client.encryption(),
-                sessionVerification: verification
+                sessionVerification: verification,
+                lifetime: clientLifetime
             )
 
             let notifications = RustNotificationService(
@@ -151,7 +156,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
                     // Même définition qu'Element X (Task 1, constat 4) : l'amont en déduit le
                     // réglage par défaut d'un salon.
                     return RoomFacts(isEncrypted: await room.isEncrypted(), isOneToOne: room.activeMembersCount() == 2)
-                }
+                },
+                lifetime: clientLifetime
             )
 
             // Référence faible : le cycle de vie peut survivre à la session (closure d'un flux OAuth
@@ -170,7 +176,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             return RustMatrixSession(
                 userID: data.userID,
                 deviceID: data.deviceID,
-                rooms: RustRoomService(roomListService: syncService.roomListService()),
+                rooms: RustRoomService(roomListService: syncService.roomListService(), lifetime: clientLifetime),
                 sync: sync,
                 encryption: encryption,
                 notifications: notifications,

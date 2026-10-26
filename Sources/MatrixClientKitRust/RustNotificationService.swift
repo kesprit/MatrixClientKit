@@ -3,19 +3,39 @@ import MatrixClientKitCore
 
 /// Implémentation de ``NotificationService`` adossée au SDK Rust.
 public final class RustNotificationService: NotificationService {
+    /// En production, le `Client` FFI lui-même : il peut être le dernier détenteur du client
+    /// interne sans danger (voir ``ClientLifetime``).
     private let pushers: any PusherDriving
-    private let settings: any NotificationSettingsDriving
     /// Résout les faits d'un salon à partir de son identifiant ; `nil` pour un salon inconnu.
     private let roomFacts: @Sendable (String) async throws -> RoomFacts?
+    private let lifetime: ClientLifetime
+    /// `NotificationSettings` retient le client interne du SDK : libéré par ``deinit`` à travers
+    /// ``lifetime``, client encore vivant. Écrit seulement par l'initialiseur et par ``deinit``,
+    /// d'où `nonisolated(unsafe)`.
+    nonisolated(unsafe) private var settingsDriver: (any NotificationSettingsDriving)?
 
     init(
         pushers: any PusherDriving,
         settings: any NotificationSettingsDriving,
-        roomFacts: @escaping @Sendable (String) async throws -> RoomFacts?
+        roomFacts: @escaping @Sendable (String) async throws -> RoomFacts?,
+        lifetime: ClientLifetime
     ) {
         self.pushers = pushers
-        self.settings = settings
+        self.settingsDriver = settings
         self.roomFacts = roomFacts
+        self.lifetime = lifetime
+    }
+
+    deinit {
+        lifetime.release(&settingsDriver)
+    }
+
+    private var settings: any NotificationSettingsDriving {
+        guard let settingsDriver else {
+            // Inatteignable : `settingsDriver` n'est vidé que par `deinit`.
+            preconditionFailure("RustNotificationService used after deinitialization")
+        }
+        return settingsDriver
     }
 
     public func registerPusher(_ configuration: PusherConfiguration) async throws {

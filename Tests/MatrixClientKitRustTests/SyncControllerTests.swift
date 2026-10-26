@@ -36,7 +36,7 @@ private final class FakeSyncService: SyncServiceDriving, @unchecked Sendable {
 
 @Test func startAndStopAreForwardedToTheService() async {
     let service = FakeSyncService()
-    let controller = RustSyncController(service: service)
+    let controller = RustSyncController(service: service, lifetime: .detached())
 
     await controller.start()
     await controller.stop()
@@ -47,7 +47,7 @@ private final class FakeSyncService: SyncServiceDriving, @unchecked Sendable {
 
 @Test func upstreamStatesAreMappedToDomainStates() async {
     let service = FakeSyncService()
-    let controller = RustSyncController(service: service)
+    let controller = RustSyncController(service: service, lifetime: .detached())
     var iterator = controller.state.makeAsyncIterator()
 
     service.emit(.running)
@@ -63,4 +63,40 @@ private final class FakeSyncService: SyncServiceDriving, @unchecked Sendable {
     #expect(SyncStateMapper.map(.terminated) == .terminated)
     #expect(SyncStateMapper.map(.error) == .error)
     #expect(SyncStateMapper.map(.offline) == .offline)
+}
+
+/// Service témoin qui consigne sa libération dans le journal partagé avec le client témoin.
+private final class LoggingSyncService: SyncServiceDriving, @unchecked Sendable {
+    private let log: ReleaseLog
+    init(log: ReleaseLog) { self.log = log }
+    deinit { log.append("service") }
+    func start() async {}
+    func stop() async {}
+    func observeState(_ listener: any SyncServiceStateObserver) -> any TaskHandleProtocol { FakeTaskHandle() }
+}
+
+private final class LoggingClient: Sendable {
+    private let log: ReleaseLog
+    init(log: ReleaseLog) { self.log = log }
+    deinit { log.append("client") }
+}
+
+private final class ReleaseLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [String] = []
+    func append(_ entry: String) { lock.withLock { entries.append(entry) } }
+    var all: [String] { lock.withLock { entries } }
+}
+
+// Un contrôleur gardé par l'application après la session libère son service avant le client.
+@Test func aControllerKeptAfterTheSessionReleasesItsServiceBeforeTheClient() {
+    let log = ReleaseLog()
+    var lifetime: ClientLifetime? = ClientLifetime(client: LoggingClient(log: log))
+    var controller: RustSyncController? = RustSyncController(service: LoggingSyncService(log: log), lifetime: lifetime!)
+
+    lifetime = nil
+    controller = nil
+
+    #expect(log.all == ["service", "client"])
+    _ = (lifetime, controller)
 }
