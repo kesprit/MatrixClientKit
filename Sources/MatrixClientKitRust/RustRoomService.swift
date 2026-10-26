@@ -14,6 +14,22 @@ private final class EntriesListener: RoomListEntriesListener {
     }
 }
 
+/// Le résultat d'`entriesWithDynamicAdapters`, libéré client encore vivant : la boîte qui le
+/// retient le relâche après la fin de la tâche du flux, hors de toute `withExtendedLifetime`.
+private final class EntriesSubscription: @unchecked Sendable {
+    private let lifetime: ClientLifetime
+    private var result: RoomListEntriesWithDynamicAdaptersResult?
+
+    init(result: RoomListEntriesWithDynamicAdaptersResult, lifetime: ClientLifetime) {
+        self.result = result
+        self.lifetime = lifetime
+    }
+
+    deinit {
+        lifetime.release(&result)
+    }
+}
+
 /// Implémentation de ``RoomService`` adossée au SDK Rust.
 public final class RustRoomService: RoomService {
     private let lifetime: ClientLifetime
@@ -99,7 +115,12 @@ public final class RustRoomService: RoomService {
                     // explicitement jusqu'à l'annulation plutôt que de parier sur une durée de
                     // vie non garantie : le coût d'une référence retenue est nul face au risque
                     // d'une liste qui cesse silencieusement de se mettre à jour.
-                    box.store(result.entriesStream(), retaining: result)
+                    // Libéré par la boîte une fois la tâche du flux terminée, à travers la
+                    // ``ClientLifetime`` : il peut alors être le dernier détenteur du client.
+                    box.store(
+                        result.entriesStream(),
+                        retaining: EntriesSubscription(result: result, lifetime: self.lifetime)
+                    )
                 } catch {
                     // `AsyncStream` n'a pas de canal d'erreur : un abonnement qui échoue ne peut
                     // que terminer le flux sans valeur. Documenté comme tel sur
