@@ -126,9 +126,11 @@ extension HarnessTests {
             }
         }
 
-        /// Un fichier depuis `Data`, un audio et un message vocal gardent leur genre à la réception.
+        /// Un fichier depuis `Data`, un audio, un message vocal et une vidéo gardent leur genre à la
+        /// réception. La vidéo passe par `sendVideo` avec sa vignette ; le fichier porte une
+        /// vignette introuvable, ignorée sans être lue (`sendFile` amont n'en prend pas).
         @Test(.timeLimit(.minutes(2)))
-        func dataFileAudioAndVoiceKeepTheirKind() async throws {
+        func dataFileAudioVoiceAndVideoKeepTheirKind() async throws {
             try await withMediaSession(encrypted: false) { session, roomID, _ in
                 let timeline = try await openTimeline(roomID, in: session)
                 let recorder = TimelineRecorder(timeline.items)
@@ -139,10 +141,16 @@ extension HarnessTests {
                 // Le contenu d'un audio n'est pas décodé par le serveur : des octets quelconques
                 // suffisent à éprouver le mappage du type de message.
                 let sound = Data(repeating: 0x4F, count: 2048)
+                let clip = Data(repeating: 0x56, count: 4096)
+                let poster = try makePNG(width: 8, height: 6)
+                let missingThumbnail = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("missing-\(tag).jpg")
                 let cases: [(filename: String, attachment: MatrixClientKit.Attachment, kind: MediaAttachment.Kind)] = [
                     (
                         "notes-\(tag).txt",
-                        Attachment(source: .data(text, filename: "notes-\(tag).txt"), kind: .file, mimeType: "text/plain"),
+                        Attachment(
+                            source: .data(text, filename: "notes-\(tag).txt"), kind: .file, mimeType: "text/plain",
+                            thumbnail: .init(source: .file(missingThumbnail), mimeType: "image/jpeg")),
                         .file
                     ),
                     (
@@ -159,6 +167,19 @@ extension HarnessTests {
                             kind: .voice(duration: .seconds(3), waveform: [0, 0.25, 0.5, 1]),
                             mimeType: "audio/ogg"),
                         .voice
+                    ),
+                    (
+                        "clip-\(tag).mp4",
+                        Attachment(
+                            source: .data(clip, filename: "clip-\(tag).mp4"),
+                            kind: .video(
+                                dimensions: MediaDimensions(width: 320, height: 240), duration: .seconds(4),
+                                blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj"),
+                            mimeType: "video/mp4",
+                            thumbnail: .init(
+                                source: .data(poster, filename: "clip-\(tag).png"), mimeType: "image/png",
+                                dimensions: MediaDimensions(width: 8, height: 6))),
+                        .video
                     ),
                 ]
 
@@ -183,6 +204,14 @@ extension HarnessTests {
                 #expect(audio.duration == .seconds(2))
                 let voice = try #require(sentMessage(named: cases[2].filename, in: items)?.media)
                 #expect(voice.duration == .seconds(3))
+                let video = try #require(sentMessage(named: cases[3].filename, in: items)?.media)
+                #expect(video.size == clip.count)
+                #expect(video.duration == .seconds(4))
+                #expect(video.dimensions == MediaDimensions(width: 320, height: 240))
+                #expect(video.blurhash == "LEHV6nWB2yk8pyo0adR*.7kCMdnj")
+                #expect(try await session.media.content(of: video.source) == clip)
+                let videoThumbnail = try #require(video.thumbnail, "the video's thumbnail was not sent")
+                #expect(try await session.media.content(of: videoThumbnail) == poster)
             }
         }
 
@@ -417,6 +446,8 @@ extension HarnessTests {
             var sync: (any SyncController)?
             var encryption: (any EncryptionService)?
             var notifications: (any NotificationService)?
+            var attachmentUpload: (any AttachmentUpload)?
+            var sendHandle: (any SendHandle)?
 
             do {
                 let opened = try #require(session)
@@ -438,6 +469,8 @@ extension HarnessTests {
                     Attachment(source: .data(png, filename: filename), kind: .image(dimensions: nil, blurhash: nil), mimeType: "image/png")
                 )
                 try await upload.waitUntilQueued()
+                attachmentUpload = upload
+                sendHandle = try await openedTimeline.send(.text("lifetime-\(UUID())"))
                 let snapshot = await openedRecorder.waitUntil(within: .seconds(30)) {
                     sentMessage(named: filename, in: $0) != nil
                 }
@@ -475,6 +508,11 @@ extension HarnessTests {
             // La session est partie : le `Client` FFI ne vit plus que par ce qui reste ici.
             #expect(timeline != nil && room != nil && media != nil && mediaFile != nil && items != nil)
             #expect(rooms != nil && sync != nil && encryption != nil && notifications != nil)
+            #expect(attachmentUpload != nil && sendHandle != nil)
+            // Déjà en file avant la déconnexion : l'issue mémorisée revient sans appel amont.
+            try await attachmentUpload?.waitUntilQueued()
+            attachmentUpload = nil
+            sendHandle = nil
             recorder?.stop()
             recorder = nil
             items = nil
