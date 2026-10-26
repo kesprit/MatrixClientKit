@@ -109,9 +109,15 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
         return paginateResult
     }
 
-    public func send(_ content: MessageContent) async throws {
+    /// Records `content`, then returns ``nextSendHandle`` — or throws ``sendError``, in which
+    /// case nothing is recorded.
+    @discardableResult
+    public func send(_ content: MessageContent) async throws -> any SendHandle {
         if let error = sendError { throw error }
-        lock.withLock { _sentMessages.append(content) }
+        return lock.withLock {
+            _sentMessages.append(content)
+            return _nextSendHandle
+        }
     }
 
     /// Records `attachment`, then returns ``nextAttachmentUpload`` — or throws

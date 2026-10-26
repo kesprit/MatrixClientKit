@@ -14,5 +14,9 @@ public protocol Timeline: Sendable {
     func paginateBackwards(count: Int) async throws -> Bool
 
     /// Sends a message. Its local echo appears in ``items`` with no further action.
-    func send(_ content: MessageContent) async throws
+    ///
+    /// - Returns: a handle to cancel the send while the message has not left, or to retry it
+    ///   after a failure.
+    @discardableResult
+    func send(_ content: MessageContent) async throws -> any SendHandle
 }

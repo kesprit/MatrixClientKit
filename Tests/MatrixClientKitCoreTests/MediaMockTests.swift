@@ -75,4 +75,13 @@ import MatrixClientKitMocks
         timeline.sendHandles[item.id] = handle
         #expect(timeline.sendHandle(for: item) as? MockSendHandle === handle)
     }
+
+    @Test func messageSendReturnsNextSendHandle() async throws {
+        let timeline = MockTimeline()
+        let handle = MockSendHandle()
+        timeline.nextSendHandle = handle
+        let returned = try await timeline.send(MessageContent.text("hi"))
+        #expect(returned as? MockSendHandle === handle)
+        #expect(timeline.sentMessages == [.text("hi")])
+    }
 }
