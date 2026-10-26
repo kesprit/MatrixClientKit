@@ -10,6 +10,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     public var sync: any SyncController { live.sync }
     public var encryption: any EncryptionService { live.encryption }
     public var notifications: any NotificationService { live.notifications }
+    public var media: any MediaService { live.media }
 
     /// Le store local de la session, et l'adresse du serveur qui l'a émise.
     let segment: StoreSegment
@@ -42,6 +43,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         let sync: any SyncController
         let encryption: any EncryptionService
         let notifications: any NotificationService
+        let media: any MediaService
         let lifecycle: SessionLifecycle
         /// Retenus pour la durée de la session : un delegate libéré ne signalerait plus aucune
         /// déconnexion serveur, et l'annulation du handle désabonnerait le delegate.
@@ -77,6 +79,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         sync: any SyncController,
         encryption: any EncryptionService,
         notifications: any NotificationService,
+        media: any MediaService,
         segment: StoreSegment,
         homeserverURL: URL,
         client: Client,
@@ -99,6 +102,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             sync: sync,
             encryption: encryption,
             notifications: notifications,
+            media: media,
             lifecycle: lifecycle,
             authDelegate: authDelegate,
             authDelegateHandle: authDelegateHandle,
@@ -183,6 +187,7 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
                 sync: sync,
                 encryption: encryption,
                 notifications: notifications,
+                media: RustMediaService(driver: ClientMediaDriver(client: client), lifetime: clientLifetime),
                 segment: localStore.segment,
                 homeserverURL: data.homeserverURL,
                 client: client,
