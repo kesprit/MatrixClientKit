@@ -122,9 +122,6 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
         }
     }
 
-    /// Sends a media; its local echo appears in ``items`` at once.
-    ///
-    /// - Throws: `.notFound(.media)` — before any upstream call — if a local file is missing.
     public func send(
         _ attachment: MatrixClientKitCore.Attachment
     ) async throws -> any MatrixClientKitCore.AttachmentUpload {
@@ -138,11 +135,6 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
         }
     }
 
-    /// The send handle of the local echo `item` carries, or `nil` for a remote or already sent
-    /// item.
-    ///
-    /// - Note: only items that a subscription to ``items`` has seen are known — which is always
-    ///   the case of a displayed item.
     public func sendHandle(
         for item: MatrixClientKitCore.TimelineItem
     ) -> (any MatrixClientKitCore.SendHandle)? {

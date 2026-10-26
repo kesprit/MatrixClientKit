@@ -14,6 +14,21 @@ import MatrixClientKitMocks
         #expect(handle.retryCount == 1)
     }
 
+    @Test func existentialTimelineExposesMediaMembers() async throws {
+        let mock = MockTimeline()
+        let item = SampleData.message("hi", isOwn: true)
+        let handle = MockSendHandle()
+        mock.sendHandles = [item.id: handle]
+        let timeline: any Timeline = mock
+        _ = try await timeline.send(SampleData.imageAttachment())
+        #expect(mock.sentAttachments.count == 1)
+        #expect(timeline.sendHandle(for: item) != nil)
+        #expect(timeline.sendHandle(for: SampleData.message("other")) == nil)
+
+        let session: any MatrixSession = MockMatrixSession()
+        #expect(session.media is MockMediaService)
+    }
+
     @Test func attachmentUploadCancelThenWaitThrowsCancellation() async {
         let upload = MockAttachmentUpload()
         upload.cancel()

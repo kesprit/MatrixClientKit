@@ -95,6 +95,15 @@ public enum SampleData: Sendable {
         )
     }
 
+    /// Builds a sample image ``Attachment`` from bytes in memory.
+    public static func imageAttachment(filename: String = "photo.jpg") -> Attachment {
+        Attachment(
+            source: .data(Data([0xFF, 0xD8, 0xFF]), filename: filename),
+            kind: .image(dimensions: MediaDimensions(width: 640, height: 480), blurhash: nil),
+            mimeType: "image/jpeg"
+        )
+    }
+
     /// Builds a sample ``TimelineItem`` carrying a media message. The body is the caption, or the
     /// file name when there is none.
     public static func imageMessage(
