@@ -97,30 +97,27 @@ public final class RustRoomService: RoomService {
                     let listener = EntriesListener { continuation.yield($0) }
                     let result = roomList.entriesWithDynamicAdapters(pageSize: 50, listener: listener)
 
-                    // `setFilter` dit si le filtre a bien été posé. Ignorer ce booléen livrerait,
-                    // sous le nom de « rooms rejointes », la liste complète — rooms quittées et
-                    // bannies comprises. Une liste qui répond à une autre question que celle
-                    // posée est pire qu'une absence de liste : on termine le flux.
-                    guard result.controller().setFilter(kind: filterKind) else {
-                        continuation.finish()
-                        return
-                    }
-
-                    // Les bindings ne documentent pas si l'abonnement survit à la libération de
-                    // `result` : `entriesWithDynamicAdapters` renvoie un objet intermédiaire
-                    // (`controller()` / `entriesStream()`) — contrairement à
-                    // `RustTimeline.items`, où `addListener` renvoie directement le `TaskHandle`
-                    // sans indirection —, et `result` comme le contrôleur qu'il expose libèrent
-                    // leur côté Rust dans leur `deinit`. Faute de certitude, on retient `result`
-                    // explicitement jusqu'à l'annulation plutôt que de parier sur une durée de
-                    // vie non garantie : le coût d'une référence retenue est nul face au risque
-                    // d'une liste qui cesse silencieusement de se mettre à jour.
-                    // Libéré par la boîte une fois la tâche du flux terminée, à travers la
-                    // ``ClientLifetime`` : il peut alors être le dernier détenteur du client.
+                    // `result` garde le `RoomList` que la tâche du flux, lancée par l'appel
+                    // ci-dessus, emprunte par un pointeur brut (source FFI) : il ne doit tomber
+                    // qu'après la fin de cette tâche. La boîte s'en charge
+                    // (``HandleBox/release(_:after:timeout:)``), à travers la ``ClientLifetime``
+                    // car il peut alors être le dernier détenteur du client. Confié à la boîte
+                    // avant toute sortie, y compris celle d'un filtre refusé.
                     box.store(
                         result.entriesStream(),
                         retaining: EntriesSubscription(result: result, lifetime: self.lifetime)
                     )
+
+                    // `setFilter` dit si le filtre a bien été posé. Ignorer ce booléen livrerait,
+                    // sous le nom de « rooms rejointes », la liste complète — rooms quittées et
+                    // bannies comprises. Une liste qui répond à une autre question que celle
+                    // posée est pire qu'une absence de liste : on termine le flux, après avoir
+                    // arrêté la tâche amont (libération différée, voir plus haut).
+                    guard result.controller().setFilter(kind: filterKind) else {
+                        box.cancel()
+                        continuation.finish()
+                        return
+                    }
                 } catch {
                     // `AsyncStream` n'a pas de canal d'erreur : un abonnement qui échoue ne peut
                     // que terminer le flux sans valeur. Documenté comme tel sur
@@ -132,8 +129,8 @@ public final class RustRoomService: RoomService {
             // Une seule assignation : annuler uniquement la tâche laisserait la souscription
             // amont en vie si la terminaison arrive après le `await` — il faut aussi annuler le
             // handle, d'où la boîte pour couvrir le cas où la terminaison arrive avant que le
-            // handle n'existe. `self` retenu : la boîte relâche ici le résultat amont, qui
-            // retient le client interne.
+            // handle n'existe. `self` retenu le temps de l'annulation ; le résultat amont, lui,
+            // est relâché plus tard par la boîte, à travers la ``ClientLifetime``.
             continuation.onTermination = { _ in
                 withExtendedLifetime(self) {
                     task.cancel()

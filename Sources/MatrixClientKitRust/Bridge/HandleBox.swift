@@ -17,8 +17,8 @@ final class HandleBox: @unchecked Sendable {
     /// Retient le handle, ou l'annule immédiatement si la terminaison a déjà eu lieu.
     ///
     /// - Parameter object: objet additionnel à garder en vie tant que le handle n'est pas
-    ///   annulé **et** sa tâche terminée (voir ``release(_:after:timeout:)``) — utile quand l'abonnement amont dépend d'un objet intermédiaire dont la durée
-    ///   de vie réelle n'est pas documentée par les bindings.
+    ///   annulé **et** sa tâche terminée (voir ``release(_:after:timeout:)``) — utile quand
+    ///   l'abonnement amont dépend d'un objet intermédiaire, voire l'emprunte sans le retenir.
     /// - Important: comme ``cancel()``, cette méthode relâche le verrou **avant** d'appeler du
     ///   code amont. Aucun blocage n'existe aujourd'hui, mais tenir un verrou pendant un appel
     ///   vers du code dont on ne contrôle pas l'implémentation est la discipline qui, un jour de

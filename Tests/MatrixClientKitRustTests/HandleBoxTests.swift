@@ -64,6 +64,29 @@ struct HandleBoxTests {
         #expect(weakObject == nil)
     }
 
+    /// La séquence d'un filtre refusé dans `RustRoomService` : `store`, `cancel` par la tâche,
+    /// puis `cancel` par la terminaison du flux. Le second appel ne libère rien plus tôt.
+    @Test
+    func aSecondCancelKeepsTheObjectUntilTheTaskEnds() async throws {
+        let handle = SlowTaskHandle()
+        let box = HandleBox()
+        weak var weakObject: Retained?
+        do {
+            let object = Retained()
+            weakObject = object
+            box.store(handle, retaining: object)
+        }
+
+        box.cancel()
+        box.cancel()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(weakObject != nil)
+
+        handle.finish()
+        try await waitUntil { weakObject == nil }
+        #expect(weakObject == nil)
+    }
+
     @Test
     func aFinishedTaskReleasesAtOnce() {
         let handle = SlowTaskHandle()
