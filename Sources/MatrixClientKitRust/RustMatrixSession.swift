@@ -129,6 +129,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             let persistence = restorer.persistence
             let session = try client.session()
             let data = try SessionMapper.sessionData(from: session, storeID: localStore.segment.storeID)
+            // Sans cela l'amont ne renseigne jamais `notSentYet(progress:)`.
+            client.enableSendQueueUploadProgress(enable: true)
             let syncService = try await client.syncService().finish()
             let sync = RustSyncController(service: syncService)
 

@@ -144,7 +144,9 @@ enum TimelineMapper {
                     timestamp: date(from: event.timestamp),
                     isOwn: event.isOwn,
                     isEdited: message.isEdited,
-                    sendState: sendState(from: event.localSendState)
+                    sendState: sendState(from: event.localSendState),
+                    media: MediaMapper.attachment(from: message.msgType),
+                    uploadProgress: MediaMapper.uploadProgress(from: event.localSendState)
                 )
             )
         case .redacted:
