@@ -140,7 +140,7 @@ check *what* your code sent:
 the thumbnails asked for. `SampleData.mediaAttachment(...)`, `SampleData.imageMessage(...)` and
 `SampleData.imageAttachment()` build the values around them. A message send hands back a
 `MockSendHandle`, a media send a `MockAttachmentUpload`; `MockTimeline.sendHandles` decides which
-handle `sendHandle(for:)` finds for an item. See <doc:Media>.
+handle `sendHandle(for:)` finds for an item. See <doc:WorkingWithMedia>.
 
 ```swift
 @Test func aFailedMediaCanBeRetried() async throws {

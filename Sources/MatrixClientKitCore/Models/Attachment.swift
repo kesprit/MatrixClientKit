@@ -1,6 +1,6 @@
 import Foundation
 
-/// A media to send with ``Timeline/send(_:)``.
+/// A media to send with ``Timeline/send(_:)->AttachmentUpload``.
 public struct Attachment: Sendable, Hashable {
     /// Where the bytes to send come from.
     public enum Source: Sendable, Hashable {

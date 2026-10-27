@@ -1,4 +1,4 @@
-/// A media being uploaded by ``Timeline/send(_:)``.
+/// A media being uploaded by ``Timeline/send(_:)->AttachmentUpload``.
 ///
 /// Releasing this value cancels nothing: the upload goes on. Only ``cancel()`` stops it.
 public protocol AttachmentUpload: Sendable {

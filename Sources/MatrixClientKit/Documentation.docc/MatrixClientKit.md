@@ -9,7 +9,7 @@ MatrixClientKit wraps the official Matrix Rust SDK behind a modern Swift API: `a
 **snapshots** — you receive the complete, current state and never apply a diff yourself.
 
 See <doc:GettingStarted> for a first end-to-end flow, <doc:Authentication> to sign in against any
-homeserver, <doc:Media> to show and send images, videos, audio and files,
+homeserver, <doc:WorkingWithMedia> to show and send images, videos, audio and files,
 <doc:VerificationAndRecovery> to handle device trust, <doc:PushNotifications> to receive push notifications through a notification service
 extension, and <doc:TestingWithMocks> to test an application that depends on the package.
 
@@ -56,7 +56,7 @@ Two behaviours to know before depending on this version:
 
 - <doc:GettingStarted>
 - <doc:Authentication>
-- <doc:Media>
+- <doc:WorkingWithMedia>
 - <doc:VerificationAndRecovery>
 - <doc:PushNotifications>
 - <doc:TestingWithMocks>
