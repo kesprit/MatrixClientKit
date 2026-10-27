@@ -104,6 +104,23 @@ func firstValue<Element: Sendable>(
 /// 20 s après `env`. Et la créatrice étant membre d'office, aucune invitation ni adhésion n'est
 /// nécessaire — l'API publique n'expose pas d'adhésion à un salon.
 func createEncryptedRoom(on homeserver: URL, user: String, password: String) async throws -> RoomID {
+    try await createRoom(on: homeserver, user: user, password: password, encrypted: true)
+}
+
+/// Comme ``createEncryptedRoom(on:user:password:)``, chiffré ou non. `powerLevels` remplace des
+/// clés du premier `m.room.power_levels` (`power_level_content_override`) : le premier événement
+/// de niveaux n'est soumis à aucune règle d'autorisation, il peut donc interdire à la créatrice
+/// elle-même un type d'événement — à condition d'imposer une version de salon antérieure à 12
+/// (`roomVersion`), où la créatrice n'a pas encore un niveau infini (MSC4289). Synapse crée des
+/// salons en version 12 par défaut.
+func createRoom(
+    on homeserver: URL,
+    user: String,
+    password: String,
+    encrypted: Bool,
+    powerLevels: [String: Any]? = nil,
+    roomVersion: String? = nil
+) async throws -> RoomID {
     var login = URLRequest(url: homeserver.appending(path: "_matrix/client/v3/login"))
     login.httpMethod = "POST"
     login.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -120,17 +137,26 @@ func createEncryptedRoom(on homeserver: URL, user: String, password: String) asy
     create.httpMethod = "POST"
     create.setValue("application/json", forHTTPHeaderField: "Content-Type")
     create.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    create.httpBody = try JSONSerialization.data(withJSONObject: [
+    var body: [String: Any] = [
         "preset": "private_chat",
         "name": "MatrixClientKit Harness \(UUID())",
-        "initial_state": [
+    ]
+    if encrypted {
+        body["initial_state"] = [
             [
                 "type": "m.room.encryption",
                 "state_key": "",
                 "content": ["algorithm": "m.megolm.v1.aes-sha2"],
             ]
-        ],
-    ])
+        ]
+    }
+    if let powerLevels {
+        body["power_level_content_override"] = powerLevels
+    }
+    if let roomVersion {
+        body["room_version"] = roomVersion
+    }
+    create.httpBody = try JSONSerialization.data(withJSONObject: body)
     let created: Result<[String: Any], any Error>
     do {
         created = .success(try await harnessJSON(for: create, step: "createRoom"))

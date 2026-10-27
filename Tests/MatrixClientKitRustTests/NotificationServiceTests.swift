@@ -109,7 +109,7 @@ private func makeService(
     settings: FakeSettings = FakeSettings(),
     facts: RoomFacts? = RoomFacts(isEncrypted: true, isOneToOne: false)
 ) -> RustNotificationService {
-    RustNotificationService(pushers: pushers, settings: settings, roomFacts: { _ in facts })
+    RustNotificationService(pushers: pushers, settings: settings, roomFacts: { _ in facts }, lifetime: .detached())
 }
 
 // MARK: Pusher

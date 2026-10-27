@@ -90,7 +90,7 @@ private final class ProgressLog: @unchecked Sendable {
 }
 
 private func makeService(_ encryption: FakeEncryption) -> RustEncryptionService {
-    RustEncryptionService(encryption: encryption, sessionVerification: StubVerification())
+    RustEncryptionService(encryption: encryption, sessionVerification: StubVerification(), lifetime: .detached())
 }
 
 @Test func verificationStatusStartsWithTheCurrentStateThenFollowsUpdates() async {

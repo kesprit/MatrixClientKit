@@ -62,6 +62,77 @@ public enum SampleData: Sendable {
         )
     }
 
+    /// Builds a sample ``MediaSource`` at `mxc://example.org/<id>`.
+    public static func mediaSource(_ id: String = "media") -> MediaSource {
+        MediaSource(url: "mxc://example.org/\(id)")!
+    }
+
+    /// Builds a sample ``MediaAttachment`` of the given kind, with a plausible file name and
+    /// MIME type for it.
+    public static func mediaAttachment(
+        kind: MediaAttachment.Kind = .image,
+        source: MediaSource = mediaSource(),
+        filename: String? = nil,
+        caption: String? = nil,
+        size: Int? = 2048,
+        dimensions: MediaDimensions? = nil
+    ) -> MediaAttachment {
+        let (defaultName, mimeType): (String, String) =
+            switch kind {
+            case .image: ("photo.jpg", "image/jpeg")
+            case .video: ("clip.mp4", "video/mp4")
+            case .audio: ("song.mp3", "audio/mpeg")
+            case .voice: ("voice.ogg", "audio/ogg")
+            case .file: ("document.pdf", "application/pdf")
+            }
+        return MediaAttachment(
+            kind: kind,
+            source: source,
+            filename: filename ?? defaultName,
+            caption: caption,
+            mimeType: mimeType,
+            size: size,
+            dimensions: dimensions
+                ?? (kind == .image || kind == .video ? MediaDimensions(width: 640, height: 480) : nil)
+        )
+    }
+
+    /// Builds a sample image ``Attachment`` from bytes in memory.
+    public static func imageAttachment(filename: String = "photo.jpg") -> Attachment {
+        Attachment(
+            source: .data(Data([0xFF, 0xD8, 0xFF]), filename: filename),
+            kind: .image(dimensions: MediaDimensions(width: 640, height: 480), blurhash: nil),
+            mimeType: "image/jpeg"
+        )
+    }
+
+    /// Builds a sample ``TimelineItem`` carrying a media message. The body is the caption, or the
+    /// file name when there is none.
+    public static func imageMessage(
+        _ media: MediaAttachment = mediaAttachment(),
+        from sender: String = "@alice:matrix.org",
+        isOwn: Bool = false,
+        uploadProgress: UploadProgress? = nil
+    ) -> TimelineItem {
+        TimelineItem(
+            id: UUID().uuidString,
+            kind: .message(
+                Message(
+                    eventID: EventID(rawValue: "$\(UUID().uuidString)"),
+                    sender: UserID(rawValue: sender) ?? UserID(rawValue: "@unknown:matrix.org")!,
+                    senderDisplayName: nil,
+                    body: media.caption ?? media.filename,
+                    timestamp: Date(),
+                    isOwn: isOwn,
+                    isEdited: false,
+                    sendState: .sent,
+                    media: media,
+                    uploadProgress: uploadProgress
+                )
+            )
+        )
+    }
+
     /// Builds a sample ``MatrixNotification`` from Alice in the "Lounge" room.
     public static func notification(
         kind: MatrixNotification.Kind = .message(body: "Hello"),

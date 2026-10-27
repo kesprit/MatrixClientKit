@@ -3,12 +3,29 @@ import MatrixClientKitCore
 
 /// Implémentation de ``EncryptionService`` adossée au SDK Rust.
 public final class RustEncryptionService: EncryptionService {
-    private let encryption: any EncryptionDriving
+    private let lifetime: ClientLifetime
+    /// Retient le client interne du SDK : libéré par ``deinit`` à travers ``lifetime``, client
+    /// encore vivant (voir ``ClientLifetime``). Écrit seulement par l'initialiseur et par
+    /// ``deinit``, d'où `nonisolated(unsafe)`.
+    nonisolated(unsafe) private var driver: (any EncryptionDriving)?
     public let sessionVerification: any SessionVerification
 
-    init(encryption: any EncryptionDriving, sessionVerification: any SessionVerification) {
-        self.encryption = encryption
+    init(encryption: any EncryptionDriving, sessionVerification: any SessionVerification, lifetime: ClientLifetime) {
+        self.lifetime = lifetime
+        self.driver = encryption
         self.sessionVerification = sessionVerification
+    }
+
+    deinit {
+        lifetime.release(&driver)
+    }
+
+    private var encryption: any EncryptionDriving {
+        guard let driver else {
+            // Inatteignable : `driver` n'est vidé que par `deinit`.
+            preconditionFailure("RustEncryptionService used after deinitialization")
+        }
+        return driver
     }
 
     public var verificationStatus: AsyncStream<VerificationStatus> {

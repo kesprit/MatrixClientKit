@@ -12,6 +12,8 @@ public protocol MatrixSession: Sendable {
     var encryption: any EncryptionService { get }
     /// Push notifications: this device's pusher, and how much each room notifies.
     var notifications: any NotificationService { get }
+    /// Media: content, thumbnails and files of received media, and the upload size limit.
+    var media: any MediaService { get }
 
     /// A stream of the session's authentication state, starting with the current value. Every
     /// access opens an independent subscription.

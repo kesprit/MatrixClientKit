@@ -2,9 +2,12 @@
 ///
 /// Un diff dont l'index est hors bornes est ignoré ; les diffs suivants sont appliqués
 /// normalement. L'application ne provoque jamais d'erreur fatale.
-enum CollectionDiffApplier: Sendable {
+///
+/// - Note: portée `package` : `RustTimeline` l'applique aussi à la liste des ids d'une
+///   souscription, pour le registre des handles d'envoi.
+package enum CollectionDiffApplier: Sendable {
 
-    static func apply<Element: Sendable>(
+    package static func apply<Element: Sendable>(
         _ diffs: [CollectionDiff<Element>],
         to items: [Element]
     ) -> [Element] {

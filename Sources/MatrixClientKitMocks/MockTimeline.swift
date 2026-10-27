@@ -18,6 +18,11 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
     private var _sendError: MatrixError?
     private var _paginationError: MatrixError?
     private var _paginateResult = true
+    private var _sentAttachments: [Attachment] = []
+    private var _attachmentSendError: MatrixError?
+    private var _nextAttachmentUpload = MockAttachmentUpload()
+    private var _nextSendHandle = MockSendHandle()
+    private var _sendHandles: [TimelineItem.ID: MockSendHandle] = [:]
 
     public init() {
         (stream, continuation) = AsyncStream<[TimelineItem]>.makeStream(
@@ -54,6 +59,39 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
         set { lock.withLock { _paginateResult = newValue } }
     }
 
+    /// The attachments passed to ``send(_:)-(Attachment)``, in the order they were sent.
+    public var sentAttachments: [Attachment] {
+        lock.withLock { _sentAttachments }
+    }
+
+    /// The error to throw from ``send(_:)-(Attachment)``. `nil` by default, meaning sends succeed.
+    public var attachmentSendError: MatrixError? {
+        get { lock.withLock { _attachmentSendError } }
+        set { lock.withLock { _attachmentSendError = newValue } }
+    }
+
+    /// The upload ``send(_:)-(Attachment)`` returns. Created once with the mock: the same
+    /// instance is returned on every call until you replace it — set a new one between sends to
+    /// tell them apart.
+    public var nextAttachmentUpload: MockAttachmentUpload {
+        get { lock.withLock { _nextAttachmentUpload } }
+        set { lock.withLock { _nextAttachmentUpload = newValue } }
+    }
+
+    /// The handle a message send returns. Created once with the mock: the same instance is
+    /// returned on every call until you replace it.
+    public var nextSendHandle: MockSendHandle {
+        get { lock.withLock { _nextSendHandle } }
+        set { lock.withLock { _nextSendHandle = newValue } }
+    }
+
+    /// The handle ``sendHandle(for:)`` returns for each item, by identifier. Empty by default,
+    /// meaning every item is remote or already sent.
+    public var sendHandles: [TimelineItem.ID: MockSendHandle] {
+        get { lock.withLock { _sendHandles } }
+        set { lock.withLock { _sendHandles = newValue } }
+    }
+
     /// Pushes a new snapshot into ``items``.
     public func emit(_ items: [TimelineItem]) {
         continuation.yield(items)
@@ -73,8 +111,30 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
         return paginateResult
     }
 
-    public func send(_ content: MessageContent) async throws {
+    /// Records `content`, then returns ``nextSendHandle`` — or throws ``sendError``, in which
+    /// case nothing is recorded.
+    @discardableResult
+    public func send(_ content: MessageContent) async throws -> any SendHandle {
         if let error = sendError { throw error }
-        lock.withLock { _sentMessages.append(content) }
+        return lock.withLock {
+            _sentMessages.append(content)
+            return _nextSendHandle
+        }
+    }
+
+    /// Records `attachment`, then returns ``nextAttachmentUpload`` — or throws
+    /// ``attachmentSendError``, in which case nothing is recorded.
+    @discardableResult
+    public func send(_ attachment: Attachment) async throws -> any AttachmentUpload {
+        if let error = attachmentSendError { throw error }
+        return lock.withLock {
+            _sentAttachments.append(attachment)
+            return _nextAttachmentUpload
+        }
+    }
+
+    /// The handle configured in ``sendHandles`` for `item`, or `nil`.
+    public func sendHandle(for item: TimelineItem) -> (any SendHandle)? {
+        lock.withLock { _sendHandles[item.id] }
     }
 }

@@ -14,5 +14,31 @@ public protocol Timeline: Sendable {
     func paginateBackwards(count: Int) async throws -> Bool
 
     /// Sends a message. Its local echo appears in ``items`` with no further action.
-    func send(_ content: MessageContent) async throws
+    ///
+    /// - Returns: a handle to cancel the send while the message has not left, or to retry it
+    ///   after a failure.
+    @discardableResult
+    func send(_ content: MessageContent) async throws -> any SendHandle
+
+    /// Sends a media. Its local echo appears in ``items`` at once, with ``Message/uploadProgress``.
+    ///
+    /// The thumbnail of an image or a video, when given, is validated like the main file; for any
+    /// other kind it is ignored (see ``Attachment/thumbnail``).
+    ///
+    /// - Returns: a handle to cancel the upload while it is being prepared, or wait until it is
+    ///   queued. Once queued, the media is cancelled or retried like a message, through
+    ///   ``sendHandle(for:)`` on its local echo.
+    /// - Throws: ``MatrixError/notFound(_:)`` with `.media`, before any upstream call, when a
+    ///   local file (the media, or the thumbnail of an image or a video) is missing.
+    @discardableResult
+    func send(_ attachment: Attachment) async throws -> any AttachmentUpload
+
+    /// The handle of the local echo `item` carries, or `nil` for a remote or already sent item.
+    ///
+    /// This is the path of the "retry" and "give up" buttons of a failed message, media included,
+    /// even after the application was relaunched.
+    ///
+    /// - Note: only items that a subscription to ``items`` has seen are known — which is always
+    ///   the case of a displayed item.
+    func sendHandle(for item: TimelineItem) -> (any SendHandle)?
 }

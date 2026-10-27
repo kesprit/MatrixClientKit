@@ -30,4 +30,6 @@ rc_login:
   account: { per_second: 1000, burst_count: 1000 }
   failed_attempts: { per_second: 1000, burst_count: 1000 }
 rc_message: { per_second: 1000, burst_count: 1000 }
+# Chaque cas média crée son salon : la limite par défaut (10 d'affilée) ne tient pas la suite.
+rc_room_creation: { per_second: 1000, burst_count: 1000 }
 log_config: null
