@@ -84,7 +84,7 @@ import Testing
         #expect(received.isEmpty)
     }
 
-    @Test func typingSubscriptionOpenedAfterHandleFinishEndsWithoutValue() async {
+    @Test(.timeLimit(.minutes(1))) func typingSubscriptionOpenedAfterHandleFinishEndsWithoutValue() async {
         let handle = makeHandle()
         handle.finish()
         let stream = handle.typingUsers
@@ -95,7 +95,7 @@ import Testing
         #expect(received.isEmpty)
     }
 
-    @Test func typingSubscriptionOpenedAfterServiceFinishEndsWithoutValue() async throws {
+    @Test(.timeLimit(.minutes(1))) func typingSubscriptionOpenedAfterServiceFinishEndsWithoutValue() async throws {
         let service = MockRoomService()
         let known = RoomID(rawValue: "!known:e.org")!
         _ = service.handle(for: known)

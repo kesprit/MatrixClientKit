@@ -35,7 +35,8 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
     ///   like "invited rooms are hidden" green against code that does not hide them.
     public func list(filter: RoomFilter) -> AsyncStream<[RoomSummary]> {
         AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
-            let current = lock.withLock { () -> [RoomSummary] in
+            let current = lock.withLock { () -> [RoomSummary]? in
+                if isFinished { return nil }
                 let identifier = nextObserverID
                 nextObserverID += 1
                 observers[identifier] = Observer(filter: filter, continuation: continuation)
@@ -44,7 +45,11 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
                 }
                 return rooms
             }
-            continuation.yield(Self.apply(filter, to: current))
+            if let current {
+                continuation.yield(Self.apply(filter, to: current))
+            } else {
+                continuation.finish()
+            }
         }
     }
 
@@ -62,8 +67,9 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
     /// Ends every stream opened by ``list(filter:)``, and the typing streams of the handles
     /// already returned.
     ///
-    /// A typing subscription opened afterwards, on a known handle or on one created later, ends at
-    /// once without any value.
+    /// A list or typing subscription opened afterwards — a typing one on a known handle or on one
+    /// created later — ends at once without any value, and ``emit(_:)`` does not reopen it. That
+    /// reproduces the real service, whose stream ends with no value when its subscription fails.
     ///
     /// - Important: without this, the `for await` loop the README and the DocC teach never
     ///   returns when driven by this mock.
