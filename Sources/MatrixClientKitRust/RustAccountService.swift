@@ -119,7 +119,8 @@ public final class RustAccountService: AccountService {
     /// première requête soit envoyée sans `authData` et la dit vouée à l'échec ; la seconde, identique
     /// mais authentifiée, aboutit. Les liaisons n'exposent ni les flux proposés ni la session UIAA :
     /// l'échec du premier appel n'est donc pas inspecté, sauf pour les causes qui rendraient
-    /// le second appel inutile (réseau, limitation de débit, annulation).
+    /// le second appel inutile (réseau, limitation de débit, jeton inconnu —
+    /// `.authentication(.unknownToken)` —, annulation).
     public func deactivate(password: String, eraseData: Bool) async throws {
         guard !usesOAuth else {
             throw MatrixError.unexpected(

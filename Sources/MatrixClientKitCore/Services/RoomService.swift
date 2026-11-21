@@ -43,4 +43,12 @@ public protocol RoomHandle: Sendable {
 
     /// Opens the room's timeline.
     func timeline() async throws -> any Timeline
+
+    /// A stream of snapshots: every value is the complete, current list of members typing in this
+    /// room, the current user excluded. Every access opens an independent subscription.
+    var typingUsers: AsyncStream<[UserID]> { get }
+
+    /// Tells the room whether the current user is typing. Call it with `true` as the user types and
+    /// with `false` when they stop or send.
+    func setTyping(_ isTyping: Bool) async throws
 }

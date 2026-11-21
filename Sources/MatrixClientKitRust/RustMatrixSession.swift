@@ -11,6 +11,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
     public var encryption: any EncryptionService { live.encryption }
     public var notifications: any NotificationService { live.notifications }
     public var media: any MediaService { live.media }
+    public var profile: any ProfileService { live.profile }
+    public var account: any AccountService { live.account }
 
     /// Le store local de la session, et l'adresse du serveur qui l'a émise.
     let segment: StoreSegment
@@ -44,6 +46,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         let encryption: any EncryptionService
         let notifications: any NotificationService
         let media: any MediaService
+        let profile: any ProfileService
+        let account: any AccountService
         let lifecycle: SessionLifecycle
         /// Retenus pour la durée de la session : un delegate libéré ne signalerait plus aucune
         /// déconnexion serveur, et l'annulation du handle désabonnerait le delegate.
@@ -80,6 +84,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
         encryption: any EncryptionService,
         notifications: any NotificationService,
         media: any MediaService,
+        profile: any ProfileService,
+        account: any AccountService,
         segment: StoreSegment,
         homeserverURL: URL,
         client: Client,
@@ -103,6 +109,8 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
             encryption: encryption,
             notifications: notifications,
             media: media,
+            profile: profile,
+            account: account,
             lifecycle: lifecycle,
             authDelegate: authDelegate,
             authDelegateHandle: authDelegateHandle,
@@ -188,6 +196,14 @@ public final class RustMatrixSession: MatrixClientKitCore.MatrixSession {
                 encryption: encryption,
                 notifications: notifications,
                 media: RustMediaService(driver: ClientMediaDriver(client: client), lifetime: clientLifetime),
+                profile: RustProfileService(driver: client, lifetime: clientLifetime),
+                account: RustAccountService(
+                    driver: ClientAccountDriver(client: client),
+                    lifetime: clientLifetime,
+                    userID: data.userID,
+                    usesOAuth: data.oauthData != nil,
+                    lifecycle: lifecycle
+                ),
                 segment: localStore.segment,
                 homeserverURL: data.homeserverURL,
                 client: client,
