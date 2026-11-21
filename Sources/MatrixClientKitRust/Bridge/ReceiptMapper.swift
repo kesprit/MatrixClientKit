@@ -5,6 +5,13 @@ import MatrixRustSDK
 /// Traduit les accusés de lecture amont vers le domaine.
 enum ReceiptMapper {
 
+    static func receiptType(for visibility: ReadReceiptVisibility) -> ReceiptType {
+        switch visibility {
+        case .public: .read
+        case .private: .readPrivate
+        }
+    }
+
     /// Les accusés des autres membres, du plus récent au plus ancien, puis par `UserID`.
     ///
     /// - Note: l'amont indexe les accusés par user ID et peut y inclure l'utilisateur courant ;

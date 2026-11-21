@@ -116,6 +116,22 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
         }
     }
 
+    /// Marks the room as read up to its latest visible message, then moves the read marker there.
+    ///
+    /// The read marker is not moved when the receipt fails.
+    public func markAsRead(visibility: ReadReceiptVisibility) async throws {
+        try await timeline.markAsRead(visibility: visibility)
+    }
+
+    /// Marks the room as read up to `eventID`, the last message the user saw, then moves the read
+    /// marker there.
+    ///
+    /// The read marker is not moved when the receipt fails. An unknown event surfaces the
+    /// upstream error, mapped.
+    public func markAsRead(upTo eventID: EventID, visibility: ReadReceiptVisibility) async throws {
+        try await timeline.markAsRead(upTo: eventID, visibility: visibility)
+    }
+
     @discardableResult
     public func send(
         _ content: MatrixClientKitCore.MessageContent

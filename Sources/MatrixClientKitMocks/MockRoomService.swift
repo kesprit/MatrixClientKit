@@ -19,6 +19,7 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
     private var rooms: [RoomSummary]
     private var observers: [Int: Observer] = [:]
     private var nextObserverID = 0
+    private var handles: [RoomID: MockRoomHandle] = [:]
 
     /// The timeline every room of this mock returns.
     public let timeline = MockTimeline()
@@ -57,7 +58,8 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
         }
     }
 
-    /// Ends every stream opened by ``list(filter:)``.
+    /// Ends every stream opened by ``list(filter:)``, and the typing streams of the handles
+    /// already returned.
     ///
     /// - Important: without this, the `for await` loop the README and the DocC teach never
     ///   returns when driven by this mock.
@@ -70,10 +72,29 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
         for observer in observers {
             observer.continuation.finish()
         }
+        let handles = lock.withLock { Array(self.handles.values) }
+        for handle in handles {
+            handle.finish()
+        }
     }
 
+    /// Returns the handle for a room: always the same ``MockRoomHandle`` for a given identifier,
+    /// so a test can drive and inspect the handle the code under test obtained through this
+    /// service. Any identifier resolves, whether or not it is in the list.
     public func room(_ id: RoomID) async throws -> any RoomHandle {
-        MockRoomHandle(id: id, timeline: timeline)
+        handle(for: id)
+    }
+
+    /// The handle ``room(_:)`` returns for `id`, created on first use. Synchronous, so a test can
+    /// call ``MockRoomHandle/emitTypingUsers(_:)`` or read ``MockRoomHandle/typingNotices``
+    /// without awaiting.
+    public func handle(for id: RoomID) -> MockRoomHandle {
+        lock.withLock {
+            if let existing = handles[id] { return existing }
+            let created = MockRoomHandle(id: id, timeline: timeline)
+            handles[id] = created
+            return created
+        }
     }
 
     private func removeObserver(_ identifier: Int) {
@@ -91,9 +112,19 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
 
 /// A drivable room handle for tests: always returns the ``MockTimeline`` it was given at
 /// initialisation.
-public struct MockRoomHandle: RoomHandle {
+///
+/// Typing is driven by ``emitTypingUsers(_:)`` and recorded by ``typingNotices``. Like the real
+/// handle, every access to ``typingUsers`` opens its own subscription, and ``finish()`` ends the
+/// open ones.
+public final class MockRoomHandle: RoomHandle, @unchecked Sendable {
     public let id: RoomID
     private let mockTimeline: MockTimeline
+
+    private let lock = NSLock()
+    private var typingObservers: [Int: AsyncStream<[UserID]>.Continuation] = [:]
+    private var nextTypingObserverID = 0
+    private var _typingNotices: [Bool] = []
+    private var _typingError: MatrixError?
 
     public init(id: RoomID, timeline: MockTimeline) {
         self.id = id
@@ -102,5 +133,61 @@ public struct MockRoomHandle: RoomHandle {
 
     public func timeline() async throws -> any Timeline {
         mockTimeline
+    }
+
+    /// Each value passed to ``setTyping(_:)``, in call order. A call is recorded even when it
+    /// then throws ``typingError``.
+    public var typingNotices: [Bool] {
+        lock.withLock { _typingNotices }
+    }
+
+    /// When set, ``setTyping(_:)`` records the call, then throws it.
+    public var typingError: MatrixError? {
+        get { lock.withLock { _typingError } }
+        set { lock.withLock { _typingError = newValue } }
+    }
+
+    /// A stream of typing snapshots, in `.bufferingNewest(1)` like the real handle. It emits
+    /// nothing until ``emitTypingUsers(_:)`` is called.
+    public var typingUsers: AsyncStream<[UserID]> {
+        AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            let identifier = lock.withLock { () -> Int in
+                let identifier = nextTypingObserverID
+                nextTypingObserverID += 1
+                typingObservers[identifier] = continuation
+                return identifier
+            }
+            continuation.onTermination = { [weak self] _ in
+                self?.lock.withLock { _ = self?.typingObservers.removeValue(forKey: identifier) }
+            }
+        }
+    }
+
+    /// Pushes a snapshot of the members typing into every open ``typingUsers`` stream.
+    public func emitTypingUsers(_ users: [UserID]) {
+        let observers = lock.withLock { Array(typingObservers.values) }
+        for observer in observers {
+            observer.yield(users)
+        }
+    }
+
+    /// Records the notice, then throws ``typingError`` when one is set.
+    public func setTyping(_ isTyping: Bool) async throws {
+        try lock.withLock {
+            _typingNotices.append(isTyping)
+            if let _typingError { throw _typingError }
+        }
+    }
+
+    /// Ends every stream opened by ``typingUsers``.
+    public func finish() {
+        let observers = lock.withLock { () -> [AsyncStream<[UserID]>.Continuation] in
+            let current = Array(typingObservers.values)
+            typingObservers.removeAll()
+            return current
+        }
+        for observer in observers {
+            observer.finish()
+        }
     }
 }
