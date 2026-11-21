@@ -119,6 +119,15 @@ import Testing
         #expect(mock.deactivations == [.init(password: "p", eraseData: false)])
     }
 
+    @Test func deactivateErrorTakesPrecedenceOverTheGeneralError() async {
+        let mock = MockAccountService()
+        mock.error = .server(.maintenance)
+        mock.deactivateError = .authentication(.invalidCredentials)
+        await #expect(throws: MatrixError.authentication(.invalidCredentials)) {
+            try await mock.deactivate(password: "p", eraseData: false)
+        }
+    }
+
     @Test func deactivateErrorLeavesOtherCallsSucceeding() async throws {
         let mock = MockAccountService()
         let url = try #require(URL(string: "https://account.example.org/deactivate"))

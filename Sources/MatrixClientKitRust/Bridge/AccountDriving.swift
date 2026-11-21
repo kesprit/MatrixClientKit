@@ -9,6 +9,7 @@ protocol AccountDriving: Sendable {
     func ignoredUsers() async throws -> [String]
     func ignoreUser(userId: String) async throws
     func unignoreUser(userId: String) async throws
+    func deactivateAccount(authData: AuthData?, eraseData: Bool) async throws
     func subscribeToIgnoredUsers(listener: any IgnoredUsersListener) -> any TaskHandleProtocol
 }
 
@@ -30,6 +31,10 @@ struct ClientAccountDriver: AccountDriving {
 
     func unignoreUser(userId: String) async throws {
         try await client.unignoreUser(userId: userId)
+    }
+
+    func deactivateAccount(authData: AuthData?, eraseData: Bool) async throws {
+        try await client.deactivateAccount(authData: authData, eraseData: eraseData)
     }
 
     func subscribeToIgnoredUsers(listener: any IgnoredUsersListener) -> any TaskHandleProtocol {

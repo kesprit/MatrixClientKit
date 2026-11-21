@@ -28,9 +28,19 @@ import MatrixClientKitCore
         #expect(try AccountMapper.managementURL(from: nil) == nil)
     }
 
+    @Test(arguments: ["http://account.example.org/", "ftp://account.example.org/", "myapp://account"])
+    func aNonHTTPSURLIsUnexpected(_ string: String) {
+        #expect { try AccountMapper.managementURL(from: string) } throws: { error in
+            if case MatrixError.unexpected = error { true } else { false }
+        }
+    }
+
     @Test func malformedURLIsUnexpected() {
-        #expect(throws: MatrixError.self) { try AccountMapper.managementURL(from: "not a url with spaces") }
-        #expect(throws: MatrixError.self) { try AccountMapper.managementURL(from: "") }
+        for malformed in ["not a url with spaces", ""] {
+            #expect { try AccountMapper.managementURL(from: malformed) } throws: { error in
+                if case MatrixError.unexpected = error { true } else { false }
+            }
+        }
     }
 
     @Test func ignoredUsersDropsMalformedIdentifiers() {

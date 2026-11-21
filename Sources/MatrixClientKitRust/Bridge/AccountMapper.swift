@@ -23,11 +23,15 @@ enum AccountMapper {
     /// L'URL de gestion rendue par l'amont ; `nil` si le serveur ne délègue pas la gestion du
     /// compte. Une chaîne qui n'est pas une URL valide est une erreur, pas un `nil` : l'appelant
     /// y verrait à tort un serveur sans page de gestion.
+    ///
+    /// Seul `https` est accepté : l'application ouvre cette URL dans un navigateur où l'utilisateur
+    /// saisit ses identifiants, et un schéma `http` ou personnalisé les exposerait ou détournerait
+    /// la page vers une autre application.
     static func managementURL(from string: String?) throws -> URL? {
         guard let string else { return nil }
-        guard !string.isEmpty, let url = URL(string: string), url.scheme != nil else {
+        guard !string.isEmpty, let url = URL(string: string), url.scheme?.lowercased() == "https" else {
             throw MatrixError.unexpected(
-                message: "The account management address is not a valid URL.", details: string)
+                message: "The account management address is not a valid https URL.", details: string)
         }
         return url
     }
