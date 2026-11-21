@@ -1,8 +1,10 @@
 # MatrixClientKit 0.6 — PRD
 
 **Date :** 2026-11-21
-**Statut :** rédigé sans séance de questions ; chaque arbitrage non tranché par la feuille de route
-est marqué *décision de rédaction*. Une seule question ouverte (§13, Q1) conditionne une tâche (T8).
+**Statut :** amendé le 2026-11-21 après relecture de T3 : les accusés de lecture sont portés par
+`TimelineItem`, plus par `Message` (§13.1, D2 ; tâche T3b). Q1 est tranchée : désactivation incluse
+(§13.1, D1). Les autres arbitrages non tranchés par la feuille de route restent marqués *décision de
+rédaction*.
 **Entrées :** README (feuille de route : « 0.6 — Read receipts, typing, presence (publishing only —
 the SDK does not expose observing it), profile and account ») ; spec 0.4 (§1 : gestion du compte via
 l'URL MAS reportée en 0.6 ; §2.8 : présence) ; spec 0.5 (§1 : avatars des utilisateurs en 0.6,
@@ -43,14 +45,14 @@ privé), **afficher qui a lu quoi** et **qui écrit**, **publier la présence** 
 | Inclus | Exclu (et palier) |
 | --- | --- |
 | Envoi d'accusés de lecture, public (`m.read`) ou privé (`m.read.private`), avec déplacement du marqueur de lecture (`m.fully_read`) | Drapeau « marqué non lu » d'une room (`setUnreadFlag`) — plus tard |
-| Accusés de lecture des autres par message (`Message.readReceipts`) | Fils de discussion (accusés par thread) — avec les threads, plus tard |
+| Accusés de lecture des autres par item de timeline (`TimelineItem.readReceipts`) | Fils de discussion (accusés par thread) — avec les threads, plus tard |
 | Notifications de frappe : publier, observer (`RoomHandle`) | — |
 | Publication de la présence (`online`, `unavailable`, `offline`) | **Observer** la présence d'autrui : l'amont ne l'expose pas |
 | Profil : lire celui d'un utilisateur, changer son nom et son avatar, retirer l'avatar | Observer son propre profil en direct (exige l'extension *Profiles* du sliding sync, §3.2) ; statut et appel MSC4426 |
 | Avatar de l'expéditeur dans `Message` (`senderAvatar`) | Liste des membres d'une room, profil propre à une room — plus tard |
 | Gestion du compte via l'URL du serveur d'autorisation (MAS) | Changement de mot de passe hors MAS : l'amont ne l'expose pas |
 | Utilisateurs ignorés : observer, ignorer, ne plus ignorer | Réinitialisation de l'identité cryptographique (`crossSigningReset`) — palier « Later » du README |
-| Désactivation d'un compte à mot de passe (**sous réserve de Q1**) | Désactivation d'un compte MAS par l'API : passe par l'URL de gestion |
+| Désactivation d'un compte à mot de passe (Q1 tranchée : incluse, §13.1) | Désactivation d'un compte MAS par l'API : passe par l'URL de gestion |
 | — | Galeries (`sendGallery`) — 0.7 ou plus tard (*décision de rédaction*, §2.1) |
 | — | Capacités du serveur (`canChangeDisplayname`, `canChangeAvatar`) — plus tard |
 | — | Montée de l'amont |
@@ -84,9 +86,12 @@ Relevés dans `.build/checkouts/matrix-rust-components-swift/Sources/MatrixRustS
    `Receipt` ne porte que `timestamp: Timestamp?` (millisecondes). La timeline par défaut
    (`Room.timeline()`, utilisée depuis la 0.1) suit déjà les accusés
    (« live timeline with read receipts and read marker tracking »). Un accusé n'est porté que par
-   le **dernier** événement lu par cet utilisateur.
+   le **dernier** événement *visible* lu par cet utilisateur, **quel que soit son type** : un
+   événement d'état (adhésion, changement de nom ou d'avatar), un message supprimé, un message
+   indéchiffrable, un sticker ou un sondage porte un accusé au même titre qu'un message. Exemple :
+   Bob lit tout, puis Carol rejoint la room ; l'accusé de Bob est sur l'adhésion de Carol.
 3. **Accusé d'un utilisateur donné.** `Room.loadUserReceipt(receiptType:thread:userId:)` (depuis le
-   store local) — non retenu : `Message.readReceipts` couvre l'affichage.
+   store local) — non retenu : `TimelineItem.readReceipts` couvre l'affichage.
 4. **Frappe.** `Room.typingNotice(isTyping:) async throws` ;
    `Room.subscribeToTypingNotifications(listener:) -> TaskHandle`, listener
    `call(typingUserIds: [String])` — des user IDs seulement. Les bindings ne disent ni si
@@ -156,7 +161,7 @@ public enum ReadReceiptVisibility: Sendable, Hashable {
     case `private`
 }
 
-/// Another member's read position: the latest message they read.
+/// Another member's read position: the latest timeline item they read.
 public struct ReadReceipt: Sendable, Hashable {
     public let userID: UserID
     /// When they read it, when the homeserver says.
@@ -165,15 +170,38 @@ public struct ReadReceipt: Sendable, Hashable {
 }
 ```
 
+`TimelineItem` (struct `id` + `kind`, inchangée par ailleurs) gagne, **en fin d'initialiseur avec une
+valeur par défaut** (tout appel existant `TimelineItem(id:kind:)` compile sans changement) :
+
+```swift
+public struct TimelineItem: Sendable, Hashable, Identifiable {
+    public let id: String
+    public let kind: Kind
+    /// The other members whose latest read item is this one, most recent first — whatever the
+    /// item holds: a message, but also a membership change, a redacted or undecryptable event,
+    /// or an event this version does not render. Always empty for an item with no associated
+    /// event (``Kind/dateSeparator(_:)``, ``Kind/readMarker``).
+    ///
+    /// A receipt sits only on the latest item a member read: they read an item `M` when their
+    /// receipt is on `M` or on any later item of the timeline.
+    public let readReceipts: [ReadReceipt]
+
+    public init(id: String, kind: Kind, readReceipts: [ReadReceipt] = [])
+}
+```
+
 `Message` gagne, **en fin de liste avec une valeur par défaut** (non cassant pour qui construit des
 `Message`) :
 
 ```swift
-/// The other members whose latest read message is this one, most recent first.
-public let readReceipts: [ReadReceipt]          // défaut []
 /// The sender's avatar at the time of sending, when known. Pass it to ``MediaService``.
 public let senderAvatar: MediaSource?           // défaut nil
 ```
+
+`Message` **ne porte pas** d'accusés (D2, §13.1) : la propriété `Message.readReceipts` et le
+paramètre `readReceipts:` de `Message.init`, livrés par T1, sont retirés par T3b avant la 0.6.0
+(rien n'est publié). `senderAvatar` reste sur `Message` : c'est un attribut du message et de son
+expéditeur, pas de la position de lecture.
 
 `Timeline` gagne :
 
@@ -195,8 +223,16 @@ Comportements :
   l'accusé échoue, le marqueur n'est pas tenté et l'erreur remonte.
 - `readReceipts` **exclut l'utilisateur courant** (filtré par le package si l'amont ne le fait pas)
   et est trié par horodatage décroissant, puis par `UserID` ; un horodatage absent passe en dernier.
-- Un accusé ne figure que sur le **dernier** message lu par ce membre : savoir si X a lu le message
-  M revient à chercher son accusé sur M ou sur un message plus récent (documenté en DocC).
+- `TimelineMapper` remplit `readReceipts` pour **tout item issu d'un événement**
+  (`item.asEvent() != nil`), quel que soit le `Kind` produit : `.message`, `.redacted`,
+  `.unableToDecrypt`, `.unsupported` (événements d'état, sticker, sondage, autre, expéditeur
+  invalide). Les items virtuels (`.dateSeparator`, `.readMarker`, début de timeline rendu en
+  `.unsupported`) ont toujours `[]`.
+- Un accusé ne figure que sur le **dernier** item visible lu par ce membre : savoir si X a lu le
+  message M revient à chercher son accusé sur M **ou sur n'importe quel item plus récent**, message
+  ou non (documenté en DocC, avec l'exemple de l'adhésion du §3.1). Pas d'aide du package pour ce
+  calcul en 0.6 (*décision de rédaction* : l'application tient déjà la liste ; une aide peut venir
+  plus tard).
 - Les accusés privés des autres ne sont jamais visibles (protocole Matrix).
 - `senderAvatar` vient de `ProfileDetails.ready(avatarUrl:)` via `MediaSource(url:)` ; `nil` tant
   que le profil n'est pas chargé.
@@ -298,7 +334,7 @@ public protocol AccountService: Sendable {
     /// Stops ignoring a user.
     func unignore(_ user: UserID) async throws
 
-    /// Deactivates the account for good, with its password. (Sous réserve de Q1, §13.)
+    /// Deactivates the account for good, with its password. (Q1 tranchée : inclus, §13.1.)
     func deactivate(password: String, eraseData: Bool) async throws
 }
 ```
@@ -328,7 +364,8 @@ public protocol AccountService: Sendable {
 - `MatrixSession` exige `profile` et `account`.
 - Une application qui implémente ces protocoles elle-même (typiquement un double de test) doit les
   compléter, ou utiliser `MockTimeline`, `MockRoomHandle`, `MockMatrixSession`.
-- Non cassant : `Message` gagne deux propriétés, initialiseur à valeurs par défaut.
+- Non cassant : `TimelineItem` gagne `readReceipts` et `Message` gagne `senderAvatar`,
+  initialiseurs à valeurs par défaut.
 
 ## 5. Erreurs
 
@@ -361,7 +398,8 @@ annulés et libérés dans la durée de vie du client. Le test de durée de vie 
 - `Rust` : `ReceiptMapper` (visibilité → `ReceiptType`, accusés reçus → `[ReadReceipt]`),
   `ProfileMapper` (`UserProfile` amont, `Presence`, `AccountManagementAction`), coutures
   `ProfileDriving` / `AccountDriving` sur le modèle des `*Driving`, `RustProfileService`,
-  `RustAccountService` ; `TimelineMapper` reçoit l'user ID courant pour filtrer les accusés.
+  `RustAccountService` ; `TimelineMapper` reçoit l'user ID courant pour filtrer les accusés et les
+  attache au `TimelineItem` de tout événement, indépendamment de la traduction du `Kind`.
 - `SessionLifecycle` gagne une terminaison « serveur d'abord, effacement seulement si le serveur a
   réussi » pour `deactivate` (Q1).
 - Pas de `@MainActor` ; un type par fichier ; mappers dans `Bridge/`.
@@ -371,8 +409,8 @@ annulés et libérés dans la durée de vie du client. Le test de durée de vie 
 Vérifiables par test, unitaire (U) ou d'intégration contre le harnais Synapse (I).
 
 1. **(I)** Deux comptes dans une room : A envoie un message ; B appelle
-   `markAsRead(visibility: .public)` ; dans la timeline de A, le message porte un `ReadReceipt` de B
-   dans un délai borné. Avec `.private`, aucun accusé de B n'apparaît chez A.
+   `markAsRead(visibility: .public)` ; dans la timeline de A, l'item du message porte un
+   `ReadReceipt` de B dans un délai borné. Avec `.private`, aucun accusé de B n'apparaît chez A.
 2. **(I)** Après `markAsRead` par B, le `RoomSummary` de la room chez B passe à
    `notificationCount == 0` à la sync suivante.
 3. **(I)** `markAsRead(upTo:)` sur un message plus ancien : l'accusé de B est sur ce message, pas
@@ -398,6 +436,11 @@ Vérifiables par test, unitaire (U) ou d'intégration contre le harnais Synapse 
 12. **(U)** Chaque nouveau membre des doubles est pilotable et observable.
 13. `swift build`, `swift test --skip MatrixClientKitIntegrationTests` et le lint
     `swift-format --strict` de la CI verts ; la DocC se génère sans avertissement de lien.
+14. **(U)** Un accusé posé par l'amont sur un item non-message — événement d'état, `.redacted`,
+    `.unableToDecrypt`, sticker ou sondage (`.unsupported`) — est conservé sur le `TimelineItem`
+    correspondant ; un item virtuel n'en porte jamais. **(I, en T10)** A change son nom d'affichage
+    après le dernier message ; B appelle `markAsRead(visibility: .public)` ; chez A, l'accusé de B
+    est sur l'item du changement de nom.
 
 **Mesure de succès :** une application de démonstration peut implémenter « vu par », « X écrit… »,
 un écran de profil et un lien « Gérer mon compte » sans importer `MatrixRustSDK` ni écrire de code
@@ -423,13 +466,16 @@ HTTP ; tous les critères ci-dessus passent sur le harnais.
   `removeAvatarCount`, `publishedPresences`, erreur configurable) ; `MockAccountService` (URL par
   action, `emitIgnoredUsers(_:)`, `ignoredCalls`, `unignoredCalls`, `deactivations`, erreurs).
 - `MockMatrixSession` : `profile`, `account` (paramètres d'initialiseur à valeur par défaut).
-- `SampleData` : `userProfile(...)`, `readReceipt(...)`, et `message(...)` gagne `readReceipts:` et
-  `senderAvatar:` à valeurs par défaut.
+- `SampleData` : `userProfile(...)`, `readReceipt(...)`, et `message(...)` gagne `senderAvatar:` à
+  valeur par défaut (**pas** `readReceipts:` : les accusés se posent sur l'item,
+  `TimelineItem(id:kind:readReceipts:)`, D2). Pas de fabrique `timelineItem(...)` en plus :
+  l'initialiseur public suffit.
 
 ## 11. Documentation et livraison
 
 - **DocC :** article *Read receipts and typing* (marquer comme lu au bon moment, afficher « vu
-  par » avec la règle du dernier message lu, indicateur de frappe) ; article *Profile and account*
+  par » avec la règle du dernier item lu — chercher l'accusé sur le message ou sur tout item plus
+  récent, y compris un événement d'état —, indicateur de frappe) ; article *Profile and account*
   (profil, avatar via `MediaService`, présence et son état initial `unavailable`, URL de gestion
   dans `ASWebAuthenticationSession`, ignorer un utilisateur, désactivation — Q1). *GettingStarted*
   et *TestingWithMocks* renvoient vers eux.
@@ -440,7 +486,8 @@ HTTP ; tous les critères ci-dessus passent sur le harnais.
   « Later »).
 - **CHANGELOG `[0.6.0] - <date de livraison>` :** *Breaking* (§4.5), *Added*, *Behaviours to know*
   (présence initiale `unavailable` et non persistée, `setPresence` qui lève mais s'applique,
-  accusé sur le dernier message lu seulement, pas d'observation du profil propre, `ignoredUsers`
+  accusé sur le dernier item lu seulement, qui peut ne pas être un message, pas d'observation du
+  profil propre, `ignoredUsers`
   qui finit sans valeur, limitation de fréquence de la frappe constatée, désactivation
   irréversible).
 - **Version :** `PackageInfo` 0.6.0.
@@ -455,11 +502,15 @@ HTTP ; tous les critères ci-dessus passent sur le harnais.
 | Synapse du harnais avec présence désactivée | Défaut Synapse `presence.enabled: true` ; vérifier la config en T11, sinon l'activer (fichier du harnais) |
 | UIAA de `deactivateAccount` différent du déroulé en deux temps | Constaté en T11 ; le test est la source de vérité |
 | Le flux `ignoredUsers` ne reçoit pas l'écho d'un `ignore` local avant la sync | Le test attend une valeur dans un délai borné ; sinon re-lecture après `ignore` |
+| L'item d'état portant l'accusé n'est pas visible dans la timeline par défaut (filtrage amont des événements d'état) | Sans effet sur le SDK : l'amont pose alors l'accusé sur l'item visible précédent. Le volet (I) du critère 14 choisit un événement visible ; sinon écart consigné en T10 |
 | Accusés en retard (sync) rendant le test instable | `firstValue` avec délai, comme les tests 0.5 |
 
 ## 13. Questions ouvertes
 
-**Q1 (bloque T8 seulement) — Désactivation d'un compte à mot de passe en 0.6 ?** Irréversible,
+Aucune question ouverte ne bloque le découpage. Q1 est tranchée (§13.1, D1) ; son énoncé est gardé
+pour mémoire.
+
+**Q1 (tranchée : inclure) — Désactivation d'un compte à mot de passe en 0.6 ?** Irréversible,
 touche le cycle de vie de la session (effacement conditionnel), et n'est utile que sur un serveur
 *sans* MAS — où le package ne crée pas de compte (pas d'inscription par mot de passe), donc où la
 règle App Store 5.1.1(v) ne l'impose pas directement ; les comptes MAS sont couverts par
@@ -471,6 +522,20 @@ Tout le reste est tranché en *décision de rédaction* : galeries hors périmè
 accusés exigée à chaque appel, accusé + marqueur en un appel, présence dans `ProfileService`, pas
 de présence automatique, `AccountManagementAction` en struct, utilisateurs ignorés inclus, pas
 d'observation du profil propre.
+
+### 13.1 Décisions utilisateur
+
+| # | Date | Décision | Conséquence sur ce PRD |
+| --- | --- | --- | --- |
+| D1 | 2026-11-21 | **Q1 : la désactivation d'un compte à mot de passe est incluse** en 0.6. | T8 reste au plan ; §4.4 garde `deactivate(password:eraseData:)` ; critère 10 maintenu. Les mentions « sous réserve de Q1 » valent désormais « inclus ». |
+| D2 | 2026-11-21 | **Les accusés de lecture sont portés par `TimelineItem`, quel que soit son type**, et non plus par `Message.readReceipts`. Modification de l'API livrée par T1, acceptée avant la 0.6.0 (rien n'est publié). | §4.1 réécrit ; critère 14 ajouté ; §10 (`SampleData.message` sans `readReceipts:`) ; tâche T3b ajoutée avant T9. |
+
+Motif de D2, relevé en relecture de T3 : l'amont pose l'accusé d'un membre sur le dernier item
+*visible* qu'il a lu (§3.1, constat 2). Quand cet item n'est pas un message — adhésion, changement
+de nom, message supprimé, indéchiffrable, sticker, sondage — `TimelineMapper` le traduit en un
+autre `Kind` qui n'a pas de place pour un accusé, et l'accusé est perdu : l'application croit que le
+membre n'a rien lu depuis son dernier accusé sur un message. Porter les accusés au niveau de l'item
+les conserve sans élargir chaque cas de `Kind`.
 
 ---
 
@@ -488,17 +553,21 @@ tests unitaires verts avant chaque commit, commits en français BLUF).
 | T2 Protocoles `ProfileService` / `AccountService` et leurs doubles | [ios] | T1 | T3 | `Core/Services/ProfileService.swift`, `AccountService.swift`, `Mocks/MockProfileService.swift`, `MockAccountService.swift`, `Mocks/SampleData.swift` |
 | T3 Accusés reçus et avatar de l'expéditeur dans la timeline Rust | [ios] | T1 | T2, T6, T7 | `Rust/Bridge/ReceiptMapper.swift`, `TimelineMapper.swift`, `RustTimeline.swift` (init), `RustRoomService.swift` (passage de l'user ID) |
 | T4 Envoi d'accusés (`markAsRead`) | [ios] | T3 (même fichier `RustTimeline.swift`) | T6, T7, T8 | `RustTimeline.swift`, `ReceiptMapper.swift`, `Mocks/MockTimeline.swift` |
+| T3b Accusés portés par `TimelineItem` (D2) | [ios] | T2, T3, T4 (fichiers partagés, ci-contre) | T5, T6, T7, T8 | `Core/Models/TimelineItem.swift`, `Rust/Bridge/TimelineMapper.swift`, `Mocks/SampleData.swift`, `Tests/MatrixClientKitRustTests/MessageKindMapperTests.swift`, `Tests/MatrixClientKitCoreTests/V06ModelTests.swift`, `RustTimeline.swift` (commentaire) |
 | T5 Frappe (`typingUsers`, `setTyping`) | [ios] | T1 ; après T3 (même fichier `RustRoomService.swift`) | T4, T6, T7, T8 | `RustRoomService.swift` (`RustRoomHandle`), `Rust/Bridge/TypingMapper.swift`, `Mocks/MockRoomService.swift` |
 | T6 `RustProfileService` (profil, avatar, présence) | [ios] | T2 | T3, T4, T5, T7 | `Rust/RustProfileService.swift`, `Rust/Bridge/ProfileMapper.swift`, `ProfileDriving.swift` |
 | T7 `RustAccountService` (URL de gestion, ignorés) | [ios] | T2 | T3, T4, T5, T6 | `Rust/RustAccountService.swift`, `Rust/Bridge/AccountDriving.swift`, `AccountMapper.swift` |
 | T8 Désactivation du compte (Q1) | [ios] | T7 (même fichier) | T4, T5, T6 | `RustAccountService.swift`, `SessionLifecycle.swift` |
-| T9 Exiger les nouveaux membres et câbler la session | [ios] | T4, T5, T6, T7, (T8) | — | `Core/Services/Timeline.swift`, `RoomService.swift`, `MatrixSession.swift`, `RustMatrixSession.swift`, `Mocks/MockMatrixSession.swift` |
+| T9 Exiger les nouveaux membres et câbler la session | [ios] | T3b, T4, T5, T6, T7, T8 | — | `Core/Services/Timeline.swift`, `RoomService.swift`, `MatrixSession.swift`, `RustMatrixSession.swift`, `Mocks/MockMatrixSession.swift` |
 | T10 Intégration : accusés et frappe | [ios] | T9 | T11, T12 | `Tests/MatrixClientKitIntegrationTests/RoomActivityHarnessTests.swift`, `HarnessSupport.swift` (seconde session) |
 | T11 Intégration : profil, présence, compte, durée de vie | [ios] | T9 | T10, T12 | `Tests/MatrixClientKitIntegrationTests/ProfileAndAccountHarnessTests.swift`, `MediaHarnessTests.swift` (test de durée de vie) |
 | T12 Documentation et version 0.6.0 | [ios] | T9 ; finalisée après T10 et T11 (*Behaviours to know*) | T10, T11 | `Documentation.docc/*.md`, `README.md`, `CHANGELOG.md`, `Core/PackageInfo.swift` |
 
-Chemin critique : T1 → T2 → T6/T7 → T9 → T10/T11 → T12. Deux pistes parallèles après T1 :
-*timeline* (T3 → T4, T3 → T5) et *services* (T2 → T6, T2 → T7 → T8).
+Chemin critique : T1 → T3 → T4 → T3b → T9 → T10/T11 → T12, à égalité avec
+T1 → T2 → T7 → T8 → T9 → … Deux pistes parallèles après T1 : *timeline* (T3 → T4 → T3b, T3 → T5)
+et *services* (T2 → T6, T2 → T7 → T8) ; T3b est le point de jonction des deux pistes avant T9, car
+elle reprend des fichiers de T2 (`SampleData.swift`) et de T4 (`MessageKindMapperTests.swift`).
+T3b ne touche pas `RustRoomService.swift` : elle ne bloque pas T5 et n'en dépend pas.
 
 **Conflit de fichier signalé :** `HarnessSupport.swift` peut être touché par T10 (aide « seconde
 session ») et T11 (création d'un compte jetable par l'API admin). Le premier qui fusionne pose
@@ -508,16 +577,18 @@ l'aide ; l'autre rebase — ou T10 la pose et T11 en dépend pour ce seul fichie
 
 Créer `ReadReceipt`, `ReadReceiptVisibility`, `UserProfile`, `Presence`, `AccountManagementAction`
 (§4.1, §4.3, §4.4) ; `Message.readReceipts` (défaut `[]`) et `Message.senderAvatar` (défaut `nil`)
-en fin d'initialiseur.
+en fin d'initialiseur. *Livrée ; amendée par T3b (D2) : `readReceipts` passe de `Message` à
+`TimelineItem`.*
 **Acceptation :** les signatures sont exactement celles du §4 ; `AccountManagementAction` égal par
 valeur (`.device(id)` == `.device(id)`) ; tout appel existant à `Message.init` compile sans
 changement ; tests `Core` (égalité, `Hashable`) verts.
 
 ### T2 — Protocoles et doubles des services `[ios]`
 
-`ProfileService`, `AccountService` (§4.3, §4.4, `deactivate` inclus sous réserve de Q1) ;
+`ProfileService`, `AccountService` (§4.3, §4.4, `deactivate` inclus, D1) ;
 `MockProfileService`, `MockAccountService` (§10) ; `SampleData.userProfile`, `readReceipt`,
-`message(readReceipts:senderAvatar:)`. **Pas encore** de membre exigé sur `MatrixSession`.
+`message(readReceipts:senderAvatar:)` (*amendé par T3b, D2 :* `readReceipts:` en sortira ; T2 peut
+fusionner tel quel). **Pas encore** de membre exigé sur `MatrixSession`.
 **Acceptation :** chaque membre des doubles enregistre ses appels et rend la valeur ou l'erreur
 configurée (tests `MockTests`) ; `ignoredUsers` du double émet ce que pousse `emitIgnoredUsers` ;
 aucun import amont dans `Core` ni `Mocks`.
@@ -526,7 +597,8 @@ aucun import amont dans `Core` ni `Mocks`.
 
 `ReceiptMapper.receipts(from: [String: Receipt], excluding ownUserID:)` ; `TimelineMapper` remplit
 `readReceipts` et `senderAvatar` ; `RustTimeline` reçoit l'user ID courant (`Room.ownUserId()`)
-depuis `RustRoomHandle.timeline()`.
+depuis `RustRoomHandle.timeline()`. *Livrée ; amendée par T3b (D2) : les accusés n'étaient remplis
+que pour la branche `.message`.*
 **Acceptation :** tests unitaires : utilisateur courant exclu, tri récent d'abord puis `UserID`,
 horodatage absent en dernier, user ID invalide écarté, millisecondes → `Date` ; `senderAvatar`
 depuis `.ready(avatarUrl: "mxc://…")`, `nil` pour `.pending`/`.unavailable`/`.error` ou une URL
@@ -539,6 +611,46 @@ non `mxc`.
 **Acceptation :** via une couture de test : `.public` → `.read`, `.private` → `.readPrivate`,
 toujours suivi de `.fullyRead` sur la même cible ; un échec du premier appel empêche le second et
 remonte mappé ; doubles testés.
+
+### T3b — Accusés portés par `TimelineItem` `[ios]`
+
+**Dépend de :** T2 (`SampleData.swift`), T3 (`TimelineItem.swift` via T1, `TimelineMapper.swift`),
+T4 (`MessageKindMapperTests.swift`) — fusionnées sur `team/v0.6` d'abord, pour éviter trois
+conflits sur les mêmes fichiers. **Bloque :** T9.
+
+Appliquer D2 (§13.1) : déplacer `readReceipts` de `Message` vers `TimelineItem`, signatures du §4.1.
+
+- `TimelineItem` gagne `public let readReceipts: [ReadReceipt]` et
+  `init(id: String, kind: Kind, readReceipts: [ReadReceipt] = [])`, avec la doc `///` du §4.1
+  (règle « l'accusé est sur M ou sur un item plus récent »).
+- `Message` perd `readReceipts` et le paramètre `readReceipts:` de son initialiseur ;
+  `senderAvatar` reste.
+- `TimelineMapper.item(from:ownUserID:)` calcule `ReceiptMapper.receipts(from: event.readReceipts,
+  excluding: ownUserID)` pour **tout** `EventTimelineItem`, avant et indépendamment de
+  `kind(from:ownUserID:)`, et le passe à `TimelineItem.init` ; la branche `.message` ne s'en
+  occupe plus. Les items virtuels reçoivent `[]` (valeur par défaut).
+- `SampleData.message(...)` perd `readReceipts:` (garde `senderAvatar:`) ; `SampleData.readReceipt`
+  inchangé.
+- Tests existants adaptés : `V06ModelTests` (accusés sur `TimelineItem`, plus sur `Message`),
+  `MessageKindMapperTests` et `ReceiptMapperTests`/`DiffMapperTests` si elles lisent
+  `message.readReceipts`. Commentaire de `RustTimeline.swift` qui renvoie à
+  ``Message/readReceipts`` corrigé vers ``TimelineItem/readReceipts``.
+
+**Acceptation :**
+- Tout appel existant `TimelineItem(id:kind:)` compile sans changement ; `Message.readReceipts`
+  n'existe plus (aucune occurrence dans `Sources/`, `Tests/`, `Documentation.docc/`).
+- Tests unitaires du mapper, un par cas, avec un accusé d'un autre membre posé par l'amont :
+  **un accusé posé sur un item non-message est conservé** — événement d'état (adhésion, changement
+  de profil : `.unsupported`), `.redacted`, `.unableToDecrypt`, sticker et sondage (`.unsupported`),
+  expéditeur invalide (`.unsupported`) — ainsi que sur `.message` ; l'utilisateur courant reste
+  exclu et le tri du §4.1 s'applique dans tous ces cas.
+- Les items virtuels (`.dateSeparator`, `.readMarker`, début de timeline) ont `readReceipts == []`.
+- Deux `TimelineItem` de même `id` et `kind` mais d'accusés différents sont différents
+  (`Hashable`) : un changement d'accusé seul reste visible d'un consommateur qui compare les items.
+- Si un test unitaire ne peut pas fabriquer un `EventTimelineItem` amont pour un cas (type FFI non
+  constructible), le calcul des accusés est extrait dans une fonction testable sur
+  `[String: Receipt]` + `Kind` et le cas est couvert à ce niveau ; l'écart est noté dans le commit.
+- `swift build`, tests unitaires et `swift-format --strict` verts.
 
 ### T5 — Frappe `[ios]`
 
@@ -586,9 +698,11 @@ protocoles compile sans lien cassé.
 
 ### T10 — Intégration : accusés et frappe `[ios]`
 
-Critères 1 à 5 du §8, deux sessions SDK sur `synapse-password` (utilisateur du harnais et admin).
-**Acceptation :** les cinq scénarios passent sur le harnais, ou l'écart constaté (accusé implicite
-de l'expéditeur, filtrage amont, fréquence de frappe) est consigné dans un fichier de rulings 0.6 et
+Critères 1 à 5 et volet (I) du critère 14 du §8, deux sessions SDK sur `synapse-password`
+(utilisateur du harnais et admin). Dépend aussi, de fait, de T3b (via T9) pour le critère 14.
+**Acceptation :** les six scénarios passent sur le harnais, ou l'écart constaté (accusé implicite
+de l'expéditeur, filtrage amont, fréquence de frappe, changement de nom non visible dans la
+timeline par défaut) est consigné dans un fichier de rulings 0.6 et
 reporté à T12 ; exécution « non exécutée » consignée si Docker manque.
 
 ### T11 — Intégration : profil, présence, compte, durée de vie `[ios]`
