@@ -99,24 +99,11 @@ enum TimelineMapper {
         let id = item.uniqueId().id
 
         if let event = item.asEvent() {
-            return MatrixClientKitCore.TimelineItem(id: id, kind: kind(from: event, ownUserID: ownUserID))
+            return self.item(id: id, event: event, ownUserID: ownUserID)
         }
 
         if let virtual = item.asVirtual() {
-            switch virtual {
-            case let .dateDivider(timestamp):
-                return MatrixClientKitCore.TimelineItem(
-                    id: id,
-                    kind: .dateSeparator(date(from: timestamp))
-                )
-            case .readMarker:
-                return MatrixClientKitCore.TimelineItem(id: id, kind: .readMarker)
-            case .timelineStart:
-                return MatrixClientKitCore.TimelineItem(
-                    id: id,
-                    kind: .unsupported(description: "Start of the timeline")
-                )
-            }
+            return self.item(id: id, virtual: virtual)
         }
 
         return MatrixClientKitCore.TimelineItem(
@@ -125,9 +112,37 @@ enum TimelineMapper {
         )
     }
 
-    static func kind(
-        from event: EventTimelineItem,
+    /// Les accusés sont calculés ici, pour tout événement, et non dans ``kind(from:)`` : ils
+    /// sont posés sur l'item quel que soit son `Kind`.
+    static func item(
+        id: String,
+        event: EventTimelineItem,
         ownUserID: String
+    ) -> MatrixClientKitCore.TimelineItem {
+        MatrixClientKitCore.TimelineItem(
+            id: id,
+            kind: kind(from: event),
+            readReceipts: ReceiptMapper.receipts(from: event.readReceipts, excluding: ownUserID)
+        )
+    }
+
+    static func item(
+        id: String,
+        virtual: VirtualTimelineItem
+    ) -> MatrixClientKitCore.TimelineItem {
+        switch virtual {
+        case let .dateDivider(timestamp):
+            MatrixClientKitCore.TimelineItem(id: id, kind: .dateSeparator(date(from: timestamp)))
+        case .readMarker:
+            MatrixClientKitCore.TimelineItem(id: id, kind: .readMarker)
+        case .timelineStart:
+            MatrixClientKitCore.TimelineItem(
+                id: id, kind: .unsupported(description: "Start of the timeline"))
+        }
+    }
+
+    static func kind(
+        from event: EventTimelineItem
     ) -> MatrixClientKitCore.TimelineItem.Kind {
         guard case let .msgLike(content) = event.content else {
             return .unsupported(description: event.eventTypeRaw ?? "Unsupported event")
@@ -151,8 +166,6 @@ enum TimelineMapper {
                     sendState: sendState(from: event.localSendState),
                     media: MediaMapper.attachment(from: message.msgType),
                     uploadProgress: MediaMapper.uploadProgress(from: event.localSendState),
-                    readReceipts: ReceiptMapper.receipts(
-                        from: event.readReceipts, excluding: ownUserID),
                     senderAvatar: senderAvatar(from: event.senderProfile)
                 )
             )

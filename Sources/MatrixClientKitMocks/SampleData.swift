@@ -44,7 +44,6 @@ public enum SampleData: Sendable {
         _ body: String,
         from sender: String = "@alice:matrix.org",
         isOwn: Bool = false,
-        readReceipts: [ReadReceipt] = [],
         senderAvatar: MediaSource? = nil
     ) -> TimelineItem {
         TimelineItem(
@@ -59,7 +58,6 @@ public enum SampleData: Sendable {
                     isOwn: isOwn,
                     isEdited: false,
                     sendState: .sent,
-                    readReceipts: readReceipts,
                     senderAvatar: senderAvatar
                 )
             )

@@ -81,13 +81,7 @@ public final class RustMediaService: MediaService {
     /// Médias absents ou trop gros : deux cas que `ErrorMapper` ne peut pas trancher seul, car il
     /// ne connaît pas la ressource demandée.
     private static func map(_ error: any Error) -> MatrixError {
-        if case let ClientError.MatrixApi(kind, code, _, details) = error, case .tooLarge = kind {
-            return .unexpected(
-                message: "The media is larger than the homeserver accepts.",
-                details: details.map { "\(code): \($0)" } ?? code
-            )
-        }
-        let mapped = ErrorMapper.map(error)
+        let mapped = MediaErrorMapper.map(error)
         if case .notFound(.unspecified) = mapped { return .notFound(.media) }
         return mapped
     }

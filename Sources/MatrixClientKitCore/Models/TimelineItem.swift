@@ -53,8 +53,6 @@ public struct Message: Sendable, Hashable {
     public let media: MediaAttachment?
     /// The upload progress; `nil` except while a media sent from this device is uploading.
     public let uploadProgress: UploadProgress?
-    /// The other members whose latest read message is this one, most recent first.
-    public let readReceipts: [ReadReceipt]
     /// The sender's avatar at the time of sending, when known. Pass it to ``MediaService``.
     public let senderAvatar: MediaSource?
 
@@ -69,7 +67,6 @@ public struct Message: Sendable, Hashable {
         sendState: SendState,
         media: MediaAttachment? = nil,
         uploadProgress: UploadProgress? = nil,
-        readReceipts: [ReadReceipt] = [],
         senderAvatar: MediaSource? = nil
     ) {
         self.eventID = eventID
@@ -82,7 +79,6 @@ public struct Message: Sendable, Hashable {
         self.sendState = sendState
         self.media = media
         self.uploadProgress = uploadProgress
-        self.readReceipts = readReceipts
         self.senderAvatar = senderAvatar
     }
 }
@@ -110,10 +106,19 @@ public struct TimelineItem: Sendable, Hashable, Identifiable {
     public let id: String
     /// What the item holds.
     public let kind: Kind
+    /// The other members whose latest read item is this one, most recent first — whatever the
+    /// item holds: a message, but also a membership change, a redacted or undecryptable event,
+    /// or an event this version does not render. Always empty for an item with no associated
+    /// event (``Kind/dateSeparator(_:)``, ``Kind/readMarker``).
+    ///
+    /// A receipt sits only on the latest item a member read: they read an item `M` when their
+    /// receipt is on `M` or on any later item of the timeline.
+    public let readReceipts: [ReadReceipt]
 
-    public init(id: String, kind: Kind) {
+    public init(id: String, kind: Kind, readReceipts: [ReadReceipt] = []) {
         self.id = id
         self.kind = kind
+        self.readReceipts = readReceipts
     }
 
     /// The message this item carries, when it is a message.

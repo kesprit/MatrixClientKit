@@ -165,12 +165,9 @@ import Testing
         let receipt = SampleData.readReceipt(userID: bob)
         #expect(receipt.userID == bob)
         let avatar = SampleData.mediaSource("a")
-        let message = try #require(
-            SampleData.message("hi", readReceipts: [receipt], senderAvatar: avatar).message)
-        #expect(message.readReceipts == [receipt])
+        let message = try #require(SampleData.message("hi", senderAvatar: avatar).message)
         #expect(message.senderAvatar == avatar)
         let plain = try #require(SampleData.message("hi").message)
-        #expect(plain.readReceipts.isEmpty)
         #expect(plain.senderAvatar == nil)
     }
 }
