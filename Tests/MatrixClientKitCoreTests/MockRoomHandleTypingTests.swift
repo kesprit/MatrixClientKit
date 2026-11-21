@@ -58,11 +58,11 @@ import Testing
     @Test func serviceReturnsTheSameHandleForARoomAndExposesItSynchronously() async throws {
         let service = MockRoomService()
         let id = RoomID(rawValue: "!r:e.org")!
-        let obtained = try await service.room(id) as! MockRoomHandle
-        let again = try await service.room(id) as! MockRoomHandle
+        let obtained = try await service.room(id)
+        let again = try await service.room(id)
         let handle = service.handle(for: id)
-        #expect(obtained === again)
-        #expect(obtained === handle)
+        #expect(obtained as? MockRoomHandle === handle)
+        #expect(again as? MockRoomHandle === handle)
 
         let stream = obtained.typingUsers
         handle.emitTypingUsers([user("@a:e.org")])
@@ -81,6 +81,32 @@ import Testing
 
         var received: [[UserID]] = []
         for await snapshot in stream { received.append(snapshot) }
+        #expect(received.isEmpty)
+    }
+
+    @Test func typingSubscriptionOpenedAfterHandleFinishEndsWithoutValue() async {
+        let handle = makeHandle()
+        handle.finish()
+        let stream = handle.typingUsers
+        handle.emitTypingUsers([user("@a:e.org")])
+
+        var received: [[UserID]] = []
+        for await snapshot in stream { received.append(snapshot) }
+        #expect(received.isEmpty)
+    }
+
+    @Test func typingSubscriptionOpenedAfterServiceFinishEndsWithoutValue() async throws {
+        let service = MockRoomService()
+        let known = RoomID(rawValue: "!known:e.org")!
+        _ = service.handle(for: known)
+        service.finish()
+
+        let knownStream = service.handle(for: known).typingUsers
+        let newStream = try await service.room(RoomID(rawValue: "!new:e.org")!).typingUsers
+
+        var received: [[UserID]] = []
+        for await snapshot in knownStream { received.append(snapshot) }
+        for await snapshot in newStream { received.append(snapshot) }
         #expect(received.isEmpty)
     }
 }

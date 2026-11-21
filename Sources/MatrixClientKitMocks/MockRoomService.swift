@@ -20,6 +20,7 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
     private var observers: [Int: Observer] = [:]
     private var nextObserverID = 0
     private var handles: [RoomID: MockRoomHandle] = [:]
+    private var isFinished = false
 
     /// The timeline every room of this mock returns.
     public let timeline = MockTimeline()
@@ -61,18 +62,21 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
     /// Ends every stream opened by ``list(filter:)``, and the typing streams of the handles
     /// already returned.
     ///
+    /// A typing subscription opened afterwards, on a known handle or on one created later, ends at
+    /// once without any value.
+    ///
     /// - Important: without this, the `for await` loop the README and the DocC teach never
     ///   returns when driven by this mock.
     public func finish() {
-        let observers = lock.withLock { () -> [Observer] in
+        let (observers, handles) = lock.withLock { () -> ([Observer], [MockRoomHandle]) in
+            isFinished = true
             let current = Array(self.observers.values)
             self.observers.removeAll()
-            return current
+            return (current, Array(self.handles.values))
         }
         for observer in observers {
             observer.continuation.finish()
         }
-        let handles = lock.withLock { Array(self.handles.values) }
         for handle in handles {
             handle.finish()
         }
@@ -89,12 +93,14 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
     /// call ``MockRoomHandle/emitTypingUsers(_:)`` or read ``MockRoomHandle/typingNotices``
     /// without awaiting.
     public func handle(for id: RoomID) -> MockRoomHandle {
-        lock.withLock {
-            if let existing = handles[id] { return existing }
+        let (handle, isNew, finished) = lock.withLock { () -> (MockRoomHandle, Bool, Bool) in
+            if let existing = handles[id] { return (existing, false, isFinished) }
             let created = MockRoomHandle(id: id, timeline: timeline)
             handles[id] = created
-            return created
+            return (created, true, isFinished)
         }
+        if isNew && finished { handle.finish() }
+        return handle
     }
 
     private func removeObserver(_ identifier: Int) {
@@ -115,7 +121,8 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
 ///
 /// Typing is driven by ``emitTypingUsers(_:)`` and recorded by ``typingNotices``. Like the real
 /// handle, every access to ``typingUsers`` opens its own subscription, and ``finish()`` ends the
-/// open ones.
+/// open ones. A subscription opened after ``finish()`` ends at once without any value, and
+/// ``emitTypingUsers(_:)`` does not reopen it.
 public final class MockRoomHandle: RoomHandle, @unchecked Sendable {
     public let id: RoomID
     private let mockTimeline: MockTimeline
@@ -123,6 +130,7 @@ public final class MockRoomHandle: RoomHandle, @unchecked Sendable {
     private let lock = NSLock()
     private var typingObservers: [Int: AsyncStream<[UserID]>.Continuation] = [:]
     private var nextTypingObserverID = 0
+    private var isTypingFinished = false
     private var _typingNotices: [Bool] = []
     private var _typingError: MatrixError?
 
@@ -151,11 +159,16 @@ public final class MockRoomHandle: RoomHandle, @unchecked Sendable {
     /// nothing until ``emitTypingUsers(_:)`` is called.
     public var typingUsers: AsyncStream<[UserID]> {
         AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
-            let identifier = lock.withLock { () -> Int in
+            let identifier = lock.withLock { () -> Int? in
+                if isTypingFinished { return nil }
                 let identifier = nextTypingObserverID
                 nextTypingObserverID += 1
                 typingObservers[identifier] = continuation
                 return identifier
+            }
+            guard let identifier else {
+                continuation.finish()
+                return
             }
             continuation.onTermination = { [weak self] _ in
                 self?.lock.withLock { _ = self?.typingObservers.removeValue(forKey: identifier) }
@@ -182,6 +195,7 @@ public final class MockRoomHandle: RoomHandle, @unchecked Sendable {
     /// Ends every stream opened by ``typingUsers``.
     public func finish() {
         let observers = lock.withLock { () -> [AsyncStream<[UserID]>.Continuation] in
+            isTypingFinished = true
             let current = Array(typingObservers.values)
             typingObservers.removeAll()
             return current
