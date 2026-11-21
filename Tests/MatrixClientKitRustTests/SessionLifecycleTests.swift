@@ -5,7 +5,7 @@ import MatrixRustSDK
 import MatrixClientKitCore
 @testable import MatrixClientKitRust
 
-private final class Journal: @unchecked Sendable {
+final class Journal: @unchecked Sendable {
     private let lock = NSLock()
     private var entries: [String] = []
     func append(_ entry: String) { lock.withLock { entries.append(entry) } }
@@ -17,7 +17,7 @@ private final class LifecycleRef: @unchecked Sendable {
     var lifecycle: SessionLifecycle?
 }
 
-private func makeLifecycle(
+func makeLifecycle(
     journal: Journal,
     eraseError: (any Error)? = nil
 ) -> SessionLifecycle {
@@ -169,7 +169,7 @@ private let unknownToken = ClientError.MatrixApi(
 
 /// Porte franchie par `stopSync`, pour figer une terminaison en plein vol le temps que le test
 /// vérifie qu'un `logout()` concurrent attend plutôt que de rendre la main en avance.
-private final class Gate: @unchecked Sendable {
+final class Gate: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Never>?
 
@@ -244,7 +244,7 @@ func aLogoutConcurrentWithAnInFlightHardLogoutWaitsForItInsteadOfReturningEarly(
 
 /// Cède la main assez de fois pour qu'une tâche qui n'attendrait pas la fin de la reconnexion
 /// ait largement le temps d'aller au bout.
-private func yieldABunch() async {
+func yieldABunch() async {
     for _ in 0..<50 {
         await Task.yield()
     }
