@@ -4,8 +4,13 @@ import Testing
 @testable import MatrixClientKitCore
 
 @Suite struct V06ModelTests {
-    private let alice = UserID(rawValue: "@alice:example.org")!
-    private let bob = UserID(rawValue: "@bob:example.org")!
+    private let alice: UserID
+    private let bob: UserID
+
+    init() throws {
+        alice = try #require(UserID(rawValue: "@alice:example.org"))
+        bob = try #require(UserID(rawValue: "@bob:example.org"))
+    }
 
     @Test func readReceiptIsHashableByValue() {
         let date = Date(timeIntervalSince1970: 100)
