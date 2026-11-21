@@ -19,6 +19,7 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
     private var rooms: [RoomSummary]
     private var observers: [Int: Observer] = [:]
     private var nextObserverID = 0
+    private var handles: [RoomID: MockRoomHandle] = [:]
 
     /// The timeline every room of this mock returns.
     public let timeline = MockTimeline()
@@ -57,7 +58,8 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
         }
     }
 
-    /// Ends every stream opened by ``list(filter:)``.
+    /// Ends every stream opened by ``list(filter:)``, and the typing streams of the handles
+    /// already returned.
     ///
     /// - Important: without this, the `for await` loop the README and the DocC teach never
     ///   returns when driven by this mock.
@@ -70,10 +72,29 @@ public final class MockRoomService: RoomService, @unchecked Sendable {
         for observer in observers {
             observer.continuation.finish()
         }
+        let handles = lock.withLock { Array(self.handles.values) }
+        for handle in handles {
+            handle.finish()
+        }
     }
 
+    /// Returns the handle for a room: always the same ``MockRoomHandle`` for a given identifier,
+    /// so a test can drive and inspect the handle the code under test obtained through this
+    /// service. Any identifier resolves, whether or not it is in the list.
     public func room(_ id: RoomID) async throws -> any RoomHandle {
-        MockRoomHandle(id: id, timeline: timeline)
+        handle(for: id)
+    }
+
+    /// The handle ``room(_:)`` returns for `id`, created on first use. Synchronous, so a test can
+    /// call ``MockRoomHandle/emitTypingUsers(_:)`` or read ``MockRoomHandle/typingNotices``
+    /// without awaiting.
+    public func handle(for id: RoomID) -> MockRoomHandle {
+        lock.withLock {
+            if let existing = handles[id] { return existing }
+            let created = MockRoomHandle(id: id, timeline: timeline)
+            handles[id] = created
+            return created
+        }
     }
 
     private func removeObserver(_ identifier: Int) {
@@ -114,12 +135,13 @@ public final class MockRoomHandle: RoomHandle, @unchecked Sendable {
         mockTimeline
     }
 
-    /// Each value passed to ``setTyping(_:)``, in call order. A call that throws is not recorded.
+    /// Each value passed to ``setTyping(_:)``, in call order. A call is recorded even when it
+    /// then throws ``typingError``.
     public var typingNotices: [Bool] {
         lock.withLock { _typingNotices }
     }
 
-    /// When set, ``setTyping(_:)`` throws it instead of recording the call.
+    /// When set, ``setTyping(_:)`` records the call, then throws it.
     public var typingError: MatrixError? {
         get { lock.withLock { _typingError } }
         set { lock.withLock { _typingError = newValue } }
@@ -149,11 +171,11 @@ public final class MockRoomHandle: RoomHandle, @unchecked Sendable {
         }
     }
 
-    /// Records the notice, or throws ``typingError`` when one is set.
+    /// Records the notice, then throws ``typingError`` when one is set.
     public func setTyping(_ isTyping: Bool) async throws {
         try lock.withLock {
-            if let _typingError { throw _typingError }
             _typingNotices.append(isTyping)
+            if let _typingError { throw _typingError }
         }
     }
 
