@@ -53,6 +53,10 @@ public struct Message: Sendable, Hashable {
     public let media: MediaAttachment?
     /// The upload progress; `nil` except while a media sent from this device is uploading.
     public let uploadProgress: UploadProgress?
+    /// The other members whose latest read message is this one, most recent first.
+    public let readReceipts: [ReadReceipt]
+    /// The sender's avatar at the time of sending, when known. Pass it to ``MediaService``.
+    public let senderAvatar: MediaSource?
 
     public init(
         eventID: EventID?,
@@ -64,7 +68,9 @@ public struct Message: Sendable, Hashable {
         isEdited: Bool,
         sendState: SendState,
         media: MediaAttachment? = nil,
-        uploadProgress: UploadProgress? = nil
+        uploadProgress: UploadProgress? = nil,
+        readReceipts: [ReadReceipt] = [],
+        senderAvatar: MediaSource? = nil
     ) {
         self.eventID = eventID
         self.sender = sender
@@ -76,6 +82,8 @@ public struct Message: Sendable, Hashable {
         self.sendState = sendState
         self.media = media
         self.uploadProgress = uploadProgress
+        self.readReceipts = readReceipts
+        self.senderAvatar = senderAvatar
     }
 }
 
