@@ -43,18 +43,20 @@ follows [SemVer](https://semver.org/).
   the `senderAvatar:` parameter of `SampleData.message(...)`.
 - The DocC article *Read receipts, typing, profile and account*.
 
+### Fixed
+
+- `MockRoomService.list(filter:)` opened after `finish()` stayed open forever, so a `for await` loop
+  over it never returned. It now ends at once without any value, like the real service when its
+  subscription fails.
+
 ### Changed
 
 - `MockRoomHandle` is now a `final class`, not a `struct`: a test drives and inspects the very
   handle the code under test holds. `MockRoomService.room(_:)` returns the same handle for a given
   `RoomID`, and the new synchronous `MockRoomService.handle(for:)` gives it without awaiting.
-- `MockRoomService.finish()` also ends the typing streams of its handles, and a `list(filter:)`
-  or a typing subscription opened after it ends at once without any value, as the real services do
-  when their subscription fails. Before, a list opened after `finish()` stayed open forever.
-- In the mocks, the 0.6 members that are commands (`markAsRead…`, `setTyping`, the profile edits
-  and `setPresence`, `ignore`, `unignore`, `deactivate`) record the call and then throw the
-  configured error; the members of earlier versions (`send`, `paginateBackwards`…) record nothing
-  when they throw.
+- `MockRoomService.finish()` also ends the typing streams of its handles, and a typing
+  subscription opened after it ends at once without any value, as the real services do when their
+  subscription fails.
 - `PackageInfo.version` is `0.6.0`.
 
 ### Behaviours to know
@@ -66,7 +68,9 @@ follows [SemVer](https://semver.org/).
 - **A read receipt sits only on the latest item a member read**, which is not necessarily a
   message. A member read a message `M` when their receipt is on `M` **or on any later item**. The
   package does not do that lookup for you.
-- **The package publishes nothing by itself**: no receipt, no typing notice, no presence.
+- **The package publishes nothing by itself**: no receipt and no typing notice. As for the
+  presence, the only state that leaves is the upstream initial one, `unavailable`, which every sync
+  carries until the application sets another.
 - **The presence is publish-only and is not persisted.** The user shows as `.unavailable` — the
   upstream initial state — until the application calls `setPresence(_:)`, at every launch. The
   state applies to the following syncs even when the call throws. Observing other users' presence
@@ -79,7 +83,9 @@ follows [SemVer](https://semver.org/).
 - **`deactivate(password:eraseData:)` is irreversible, and refused in an OAuth session** before any
   server call: use `managementURL(for: .deactivateAccount)`. On success, the local erasure is best
   effort — an erasure error is not reported once the server has deactivated the account. On
-  failure, nothing is erased and the session stays usable. A reported failure can match an account
+  failure, nothing is erased and the session stays usable: a refused password throws
+  `MatrixError.authentication` with `.invalidCredentials`, and a session that already ended throws
+  `.unexpected`. A reported failure can match an account
   that was deactivated all the same (the network dropping after the server accepted the request):
   the next sync then fails with an unknown-token error and the hard logout erases the local data.
 - **An unknown user in `profile(of:)` throws `MatrixError.notFound` with `.user`.**

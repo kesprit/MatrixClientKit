@@ -163,14 +163,23 @@ and records the edits; `MockAccountService` serves a URL per action from `manage
 records `ignore`, `unignore` and `deactivate`. `MockMatrixSession` takes both as the `profile:` and
 `account:` parameters of its initialiser, with defaults. See <doc:ReadReceiptsTypingAndProfile>.
 
-### Two error regimes
+### When a command fails
 
-The members that are **commands** and were added in 0.6 — `markAsRead(visibility:)`,
-`markAsRead(upTo:visibility:)`, `setTyping(_:)`, the profile edits and `setPresence(_:)`,
-`ignore`, `unignore` and `deactivate` — record the call first, then throw the configured error. A
-test can therefore check both that the code attempted the action and how it reacted to the
-failure. The members of earlier versions — `send`, `paginateBackwards`… — record nothing when they
-throw. Reads (`profile(of:)`, `managementURL(for:)`) record nothing either.
+The general rule: a mock **command** records the attempt first, then throws the error you
+configured, so a test can check both that the code tried the action and how it reacted to the
+failure. That is what `markAsRead(visibility:)`, `markAsRead(upTo:visibility:)`, `setTyping(_:)`,
+the profile edits, `setPresence(_:)`, `ignore`, `unignore`, `deactivate`, `logout()`,
+`reauthenticate(_:)`, the `SendHandle` commands, `submitCheckCode(_:)` and the commands of
+`MockSessionVerification` do.
+
+The exceptions, which throw **before** recording anything, are:
+
+- `MockTimeline.send(_:)`, for a message and for an attachment: a failed send leaves
+  `sentMessages` and `sentAttachments` as they were;
+- `MockNotificationService.registerPusher(_:)` and `unregisterPusher(_:)`.
+
+Reads (`profile(of:)`, `managementURL(for:)`, `content(of:)`) record nothing. The `///`
+documentation of each double states what it records and when it throws.
 
 ### Ending the streams
 

@@ -3,7 +3,7 @@ import MatrixClientKitCore
 import MatrixClientKitMocks
 import Testing
 
-@Suite struct MockRoomHandleTypingTests {
+@Suite(.timeLimit(.minutes(1))) struct MockRoomHandleTypingTests {
     private func makeHandle() -> MockRoomHandle {
         MockRoomHandle(id: RoomID(rawValue: "!r:e.org")!, timeline: MockTimeline())
     }
@@ -84,7 +84,7 @@ import Testing
         #expect(received.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(1))) func typingSubscriptionOpenedAfterHandleFinishEndsWithoutValue() async {
+    @Test func typingSubscriptionOpenedAfterHandleFinishEndsWithoutValue() async {
         let handle = makeHandle()
         handle.finish()
         let stream = handle.typingUsers
@@ -95,7 +95,7 @@ import Testing
         #expect(received.isEmpty)
     }
 
-    @Test(.timeLimit(.minutes(1))) func typingSubscriptionOpenedAfterServiceFinishEndsWithoutValue() async throws {
+    @Test func typingSubscriptionOpenedAfterServiceFinishEndsWithoutValue() async throws {
         let service = MockRoomService()
         let known = RoomID(rawValue: "!known:e.org")!
         _ = service.handle(for: known)

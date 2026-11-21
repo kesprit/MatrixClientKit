@@ -479,6 +479,8 @@ HTTP ; tous les critères ci-dessus passent sur le harnais.
   (profil, avatar via `MediaService`, présence et son état initial `unavailable`, URL de gestion
   dans `ASWebAuthenticationSession`, ignorer un utilisateur, désactivation — Q1). *GettingStarted*
   et *TestingWithMocks* renvoient vers eux.
+  *Écart constaté en T12 (accepté en relecture) :* un **seul** article, `ReadReceiptsTypingAndProfile`,
+  couvre les deux sujets, au lieu de deux articles.
 - **README :** section Scope réécrite pour la 0.6 ; « What v0.6 does not expose » : retirer
   « managing the account through the authorization server », ajouter l'observation de la présence,
   les galeries ; ligne `0.6.x | 26.09.07 | 18+ | 15+ | 6.2+` dans *Compatibility* ;

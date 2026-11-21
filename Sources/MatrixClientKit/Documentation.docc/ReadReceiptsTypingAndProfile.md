@@ -126,7 +126,8 @@ try await session.profile.setPresence(.online)
 
 Know the limits before relying on it:
 
-- **The package publishes nothing itself.** Until your application calls `setPresence(_:)`, the
+- **The package publishes nothing itself, except the initial state.** The upstream SDK's initial
+  state, `.unavailable`, goes out with every sync: until your application calls `setPresence(_:)`, the
   user shows as `.unavailable` to their contacts, at every launch: the state is not persisted.
   Publish it again each time the application starts, for instance when it comes to the foreground.
 - **The state applies to the following syncs even when the call throws.**
@@ -215,10 +216,12 @@ for good. Ask the user to confirm before calling it, and for their password: it 
 try await session.account.deactivate(password: password, eraseData: false)
 ```
 
-- On success, the local data is erased as after a logout, and the session's authentication state
-  becomes signed out.
-- On failure — a refused password, a network error — nothing is erased and the session stays usable,
-  unlike ``MatrixSession/logout()``.
+- On success, the local data is erased as after a logout — on a best-effort basis: once the server
+  has deactivated the account, a local erasure error is not reported — and the session's
+  authentication state becomes signed out.
+- On failure nothing is erased and the session stays usable, unlike ``MatrixSession/logout()``. A
+  refused password throws ``MatrixError/authentication(_:)`` with `.invalidCredentials`; a session
+  that already ended throws ``MatrixError/unexpected(message:details:)``.
 - **A session opened through OAuth is refused** before any server call, with
   ``MatrixError/unexpected(message:details:)``. Such an account is deactivated on the authorization
   server's page: open ``AccountService/managementURL(for:)`` with
@@ -229,7 +232,8 @@ try await session.account.deactivate(password: password, eraseData: false)
 
 ## What to remember
 
-- The package sends no receipt, no typing notice and no presence by itself.
+- The package sends no receipt and no typing notice by itself, and no presence other than the
+  initial `.unavailable` that every sync carries.
 - A read receipt is on the latest item a member read, which is not always a message.
 - ``Timeline/markAsRead(visibility:)`` resolves "the latest item" twice; use
   ``Timeline/markAsRead(upTo:visibility:)`` for one fixed target.
