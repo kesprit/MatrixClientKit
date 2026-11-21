@@ -22,11 +22,9 @@ enum ProfileMapper {
         )
     }
 
+    /// Même règle que l'avatar de l'expéditeur dans la timeline : ``MediaSource/init(url:)``.
     private static func avatar(from url: String?) -> MatrixClientKitCore.MediaSource? {
-        guard let url, url.hasPrefix("mxc://"),
-            let source = try? MatrixRustSDK.MediaSource.fromUrl(url: url)
-        else { return nil }
-        return MediaMapper.source(from: source)
+        url.flatMap { MatrixClientKitCore.MediaSource(url: $0) }
     }
 
     static func upstreamPresence(from presence: Presence) -> PresenceState {

@@ -55,7 +55,7 @@ public final class RustProfileService: ProfileService {
         do {
             try await driver.uploadAvatar(mimeType: mimeType, data: data)
         } catch {
-            throw Self.mapUpload(error)
+            throw MediaErrorMapper.map(error)
         }
     }
 
@@ -73,17 +73,5 @@ public final class RustProfileService: ProfileService {
         } catch {
             throw ErrorMapper.map(error)
         }
-    }
-
-    /// Avatar trop gros : `ErrorMapper` ne peut pas le trancher seul, car il ne connaît pas la
-    /// ressource envoyée.
-    private static func mapUpload(_ error: any Error) -> MatrixError {
-        if case let ClientError.MatrixApi(kind, code, _, details) = error, case .tooLarge = kind {
-            return .unexpected(
-                message: "The media is larger than the homeserver accepts.",
-                details: details.map { "\(code): \($0)" } ?? code
-            )
-        }
-        return ErrorMapper.map(error)
     }
 }

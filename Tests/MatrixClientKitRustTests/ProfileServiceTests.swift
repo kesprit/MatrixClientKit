@@ -69,8 +69,8 @@ private final class FakeProfileDriver: ProfileDriving, @unchecked Sendable {
     }
 }
 
-private func apiError(_ kind: ErrorKind, code: String = "M_X") -> ClientError {
-    .MatrixApi(kind: kind, code: code, msg: "boom", details: nil)
+private func apiError(_ kind: ErrorKind, code: String = "M_X", details: String? = nil) -> ClientError {
+    .MatrixApi(kind: kind, code: code, msg: "boom", details: details)
 }
 
 private let alice = UserID(rawValue: "@alice:example.org")!
@@ -175,6 +175,45 @@ private let alice = UserID(rawValue: "@alice:example.org")!
         driver.error = apiError(.notFound)
         let service = makeService(driver)
         await #expect(throws: MatrixError.notFound(.unspecified)) { try await service.removeAvatar() }
+    }
+
+    @Test func setPresenceErrorIsMapped() async {
+        let driver = FakeProfileDriver()
+        driver.error = apiError(.forbidden)
+        let service = makeService(driver)
+        await #expect(throws: MatrixError.permission(.forbidden)) { try await service.setPresence(.online) }
+    }
+
+    @Test func profileErrorOtherThanNotFoundIsNotRemapped() async {
+        let driver = FakeProfileDriver()
+        driver.error = apiError(.forbidden)
+        let service = makeService(driver)
+        await #expect(throws: MatrixError.permission(.forbidden)) { try await service.profile(of: alice) }
+    }
+
+    @Test func tooLargeAvatarKeepsUpstreamDetails() async {
+        let driver = FakeProfileDriver()
+        driver.error = apiError(.tooLarge, details: "limit 1MB")
+        let service = makeService(driver)
+        await #expect(
+            throws: MatrixError.unexpected(
+                message: "The media is larger than the homeserver accepts.", details: "M_X: limit 1MB")
+        ) { try await service.setAvatar(Data([1]), mimeType: "image/png") }
+    }
+
+    @Test(arguments: [
+        ("MXC://example.org/a", true),
+        ("mxc://example.org/a", true),
+        ("mxc://", false),
+        ("https://example.org/a", false),
+    ])
+    func avatarFollowsTheSameRuleAsSenderAvatar(url: String, isAvatar: Bool) async throws {
+        let driver = FakeProfileDriver()
+        driver.profile = MatrixRustSDK.UserProfile(
+            userId: "@alice:example.org", displayName: nil, avatarUrl: url, status: nil, call: nil)
+        let profile = try await makeService(driver).profile(of: alice)
+        #expect((profile.avatar != nil) == isAvatar)
+        #expect(profile.avatar == MatrixClientKitCore.MediaSource(url: url))
     }
 
     @Test(arguments: [
