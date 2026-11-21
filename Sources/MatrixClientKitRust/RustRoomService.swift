@@ -179,7 +179,11 @@ public final class RustRoomHandle: RoomHandle {
 
     public func timeline() async throws -> any MatrixClientKitCore.Timeline {
         do {
-            return RustTimeline(timeline: try await room.timeline(), lifetime: lifetime)
+            return RustTimeline(
+                timeline: try await room.timeline(),
+                ownUserID: room.ownUserId(),
+                lifetime: lifetime
+            )
         } catch {
             throw ErrorMapper.map(error)
         }

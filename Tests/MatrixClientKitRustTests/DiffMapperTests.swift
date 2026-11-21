@@ -19,27 +19,28 @@ import MatrixRustSDK
 // MARK: - TimelineMapper
 
 @Test func timelineClearIsTranslated() {
-    #expect(TimelineMapper.diff(from: .clear) == .clear)
+    #expect(TimelineMapper.diff(from: .clear, ownUserID: "@me:e.org") == .clear)
 }
 
 @Test func timelinePopsAreTranslated() {
-    #expect(TimelineMapper.diff(from: .popFront) == .popFront)
-    #expect(TimelineMapper.diff(from: .popBack) == .popBack)
+    #expect(TimelineMapper.diff(from: .popFront, ownUserID: "@me:e.org") == .popFront)
+    #expect(TimelineMapper.diff(from: .popBack, ownUserID: "@me:e.org") == .popBack)
 }
 
 @Test(arguments: [0, 1, 7, 4_294_967_295] as [UInt32])
 func timelineRemoveKeepsItsIndex(index: UInt32) {
-    #expect(TimelineMapper.diff(from: .remove(index: index)) == .remove(index: Int(index)))
+    #expect(TimelineMapper.diff(from: .remove(index: index), ownUserID: "@me:e.org") == .remove(index: Int(index)))
 }
 
 @Test(arguments: [0, 1, 7, 4_294_967_295] as [UInt32])
 func timelineTruncateKeepsItsLength(length: UInt32) {
-    #expect(TimelineMapper.diff(from: .truncate(length: length)) == .truncate(length: Int(length)))
+    #expect(
+        TimelineMapper.diff(from: .truncate(length: length), ownUserID: "@me:e.org") == .truncate(length: Int(length)))
 }
 
 @Test func timelineEmptyBatchesAreTranslatedInPlace() {
-    #expect(TimelineMapper.diff(from: .append(values: [])) == .append([]))
-    #expect(TimelineMapper.diff(from: .reset(values: [])) == .reset([]))
+    #expect(TimelineMapper.diff(from: .append(values: []), ownUserID: "@me:e.org") == .append([]))
+    #expect(TimelineMapper.diff(from: .reset(values: []), ownUserID: "@me:e.org") == .reset([]))
 }
 
 // MARK: - RoomMapper
@@ -76,7 +77,7 @@ func roomListTruncateKeepsItsLength(length: UInt32) async {
     let items = ["a", "b", "c", "d"]
 
     func applied(_ upstream: TimelineDiff) -> [String] {
-        switch TimelineMapper.diff(from: upstream) {
+        switch TimelineMapper.diff(from: upstream, ownUserID: "@me:e.org") {
         case let .remove(index): return CollectionDiffApplier.apply([.remove(index: index)], to: items)
         case let .truncate(length): return CollectionDiffApplier.apply([.truncate(length: length)], to: items)
         default: return items
