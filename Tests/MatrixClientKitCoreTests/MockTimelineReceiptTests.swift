@@ -14,7 +14,7 @@ import MatrixClientKitMocks
         #expect(timeline.markAsReadUpToCalls.map(\.visibility) == [.private])
     }
 
-    @Test func errorIsThrownAndNothingRecorded() async {
+    @Test func errorIsThrownAfterRecording() async {
         let timeline = MockTimeline()
         let error = MatrixError.unexpected(message: "x", details: nil)
         timeline.markAsReadError = error
@@ -22,7 +22,7 @@ import MatrixClientKitMocks
         await #expect(throws: error) {
             try await timeline.markAsRead(upTo: EventID(rawValue: "$e")!, visibility: .public)
         }
-        #expect(timeline.markAsReadCalls.isEmpty)
-        #expect(timeline.markAsReadUpToCalls.isEmpty)
+        #expect(timeline.markAsReadCalls == [.public])
+        #expect(timeline.markAsReadUpToCalls.map(\.eventID) == [EventID(rawValue: "$e")!])
     }
 }

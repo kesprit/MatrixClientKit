@@ -106,22 +106,28 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
     }
 
     /// The error to throw from ``markAsRead(visibility:)`` and ``markAsRead(upTo:visibility:)``.
-    /// `nil` by default, meaning they succeed.
+    /// `nil` by default, meaning they succeed. The call is recorded before the error is thrown.
     public var markAsReadError: MatrixError? {
         get { lock.withLock { _markAsReadError } }
         set { lock.withLock { _markAsReadError = newValue } }
     }
 
-    /// Records `visibility`, or throws ``markAsReadError`` without recording.
+    /// Records `visibility`, then throws ``markAsReadError`` if set.
     public func markAsRead(visibility: ReadReceiptVisibility) async throws {
-        if let error = markAsReadError { throw error }
-        lock.withLock { _markAsReadCalls.append(visibility) }
+        let error = lock.withLock {
+            _markAsReadCalls.append(visibility)
+            return _markAsReadError
+        }
+        if let error { throw error }
     }
 
-    /// Records `eventID` and `visibility`, or throws ``markAsReadError`` without recording.
+    /// Records `eventID` and `visibility`, then throws ``markAsReadError`` if set.
     public func markAsRead(upTo eventID: EventID, visibility: ReadReceiptVisibility) async throws {
-        if let error = markAsReadError { throw error }
-        lock.withLock { _markAsReadUpToCalls.append((eventID, visibility)) }
+        let error = lock.withLock {
+            _markAsReadUpToCalls.append((eventID, visibility))
+            return _markAsReadError
+        }
+        if let error { throw error }
     }
 
     /// Pushes a new snapshot into ``items``.
