@@ -74,8 +74,9 @@ func ffiStateStream<Element: Sendable, Listener>(
     }
 }
 
-/// Sérialise les émissions d'un flux d'état et retient si le listener a déjà livré une valeur.
-private final class FirstDeliveryGate: Sendable {
+/// Sérialise les émissions d'un flux d'état et retient si le listener a déjà livré une valeur. Partagée
+/// par ``ffiStateStream`` et par les flux à lecture initiale asynchrone (`RustAccountService`).
+final class FirstDeliveryGate: Sendable {
     private let hasDelivered = Mutex(false)
 
     func deliver(_ body: () -> Void) {

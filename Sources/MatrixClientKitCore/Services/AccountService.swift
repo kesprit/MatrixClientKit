@@ -10,7 +10,8 @@ public protocol AccountService: Sendable {
     /// A stream of snapshots of the users the current user ignores, starting with the current
     /// list. Every access opens an independent subscription.
     ///
-    /// When reading the initial list fails, the stream ends without any value.
+    /// When reading the initial list fails before any update arrived, the stream ends without any
+    /// value; if an update already arrived, the stream stays open.
     var ignoredUsers: AsyncStream<[UserID]> { get }
     /// Ignores a user: their messages and invitations no longer reach this account.
     func ignore(_ user: UserID) async throws
