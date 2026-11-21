@@ -503,6 +503,7 @@ HTTP ; tous les critères ci-dessus passent sur le harnais.
 | UIAA de `deactivateAccount` différent du déroulé en deux temps | Constaté en T11 ; le test est la source de vérité |
 | Le flux `ignoredUsers` ne reçoit pas l'écho d'un `ignore` local avant la sync | Le test attend une valeur dans un délai borné ; sinon re-lecture après `ignore` |
 | L'item d'état portant l'accusé n'est pas visible dans la timeline par défaut (filtrage amont des événements d'état) | Sans effet sur le SDK : l'amont pose alors l'accusé sur l'item visible précédent. Le volet (I) du critère 14 choisit un événement visible ; sinon écart consigné en T10 |
+| `markAsRead(visibility:)` résout deux fois « le dernier événement visible » : un événement arrivé entre les deux appels peut porter `.read` sur N et `fullyRead` sur N+1 | Accepté (décision §4.1) ; `markAsRead(upTo:visibility:)` garantit la même cible pour les deux |
 | Accusés en retard (sync) rendant le test instable | `firstValue` avec délai, comme les tests 0.5 |
 
 ## 13. Questions ouvertes

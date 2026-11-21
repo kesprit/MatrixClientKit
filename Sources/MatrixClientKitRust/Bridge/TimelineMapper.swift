@@ -125,7 +125,7 @@ enum TimelineMapper {
         )
     }
 
-    private static func kind(
+    static func kind(
         from event: EventTimelineItem,
         ownUserID: String
     ) -> MatrixClientKitCore.TimelineItem.Kind {

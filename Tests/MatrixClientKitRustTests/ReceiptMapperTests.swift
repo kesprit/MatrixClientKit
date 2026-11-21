@@ -38,6 +38,13 @@ import Testing
         #expect(receipts.last?.timestamp == nil)
     }
 
+    @Test func missingTimestampsFallBackToUserIDOrder() {
+        let receipts = ReceiptMapper.receipts(
+            from: ["@b:e.org": Receipt(timestamp: nil), "@a:e.org": Receipt(timestamp: nil)],
+            excluding: "@me:e.org")
+        #expect(receipts.map(\.userID.rawValue) == ["@a:e.org", "@b:e.org"])
+    }
+
     @Test func invalidUserIDIsDropped() {
         let receipts = ReceiptMapper.receipts(
             from: ["not-a-user": Receipt(timestamp: 1), "@a:e.org": Receipt(timestamp: 1)],
