@@ -119,6 +119,42 @@ import MatrixClientKitCore
         #expect(lifecycle.current == .signedOut)
     }
 
+    @Test func anEraseFailureAfterTheServerSucceededIsSwallowed() async throws {
+        let journal = Journal()
+        let lifecycle = makeLifecycle(journal: journal, eraseError: MatrixError.storage(.unavailable))
+
+        try await lifecycle.deactivate { journal.append("server") }
+
+        #expect(journal.all == ["server", "stopSync", "erase while signedIn"])
+        #expect(lifecycle.current == .signedOut)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aHardLogoutDuringASuccessfulDeactivationDoesNotEraseTwice() async throws {
+        let journal = Journal()
+        let gate = Gate()
+        let lifecycle = makeLifecycle(journal: journal)
+
+        let deactivation = Task {
+            try await lifecycle.deactivate {
+                await gate.wait()
+                journal.append("deactivated")
+            }
+        }
+        while !gate.isSuspended { await Task.yield() }
+
+        let hardLogout = lifecycle.handleAuthError(isSoftLogout: false)
+        await yieldABunch()
+        gate.release()
+        try await deactivation.value
+        await hardLogout?.value
+        // Un hard logout tardif, une fois la désactivation faite.
+        await lifecycle.handleAuthError(isSoftLogout: false)?.value
+
+        #expect(journal.all.filter { $0.hasPrefix("erase") }.count == 1)
+        #expect(lifecycle.current == .signedOut)
+    }
+
     @Test func aDeactivationOnAnEndedSessionIsRefusedWithoutCallingTheServer() async throws {
         let journal = Journal()
         let lifecycle = makeLifecycle(journal: journal)

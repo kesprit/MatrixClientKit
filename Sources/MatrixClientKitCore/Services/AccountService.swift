@@ -23,8 +23,15 @@ public protocol AccountService: Sendable {
     /// A session opened through OAuth is refused before any server call, with
     /// ``MatrixError/unexpected(message:details:)`` pointing to
     /// ``managementURL(for:)`` with ``AccountManagementAction/deactivateAccount``.
-    /// On success the local data is erased as after `logout()` and the authentication state
-    /// becomes signed out. On failure nothing is erased and the session stays usable.
+    /// On success the local data is erased and the authentication state becomes signed out. The
+    /// erasure is best effort: once the server has deactivated the account, a local erasure error
+    /// is not reported, since the call did succeed. On failure nothing is erased and the session
+    /// stays usable.
+    ///
+    /// - Important: a failure can be reported although the account was deactivated on the server
+    ///   (for example the network dropping on the second request, after the server accepted the
+    ///   first authenticated one). The session is then dead: the next sync receives
+    ///   `M_UNKNOWN_TOKEN`, the hard logout erases the local data and publishes signed out.
     ///
     /// - Parameters:
     ///   - password: The account's password.

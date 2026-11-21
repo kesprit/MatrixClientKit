@@ -137,7 +137,7 @@ public final class RustAccountService: AccountService {
                 let mapped = ErrorMapper.map(error)
                 if Task.isCancelled { throw mapped }
                 switch mapped {
-                case .network, .rateLimited: throw mapped
+                case .network, .rateLimited, .authentication(.unknownToken): throw mapped
                 default: break
                 }
             }

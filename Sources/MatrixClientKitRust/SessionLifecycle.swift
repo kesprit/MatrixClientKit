@@ -185,6 +185,10 @@ final class SessionLifecycle: Sendable {
     /// remonte telle quelle — c'est à `server` de la traduire. Le succès arrête la sync, efface les
     /// données locales puis publie `.signedOut`, comme après une déconnexion.
     ///
+    /// - Important: après le succès serveur, l'effacement est fait au mieux et son erreur est
+    ///   avalée (comme pour un hard logout) : la désactivation a réussi, `.signedOut` est publié, et
+    ///   le store orphelin est repris par le balayage des stores orphelins.
+    ///
     /// - Note: pendant l'appel serveur la session est revendiquée à titre provisoire (voir
     ///   `Claim.deactivating`). Un `logout()` ou un hard logout concurrent attend l'issue : après un
     ///   succès il ressort sans rien rejouer (un seul effacement), après un échec il termine la
@@ -212,12 +216,10 @@ final class SessionLifecycle: Sendable {
                 }
                 claim.withLock { claim in claim = .terminating(task) }
                 await stopSync()
-                defer { broadcaster.update { _ in .signedOut } }
-                do {
-                    try erase()
-                } catch {
-                    throw ErrorMapper.map(error)
-                }
+                // Comme le hard logout : le serveur a déjà détruit le compte, un effacement en échec
+                // est avalé. Le remonter ferait afficher « échec, réessayez » pour un compte mort.
+                try? erase()
+                broadcaster.update { _ in .signedOut }
                 return
             case let .join(task):
                 await task.value

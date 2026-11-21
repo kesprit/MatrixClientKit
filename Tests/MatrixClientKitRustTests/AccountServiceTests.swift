@@ -27,6 +27,8 @@ private final class FakeAccountDriver: AccountDriving, @unchecked Sendable {
     private var _deactivations: [Deactivation] = []
     /// Erreurs rendues par `deactivateAccount`, appel après appel ; `nil` ou file vide : succès.
     var deactivationOutcomes: [(any Error)?] = []
+    /// Exécuté au début de chaque `deactivateAccount`, dans la tâche appelante.
+    var deactivationHook: (@Sendable () -> Void)?
 
     struct Deactivation: Equatable {
         let authData: AuthData?
@@ -53,6 +55,7 @@ private final class FakeAccountDriver: AccountDriving, @unchecked Sendable {
     }
 
     func deactivateAccount(authData: AuthData?, eraseData: Bool) async throws {
+        deactivationHook?()
         try lock.withLock {
             _deactivations.append(Deactivation(authData: authData, eraseData: eraseData))
             let outcome = deactivationOutcomes.isEmpty ? nil : deactivationOutcomes.removeFirst()
@@ -212,7 +215,7 @@ private let forbidden = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDD
         await waitUntil { collector.values.count == 1 }
         driver.releaseInitial()
         await waitUntil { driver.initialReadFinished }
-        try? await Task.sleep(for: .milliseconds(100))
+        await yieldABunch()
         driver.listener?.call(ignoredUserIds: ["@b:x.org"])
         await waitUntil { collector.values.count == 2 }
 
@@ -253,8 +256,9 @@ private let forbidden = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDD
         await waitUntil { collector.values.count == 1 }
         driver.releaseInitial()
         await waitUntil { driver.initialReadFinished }
-        // Laisse à la lecture initiale le temps d'émettre si l'arbitrage ne l'en empêchait pas.
-        try? await Task.sleep(for: .milliseconds(100))
+        // Test de comportement : la détection déterministe de la régression est dans
+        // `FirstDeliveryGateTests`.
+        await yieldABunch()
 
         #expect(collector.values == [[user("@new:x.org")]])
         consumer.cancel()
@@ -329,6 +333,42 @@ private let forbidden = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDD
 
         #expect(journal.all.isEmpty)
         #expect(lifecycle.current == .signedIn)
+    }
+
+    @Test(arguments: [
+        ClientError.MatrixApi(kind: .limitExceeded(retryAfterMs: nil), code: "M_LIMIT_EXCEEDED", msg: "", details: nil),
+        ClientError.MatrixApi(kind: .unknownToken(softLogout: false), code: "M_UNKNOWN_TOKEN", msg: "", details: nil),
+    ])
+    func deactivateDoesNotRetryWithThePasswordWhenTheFirstCallFailsForAnotherReason(
+        _ failure: ClientError
+    ) async {
+        let driver = FakeAccountDriver()
+        driver.deactivationOutcomes = [failure]
+        let journal = Journal()
+        let lifecycle = makeLifecycle(journal: journal)
+        let service = makeService(driver, lifecycle: lifecycle)
+
+        await #expect(throws: MatrixError.self) {
+            try await service.deactivate(password: "pw", eraseData: false)
+        }
+
+        #expect(driver.deactivations.count == 1)
+        #expect(journal.all.isEmpty)
+        #expect(lifecycle.current == .signedIn)
+    }
+
+    @Test func deactivateDoesNotRetryWithThePasswordWhenTheTaskIsCancelledDuringTheFirstCall() async {
+        let driver = FakeAccountDriver()
+        driver.deactivationOutcomes = [ClientError.Generic(msg: "uiaa", details: nil)]
+        driver.deactivationHook = { withUnsafeCurrentTask { $0?.cancel() } }
+        let journal = Journal()
+        let service = makeService(driver, lifecycle: makeLifecycle(journal: journal))
+
+        let task = Task { try await service.deactivate(password: "pw", eraseData: false) }
+        _ = try? await task.value
+
+        #expect(driver.deactivations.count == 1)
+        #expect(journal.all.isEmpty)
     }
 
     @Test func deactivateDoesNotRetryWithThePasswordWhenTheFirstCallFailsOffline() async {
