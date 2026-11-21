@@ -51,6 +51,9 @@ import Testing
         await #expect(throws: MatrixError.network(.offline)) { try await mock.setAvatar(Data(), mimeType: "image/png") }
         await #expect(throws: MatrixError.network(.offline)) { try await mock.removeAvatar() }
         await #expect(throws: MatrixError.network(.offline)) { try await mock.setPresence(.unavailable) }
+        #expect(mock.displayNameChanges == ["x"])
+        #expect(mock.avatarUploads.count == 1)
+        #expect(mock.removeAvatarCount == 1)
         // Upstream, a failing setPresence still applies the state (PRD §4.3).
         #expect(mock.publishedPresences == [.unavailable])
     }
@@ -111,6 +114,38 @@ import Testing
         await #expect(throws: MatrixError.server(.maintenance)) {
             try await mock.deactivate(password: "p", eraseData: false)
         }
+        #expect(mock.ignoredCalls == [alice])
+        #expect(mock.unignoredCalls == [alice])
+        #expect(mock.deactivations == [.init(password: "p", eraseData: false)])
+    }
+
+    @Test func deactivateErrorLeavesOtherCallsSucceeding() async throws {
+        let mock = MockAccountService()
+        let url = try #require(URL(string: "https://account.example.org/deactivate"))
+        mock.managementURLs = [.deactivateAccount: url]
+        mock.deactivateError = .authentication(.invalidCredentials)
+        await #expect(throws: MatrixError.authentication(.invalidCredentials)) {
+            try await mock.deactivate(password: "wrong", eraseData: false)
+        }
+        #expect(try await mock.managementURL(for: .deactivateAccount) == url)
+        try await mock.ignore(alice)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func ignoredUsersStreamsCanBeFinished() async {
+        let mock = MockAccountService()
+        mock.emitIgnoredUsers([alice])
+        let open = mock.ignoredUsers
+        mock.finish()
+
+        var received: [[UserID]] = []
+        for await users in open { received.append(users) }
+        #expect(received == [[alice]])
+
+        // A subscription after finish() ends without any value: the failed initial read.
+        var late: [[UserID]] = []
+        for await users in mock.ignoredUsers { late.append(users) }
+        #expect(late.isEmpty)
     }
 
     // MARK: SampleData

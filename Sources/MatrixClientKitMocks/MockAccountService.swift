@@ -5,6 +5,7 @@ import MatrixClientKitCore
 ///
 /// ``ignoredUsers`` emits the current list on subscription, then every list pushed through
 /// ``emitIgnoredUsers(_:)``; every access opens its own stream, like the real service.
+/// ``finish()`` ends the open streams.
 public final class MockAccountService: AccountService, @unchecked Sendable {
     /// A call to ``deactivate(password:eraseData:)``.
     public struct Deactivation: Sendable, Hashable {
@@ -24,6 +25,8 @@ public final class MockAccountService: AccountService, @unchecked Sendable {
     private var _managementURLs: [AccountManagementAction: URL] = [:]
     private var _error: MatrixError?
     private var _ignored: [UserID] = []
+    private var isFinished = false
+    private var _deactivateError: MatrixError?
     private var observers: [Int: AsyncStream<[UserID]>.Continuation] = [:]
     private var nextObserverID = 0
     private var _ignoredCalls: [UserID] = []
@@ -45,6 +48,13 @@ public final class MockAccountService: AccountService, @unchecked Sendable {
         set { lock.withLock { _error = newValue } }
     }
 
+    /// The error ``deactivate(password:eraseData:)`` throws, taking precedence over ``error``.
+    /// `nil` by default. Lets a test fail the deactivation while ``managementURL(for:)`` succeeds.
+    public var deactivateError: MatrixError? {
+        get { lock.withLock { _deactivateError } }
+        set { lock.withLock { _deactivateError = newValue } }
+    }
+
     /// Every user passed to ``ignore(_:)``, in order.
     public var ignoredCalls: [UserID] { lock.withLock { _ignoredCalls } }
 
@@ -56,7 +66,8 @@ public final class MockAccountService: AccountService, @unchecked Sendable {
 
     public var ignoredUsers: AsyncStream<[UserID]> {
         AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
-            let current = lock.withLock { () -> [UserID] in
+            let current = lock.withLock { () -> [UserID]? in
+                if isFinished { return nil }
                 let identifier = nextObserverID
                 nextObserverID += 1
                 observers[identifier] = continuation
@@ -65,7 +76,30 @@ public final class MockAccountService: AccountService, @unchecked Sendable {
                 }
                 return _ignored
             }
-            continuation.yield(current)
+            if let current {
+                continuation.yield(current)
+            } else {
+                continuation.finish()
+            }
+        }
+    }
+
+    /// Ends every open ``ignoredUsers`` stream.
+    ///
+    /// A subscription opened afterwards ends at once without any value, which simulates the real
+    /// service's failed initial read. ``emitIgnoredUsers(_:)`` does not reopen it.
+    ///
+    /// - Important: without this, a `for await` loop over ``ignoredUsers`` never returns when
+    ///   driven by this mock.
+    public func finish() {
+        let continuations = lock.withLock { () -> [AsyncStream<[UserID]>.Continuation] in
+            isFinished = true
+            let current = Array(observers.values)
+            observers.removeAll()
+            return current
+        }
+        for continuation in continuations {
+            continuation.finish()
         }
     }
 
@@ -97,6 +131,7 @@ public final class MockAccountService: AccountService, @unchecked Sendable {
 
     public func deactivate(password: String, eraseData: Bool) async throws {
         lock.withLock { _deactivations.append(Deactivation(password: password, eraseData: eraseData)) }
+        if let deactivateError { throw deactivateError }
         if let error { throw error }
     }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Reads and edits the current user's profile, and publishes their presence.
+/// Reads any user's profile, edits the current user's, and publishes the current user's presence.
 public protocol ProfileService: Sendable {
     /// Fetches a user's global profile from the homeserver; pass ``MatrixSession/userID`` for
     /// the current user's.
