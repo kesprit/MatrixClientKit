@@ -23,6 +23,9 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
     private var _nextAttachmentUpload = MockAttachmentUpload()
     private var _nextSendHandle = MockSendHandle()
     private var _sendHandles: [TimelineItem.ID: MockSendHandle] = [:]
+    private var _markAsReadCalls: [ReadReceiptVisibility] = []
+    private var _markAsReadUpToCalls: [(eventID: EventID, visibility: ReadReceiptVisibility)] = []
+    private var _markAsReadError: MatrixError?
 
     public init() {
         (stream, continuation) = AsyncStream<[TimelineItem]>.makeStream(
@@ -90,6 +93,35 @@ public final class MockTimeline: Timeline, @unchecked Sendable {
     public var sendHandles: [TimelineItem.ID: MockSendHandle] {
         get { lock.withLock { _sendHandles } }
         set { lock.withLock { _sendHandles = newValue } }
+    }
+
+    /// The visibilities passed to ``markAsRead(visibility:)``, in call order.
+    public var markAsReadCalls: [ReadReceiptVisibility] {
+        lock.withLock { _markAsReadCalls }
+    }
+
+    /// The arguments passed to ``markAsRead(upTo:visibility:)``, in call order.
+    public var markAsReadUpToCalls: [(eventID: EventID, visibility: ReadReceiptVisibility)] {
+        lock.withLock { _markAsReadUpToCalls }
+    }
+
+    /// The error to throw from ``markAsRead(visibility:)`` and ``markAsRead(upTo:visibility:)``.
+    /// `nil` by default, meaning they succeed.
+    public var markAsReadError: MatrixError? {
+        get { lock.withLock { _markAsReadError } }
+        set { lock.withLock { _markAsReadError = newValue } }
+    }
+
+    /// Records `visibility`, or throws ``markAsReadError`` without recording.
+    public func markAsRead(visibility: ReadReceiptVisibility) async throws {
+        if let error = markAsReadError { throw error }
+        lock.withLock { _markAsReadCalls.append(visibility) }
+    }
+
+    /// Records `eventID` and `visibility`, or throws ``markAsReadError`` without recording.
+    public func markAsRead(upTo eventID: EventID, visibility: ReadReceiptVisibility) async throws {
+        if let error = markAsReadError { throw error }
+        lock.withLock { _markAsReadUpToCalls.append((eventID, visibility)) }
     }
 
     /// Pushes a new snapshot into ``items``.
