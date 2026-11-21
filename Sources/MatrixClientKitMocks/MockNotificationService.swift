@@ -51,6 +51,8 @@ public final class MockNotificationService: NotificationService, @unchecked Send
         lock.withLock { _settings[roomID] = settings }
     }
 
+    /// Records `configuration` — or throws the register error first, in which case nothing is
+    /// recorded.
     public func registerPusher(_ configuration: PusherConfiguration) async throws {
         try lock.withLock {
             if let error = _registerError { throw error }
@@ -58,6 +60,8 @@ public final class MockNotificationService: NotificationService, @unchecked Send
         }
     }
 
+    /// Records `configuration` — or throws the unregister error first, in which case nothing is
+    /// recorded.
     public func unregisterPusher(_ configuration: PusherConfiguration) async throws {
         try lock.withLock {
             if let error = _unregisterError { throw error }
@@ -72,6 +76,8 @@ public final class MockNotificationService: NotificationService, @unchecked Send
         }
     }
 
+    /// Sets the room's mode — or throws ``settingsError`` first, in which case nothing is
+    /// modified.
     public func setNotificationMode(_ mode: RoomNotificationMode, for roomID: RoomID) async throws {
         try lock.withLock {
             if let error = _settingsError { throw error }
@@ -79,6 +85,8 @@ public final class MockNotificationService: NotificationService, @unchecked Send
         }
     }
 
+    /// Removes the room's own mode — or throws ``settingsError`` first, in which case nothing is
+    /// modified.
     public func restoreDefaultNotificationMode(for roomID: RoomID) async throws {
         try lock.withLock {
             if let error = _settingsError { throw error }

@@ -93,6 +93,7 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
         authStateContinuation.yield(state)
     }
 
+    /// Marks the session as signed out (``didLogout``), then throws ``logoutError`` when one is set.
     public func logout() async throws {
         let error = lock.withLock {
             _didLogout = true

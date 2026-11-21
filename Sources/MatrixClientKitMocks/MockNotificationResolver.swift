@@ -33,6 +33,7 @@ public final class MockNotificationResolver: NotificationContentResolving, @unch
         lock.withLock { _results[MatrixPushPayload(roomID: roomID, eventID: eventID)] = result }
     }
 
+    /// Records the request, then throws the configured error when one is set.
     public func notification(roomID: RoomID, eventID: EventID) async throws -> NotificationResult {
         let key = MatrixPushPayload(roomID: roomID, eventID: eventID)
         return try lock.withLock {

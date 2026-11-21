@@ -176,7 +176,9 @@ The exceptions, which throw **before** recording anything, are:
 
 - `MockTimeline.send(_:)`, for a message and for an attachment: a failed send leaves
   `sentMessages` and `sentAttachments` as they were;
-- `MockNotificationService.registerPusher(_:)` and `unregisterPusher(_:)`.
+- `MockNotificationService.registerPusher(_:)` and `unregisterPusher(_:)`;
+- `MockNotificationService.setNotificationMode(_:for:)` and `restoreDefaultNotificationMode(for:)`:
+  on error, the room's settings are left as they were.
 
 Reads (`profile(of:)`, `managementURL(for:)`, `content(of:)`) record nothing. The `///`
 documentation of each double states what it records and when it throws.

@@ -31,6 +31,7 @@ public final class MockOAuthLoginFlow: OAuthLoginFlow, @unchecked Sendable {
     /// How many times ``cancel()`` was called.
     public var cancelCount: Int { lock.withLock { _cancelCount } }
 
+    /// Records `callbackURL`, then returns or throws ``completeResult``.
     public func complete(callbackURL: URL) async throws -> any MatrixSession {
         let result = lock.withLock {
             _completedCallbackURLs.append(callbackURL)

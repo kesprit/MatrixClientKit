@@ -64,6 +64,7 @@ public final class MockQRCodeLogin: QRCodeLogin, @unchecked Sendable {
         return try startResult.get()
     }
 
+    /// Records `code` (``submittedCheckCodes``), then throws ``submitError`` when one is set.
     public func submitCheckCode(_ code: UInt8) async throws {
         let error = lock.withLock {
             _submittedCheckCodes.append(code)

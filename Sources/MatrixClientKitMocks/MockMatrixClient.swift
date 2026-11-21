@@ -84,6 +84,7 @@ public final class MockMatrixClient: MatrixClient, @unchecked Sendable {
         lock.withLock { _loginAttempts }
     }
 
+    /// Records `credentials`, then returns or throws the configured ``loginResult``.
     public func login(_ credentials: Credentials) async throws -> any MatrixSession {
         let result = lock.withLock {
             _loginAttempts.append(credentials)
@@ -100,6 +101,7 @@ public final class MockMatrixClient: MatrixClient, @unchecked Sendable {
         try loginDetailsResult.get()
     }
 
+    /// Records the request, then throws ``oauthLoginError`` when one is set, or returns ``oauthFlow``.
     public func beginOAuthLogin(
         _ configuration: OAuthConfiguration,
         prompt: OAuthPrompt?,
