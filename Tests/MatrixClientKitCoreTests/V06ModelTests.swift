@@ -62,18 +62,22 @@ import Testing
             eventID: nil, sender: alice, senderDisplayName: nil, body: "hi",
             timestamp: Date(timeIntervalSince1970: 0), isOwn: false, isEdited: false,
             sendState: .sent)
-        #expect(message.readReceipts.isEmpty)
         #expect(message.senderAvatar == nil)
     }
 
-    @Test func messageCarriesReceiptsAndAvatar() {
-        let receipt = ReadReceipt(userID: bob, timestamp: nil)
+    @Test func messageCarriesAvatar() {
         let avatar = MediaSource(url: "mxc://example.org/a")
         let message = Message(
             eventID: nil, sender: alice, senderDisplayName: nil, body: "hi",
             timestamp: Date(timeIntervalSince1970: 0), isOwn: false, isEdited: false,
-            sendState: .sent, readReceipts: [receipt], senderAvatar: avatar)
-        #expect(message.readReceipts == [receipt])
+            sendState: .sent, senderAvatar: avatar)
         #expect(message.senderAvatar == avatar)
+    }
+
+    @Test func timelineItemDefaultsReceiptsAndCarriesThem() {
+        let receipt = ReadReceipt(userID: bob, timestamp: nil)
+        #expect(TimelineItem(id: "a", kind: .redacted).readReceipts.isEmpty)
+        #expect(
+            TimelineItem(id: "a", kind: .redacted, readReceipts: [receipt]).readReceipts == [receipt])
     }
 }

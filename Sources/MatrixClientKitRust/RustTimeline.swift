@@ -32,7 +32,7 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
     /// interne, d'où la même libération que ``ffiTimeline``.
     nonisolated(unsafe) private var registryStorage: SendHandleRegistry<MatrixRustSDK.SendHandle>?
 
-    /// User ID de la session, pour écarter son propre accusé de ``Message/readReceipts``.
+    /// User ID de la session, pour écarter son propre accusé de ``TimelineItem/readReceipts``.
     private let ownUserID: String
 
     init(timeline: MatrixRustSDK.Timeline, ownUserID: String, lifetime: ClientLifetime) {
