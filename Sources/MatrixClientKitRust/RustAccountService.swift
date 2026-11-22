@@ -148,9 +148,19 @@ public final class RustAccountService: AccountService {
                         passwordDetails: AuthDataPasswordDetails(identifier: identifier, password: password)),
                     eraseData: eraseData)
             } catch {
+                if Self.isUIAAPasswordRefusal(error) { throw MatrixError.authentication(.invalidCredentials) }
                 throw ErrorMapper.mapAuthentication(error)
             }
         }
+    }
+
+    /// Synapse refuse le mot de passe du second appel par une réponse UIAA portant
+    /// `auth_error: Forbidden`, non par `M_FORBIDDEN` (constaté contre le harnais) : l'amont la
+    /// remonte en `ClientError.Generic`, sans structure exploitable. Dernier recours, documenté :
+    /// le texte des détails est lu pour `auth_error: Some(StandardErrorBody { kind: Forbidden`.
+    private static func isUIAAPasswordRefusal(_ error: any Error) -> Bool {
+        guard case let ClientError.Generic(_, details) = error, let details else { return false }
+        return details.contains("auth_error: Some(StandardErrorBody { kind: Forbidden")
     }
 }
 

@@ -470,3 +470,20 @@ private actor ScannedLogin {
         return try? await starting?.value
     }
 }
+
+/// Ce que les autres fichiers de la suite ont besoin de l'aide OAuth, sans exposer ``OAuthHarness``
+/// (dont les méthodes manipulent des types privés à ce fichier).
+struct OAuthSignIn {
+    let session: any MatrixSession
+    /// L'adresse de MAS annoncée par le harnais.
+    let mas: URL
+    /// Le mot de passe du compte OAuth du harnais.
+    let password: String
+
+    /// Ouvre une session par OAuth dans `directory` (MAS piloté par HTTP).
+    static func open(in directory: URL) async throws -> OAuthSignIn {
+        let harness = try OAuthHarness()
+        let signedIn = try await harness.signInWithOAuth(in: directory)
+        return OAuthSignIn(session: signedIn.session, mas: harness.mas, password: harness.password)
+    }
+}

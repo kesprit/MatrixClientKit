@@ -38,9 +38,21 @@ public final class RustProfileService: ProfileService {
         } catch {
             let mapped = ErrorMapper.map(error)
             if case .notFound(.unspecified) = mapped { throw MatrixError.notFound(.user) }
+            if Self.isUnknownProfileResponse(error) { throw MatrixError.notFound(.user) }
             throw mapped
         }
         return try ProfileMapper.profile(from: upstream)
+    }
+
+    /// Synapse répond **404 `M_UNKNOWN`** (« No row found (profiles) »), non `M_NOT_FOUND`, pour le
+    /// profil d'un utilisateur inconnu (constaté contre le harnais). Les liaisons n'exposent pas le
+    /// code HTTP : la structure (`kind` `.unknown`, code `M_UNKNOWN`) est testée d'abord, et le
+    /// statut 404 se lit en dernier recours dans le texte des détails (`status_code: 404`).
+    /// Réservé à `profile(of:)` : un 404 `M_UNKNOWN` ailleurs reste `.unexpected`.
+    private static func isUnknownProfileResponse(_ error: any Error) -> Bool {
+        guard case let ClientError.MatrixApi(kind, code, _, details) = error, kind == .unknown, code == "M_UNKNOWN"
+        else { return false }
+        return details?.contains("status_code: 404") == true
     }
 
     public func setDisplayName(_ name: String) async throws {

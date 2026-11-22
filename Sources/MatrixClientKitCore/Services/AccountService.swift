@@ -5,6 +5,10 @@ public protocol AccountService: Sendable {
     /// The page to open in a browser (`ASWebAuthenticationSession` or Safari) for `action`;
     /// `nil` when the homeserver does not delegate account management to an authorization
     /// server — then the account is managed by the homeserver itself.
+    ///
+    /// The URL is `https`; `http` is accepted only for a loopback host (`localhost`, `*.localhost`,
+    /// `127.0.0.0/8`, `::1`), for a local development server. Any other address the server
+    /// advertises throws ``MatrixError/unexpected(message:details:)``.
     func managementURL(for action: AccountManagementAction) async throws -> URL?
 
     /// A stream of snapshots of the users the current user ignores, starting with the current

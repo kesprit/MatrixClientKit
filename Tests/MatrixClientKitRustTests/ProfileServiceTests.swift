@@ -125,6 +125,42 @@ private let alice = UserID(rawValue: "@alice:example.org")!
         await #expect(throws: MatrixError.notFound(.user)) { try await service.profile(of: alice) }
     }
 
+    /// Synapse répond 404 `M_UNKNOWN` (et non `M_NOT_FOUND`) pour un profil inconnu : erreur
+    /// relevée telle quelle contre le harnais.
+    @Test func synapse404MUnknownBecomesNotFoundUser() async {
+        let driver = FakeProfileDriver()
+        driver.error = ClientError.MatrixApi(
+            kind: .unknown, code: "M_UNKNOWN", msg: "No row found (profiles)",
+            details: "Error { status_code: 404, headers: {}, body: Json(Object {}), kind: Unknown }")
+        let service = makeService(driver)
+        await #expect(throws: MatrixError.notFound(.user)) { try await service.profile(of: alice) }
+    }
+
+    @Test func mUnknownWithAnotherStatusIsNotRemapped() async {
+        let driver = FakeProfileDriver()
+        driver.error = ClientError.MatrixApi(
+            kind: .unknown, code: "M_UNKNOWN", msg: "boom",
+            details: "Error { status_code: 500, headers: {}, kind: Unknown }")
+        let service = makeService(driver)
+        await #expect(
+            throws: MatrixError.unexpected(
+                message: "boom", details: "M_UNKNOWN: Error { status_code: 500, headers: {}, kind: Unknown }")
+        ) { try await service.profile(of: alice) }
+    }
+
+    @Test func a404MUnknownOutsideProfileLookupIsNotRemapped() async {
+        let driver = FakeProfileDriver()
+        driver.error = ClientError.MatrixApi(
+            kind: .unknown, code: "M_UNKNOWN", msg: "No row found (profiles)",
+            details: "Error { status_code: 404, kind: Unknown }")
+        let service = makeService(driver)
+        await #expect {
+            try await service.removeAvatar()
+        } throws: { error in
+            if case MatrixError.unexpected = error { true } else { false }
+        }
+    }
+
     @Test func setDisplayNamePassesNameAsIs() async throws {
         let driver = FakeProfileDriver()
         let service = makeService(driver)

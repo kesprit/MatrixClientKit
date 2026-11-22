@@ -24,16 +24,30 @@ enum AccountMapper {
     /// compte. Une chaîne qui n'est pas une URL valide est une erreur, pas un `nil` : l'appelant
     /// y verrait à tort un serveur sans page de gestion.
     ///
-    /// Seul `https` est accepté : l'application ouvre cette URL dans un navigateur où l'utilisateur
-    /// saisit ses identifiants, et un schéma `http` ou personnalisé les exposerait ou détournerait
-    /// la page vers une autre application.
+    /// Seul `https` est accepté (casse ignorée), plus `http` quand l'hôte est local (voir
+    /// ``isLoopback(host:)``) : l'application ouvre cette URL dans un navigateur où l'utilisateur
+    /// saisit ses identifiants, et un `http` distant ou un schéma personnalisé les exposerait ou
+    /// détournerait la page vers une autre application. `http` en boucle locale ne quitte pas
+    /// l'appareil : c'est le serveur d'autorisation d'un développement local.
     static func managementURL(from string: String?) throws -> URL? {
         guard let string else { return nil }
-        guard !string.isEmpty, let url = URL(string: string), url.scheme?.lowercased() == "https" else {
+        guard !string.isEmpty, let url = URL(string: string), let scheme = url.scheme?.lowercased(),
+            scheme == "https" || (scheme == "http" && isLoopback(host: url.host))
+        else {
             throw MatrixError.unexpected(
-                message: "The account management address is not a valid https URL.", details: string)
+                message: "The account management address is not a valid https URL (or http on a loopback host).",
+                details: string)
         }
         return url
+    }
+
+    /// `localhost`, un sous-domaine de `localhost`, une adresse IPv4 de `127.0.0.0/8` ou `::1`.
+    private static func isLoopback(host: String?) -> Bool {
+        guard let host = host?.lowercased() else { return false }
+        if host == "localhost" || host.hasSuffix(".localhost") || host == "::1" { return true }
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        let octets = parts.compactMap { UInt8($0) }
+        return parts.count == 4 && octets.count == 4 && octets[0] == 127
     }
 
     /// Les identifiants amont, sans ceux qui ne sont pas des user ID valides.
