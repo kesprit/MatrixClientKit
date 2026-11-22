@@ -71,25 +71,45 @@ package struct KeychainSecureStore: SecureStore {
     #if os(macOS)
         /// Migration paresseuse, déclenchée par la première lecture qui ne trouve rien dans le
         /// trousseau data protection (décision du 2026-11-22). Une migration au démarrage ou à
-        /// l'ouverture du client aurait dû être appelée par chaque cible, et l'extension de
-        /// notification, qui ne lit que ce trousseau, n'est pas l'endroit où la déclencher.
+        /// l'ouverture du client aurait dû être appelée par chaque cible. Seule l'application
+        /// peut migrer : l'extension de notification, d'une autre identité de code, n'a pas le
+        /// droit de lire l'ancien trousseau (c'est le défaut corrigé ici), sa lecture de
+        /// l'ancien élément lève donc une erreur de stockage tant que l'application n'a pas lu
+        /// la session une fois après la mise à jour.
         ///
-        /// Ordre : lire l'ancien élément (sans la clé), l'écrire avec la clé, le relire, et
-        /// seulement alors supprimer l'ancien. Un échec avant la suppression laisse l'ancien
-        /// élément intact et la lecture suivante recommence, donc la migration est idempotente.
-        /// Une suppression de l'ancien élément qui échoue n'invalide pas la migration : la valeur
-        /// est déjà en sécurité côté data protection, et `removeValue(forKey:)` supprime les deux
-        /// copies à la déconnexion.
+        /// La migration n'écrit qu'en ajout, jamais en mise à jour : l'ancienne valeur lue peut
+        /// être périmée si un autre lecteur (deuxième `restore`, deuxième instance) a migré puis
+        /// rafraîchi la session entre-temps, et un `set` écraserait le jeton rafraîchi. Sur
+        /// `errSecDuplicateItem`, la valeur data protection fait foi et est renvoyée. De même,
+        /// un ancien élément vide ne vaut « pas de session » qu'après une relecture data
+        /// protection : un autre lecteur a pu le migrer et le supprimer entre nos deux lectures,
+        /// et renvoyer `nil` ferait balayer une session valide.
+        ///
+        /// Ordre : lire l'ancien élément (sans la clé), l'ajouter avec la clé, relire la copie
+        /// data protection, et seulement alors supprimer l'ancien. Un échec avant l'ajout laisse
+        /// l'ancien élément intact : la lecture lève et la suivante recommence. Une suppression
+        /// de l'ancien élément qui échoue n'invalide pas la migration (la valeur est déjà en
+        /// sécurité côté data protection, qui prime ensuite) ; `removeValue(forKey:)` supprime les
+        /// deux copies à la déconnexion.
         private func migrateLegacyItem(forKey key: String) throws -> Data? {
+            let dataProtectionQuery = baseQuery(forKey: key)
             guard let legacyData = try readData(query: legacyQuery(forKey: key)) else {
-                return nil
+                return try readData(query: dataProtectionQuery)
             }
-            try set(legacyData, forKey: key)
-            guard try readData(query: baseQuery(forKey: key)) == legacyData else {
-                throw MatrixError.storage(.keychainFailure(status: errSecDataNotAvailable))
+
+            var insertion = dataProtectionQuery
+            insertion[kSecValueData as String] = legacyData
+            insertion[kSecAttrAccessible as String] = secAccessibility
+            let addStatus = keychain.add(insertion)
+            guard addStatus == errSecSuccess || addStatus == errSecDuplicateItem else {
+                throw MatrixError.storage(.keychainFailure(status: addStatus))
             }
-            _ = keychain.delete(matching: legacyQuery(forKey: key))
-            return legacyData
+
+            let stored = try readData(query: dataProtectionQuery)
+            if stored != nil {
+                _ = keychain.delete(matching: legacyQuery(forKey: key))
+            }
+            return stored
         }
     #endif
 
@@ -154,10 +174,12 @@ package struct KeychainSecureStore: SecureStore {
     }
 
     package func removeValue(forKey key: String) throws {
-        try delete(query: baseQuery(forKey: key))
+        // L'ancienne copie d'abord : si sa suppression échoue, la copie data protection reste, et
+        // la lecture suivante ne « migre » pas une session révoquée depuis l'ancien trousseau.
         #if os(macOS)
             try delete(query: legacyQuery(forKey: key))
         #endif
+        try delete(query: baseQuery(forKey: key))
     }
 
     private func delete(query: [String: Any]) throws {
