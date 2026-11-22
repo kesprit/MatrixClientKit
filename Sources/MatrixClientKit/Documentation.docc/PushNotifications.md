@@ -43,6 +43,38 @@ Both targets need the matching entitlements:
 while the device may still be locked, and ``MatrixStorage/KeychainAccessibility/whenUnlocked``
 would make the access token unreadable, so every notification would arrive empty.
 
+### On macOS
+
+The package stores its secrets in the data protection keychain (`kSecUseDataProtectionKeychain`).
+On macOS, the legacy file-based keychain refuses an extension that has another code identity than
+the application, even with the same access group; the data protection keychain does not. On iOS
+there is only one keychain and the key changes nothing. This has these consequences:
+
+- the application and the extension must both be **signed**, and carry the **same**
+  `keychain-access-groups` entitlement. An unsigned binary — a command-line tool, a test run
+  without a signing identity — gets `errSecMissingEntitlement` (-34018), thrown as
+  ``MatrixError/storage(_:)``;
+- the extension's `Info.plist` declares its extension service subsystem:
+
+  ```xml
+  <key>NSExtension</key>
+  <dict>
+      <key>NSExtensionPointIdentifier</key>
+      <string>com.apple.usernotifications.service</string>
+      <key>NSExtensionPrincipalClass</key>
+      <string>$(PRODUCT_MODULE_NAME).NotificationService</string>
+      <key>Subsystems</key>
+      <array>
+          <string>NSExtensionService_Subsystem</string>
+      </array>
+  </dict>
+  ```
+
+- a session written by an earlier version in the legacy keychain is migrated on the first read, by
+  whichever of the application or the extension reads first: the item is read, rewritten in the
+  data protection keychain, read back, and only then deleted. A failure before the deletion leaves
+  the legacy item in place and the next read retries; logging out deletes both copies.
+
 ## Register the pusher
 
 Ask for a device token as usual:
