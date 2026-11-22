@@ -133,6 +133,11 @@ follows [SemVer](https://semver.org/).
   extension's read throws a storage error. This keychain requires a signed application carrying
   `keychain-access-groups`: an unsigned binary gets `errSecMissingEntitlement` (-34018), which
   surfaces as `MatrixError.storage`. iOS is unchanged. See the *Push notifications* article.
+- **A residual window exists at the very first read after the update**: a logout
+  (`removeValue`) by another instance that lands between the legacy read and the add can bring a
+  revoked session back. No lock covers it — the `CrossProcessLock` serialises the SDK's SQLite
+  store, not the keychain. It resolves itself at the first authentication refusal, which erases
+  the session, with no data loss.
 
 ## [0.5.0] - 2026-10-26
 

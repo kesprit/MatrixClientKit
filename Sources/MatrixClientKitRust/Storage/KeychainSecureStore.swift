@@ -91,6 +91,13 @@ package struct KeychainSecureStore: SecureStore {
         /// de l'ancien élément qui échoue n'invalide pas la migration (la valeur est déjà en
         /// sécurité côté data protection, qui prime ensuite) ; `removeValue(forKey:)` supprime les
         /// deux copies à la déconnexion.
+        ///
+        /// - Important: une fenêtre résiduelle subsiste, à la toute première lecture après la
+        ///   mise à jour : un `removeValue(forKey:)` (déconnexion) d'une autre instance qui
+        ///   s'intercale entre la lecture legacy et l'ajout peut faire réapparaître une session
+        ///   révoquée. Aucun verrou ne la couvre : le `CrossProcessLock` sérialise le store SQLite
+        ///   du SDK, pas le trousseau. Elle se résorbe au premier refus d'authentification, qui
+        ///   efface la session, sans perte de données.
         private func migrateLegacyItem(forKey key: String) throws -> Data? {
             let dataProtectionQuery = baseQuery(forKey: key)
             guard let legacyData = try readData(query: legacyQuery(forKey: key)) else {
