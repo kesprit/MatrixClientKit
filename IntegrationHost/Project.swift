@@ -19,6 +19,9 @@ let signing: SettingsDictionary = [
     "DEVELOPMENT_TEAM": .string(developmentTeam),
     "CODE_SIGN_STYLE": "Automatic",
     "CODE_SIGN_IDENTITY": "Apple Development",
+    // Comme `swiftLanguageModes: [.v6]` du package : en mode 6, les diagnostics de concurrence
+    // (Sendable, isolation) sont des erreurs, donc le job CI `integration-host` y échoue.
+    "SWIFT_VERSION": "6.0",
     // Les sources de la suite utilisent des symboles `package` du package racine.
     "OTHER_SWIFT_FLAGS": "$(inherited) -package-name MatrixClientKit",
 ]

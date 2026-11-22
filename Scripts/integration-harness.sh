@@ -129,6 +129,15 @@ case "${1:-}" in
   test)
     filter="${2:-IntegrationHostTests/HarnessTests}"
     [[ $# -le 2 ]] || echo "avertissement : arguments ignorés après le filtre : ${*:3}" >&2
+    # Les deux suites ne tournent jamais ensemble (une session Keychain par processus) et exigent
+    # des environnements différents : le filtre doit en nommer exactement une.
+    case "$filter" in
+      *HarnessTests* | *IntegrationTests*) ;;
+      *) echo "filtre « $filter » ambigu : nommez IntegrationHostTests/HarnessTests ou IntegrationHostTests/IntegrationTests" >&2; exit 64 ;;
+    esac
+    if [[ "$filter" == *HarnessTests* && "$filter" == *IntegrationTests* ]]; then
+      echo "filtre « $filter » couvre les deux suites" >&2; exit 64
+    fi
     if [[ "$filter" == *HarnessTests* ]]; then
       # Le harnais Docker doit tourner : sans lui, tous les cas seraient « skipped ». Aucune
       # variable `MATRIX_TEST_*` résiduelle ne remplace cet environnement ; l'échec de `env` est fatal.

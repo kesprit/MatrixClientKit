@@ -100,7 +100,18 @@ jobs:
           xcode-version: '26'
 
       # Tuist version pinned by mise.toml.
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v3
+
+      # Same reason as in `verify`: the upstream XCFramework is large. Tuist resolves the package
+      # into IntegrationHost/Tuist/.build, with SwiftPM's own cache in ~/.cache/swifterpm.
+      - name: Cache Tuist dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            IntegrationHost/Tuist/.build
+            ~/.cache/swifterpm
+          key: tuist-${{ runner.os }}-${{ hashFiles('Package.swift', 'IntegrationHost/Tuist/Package.resolved') }}
+          restore-keys: tuist-${{ runner.os }}-
 
       - name: Generate the project
         working-directory: IntegrationHost
