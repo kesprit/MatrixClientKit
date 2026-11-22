@@ -12,3 +12,4 @@ docs-build/
 # IntegrationHost (Tuist) : projet généré, jamais committé
 IntegrationHost/Derived/
 IntegrationHost/Tuist/.build/
+Derived/
