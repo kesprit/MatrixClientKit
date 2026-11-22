@@ -9,12 +9,13 @@ public enum ReadReceiptVisibility: Sendable, Hashable {
     case `private`
 }
 
-/// Another member's read position: the latest message they read.
+/// Another member's read position: the latest timeline item they read.
 ///
-/// A receipt appears only on the *latest* message a member read. To know whether a member read
-/// a message `M`, look for their receipt on `M` or on any more recent message.
+/// A receipt appears only on the *latest* item a member read, and that item is not necessarily a
+/// message. To know whether a member read a message `M`, look for their receipt on `M` or on any
+/// more recent item. See ``TimelineItem/readReceipts``.
 public struct ReadReceipt: Sendable, Hashable {
-    /// The member who read the message.
+    /// The member who read the item.
     public let userID: UserID
     /// When they read it, when the homeserver says.
     public let timestamp: Date?

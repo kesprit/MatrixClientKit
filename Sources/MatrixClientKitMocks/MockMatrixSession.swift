@@ -1,11 +1,13 @@
 import Foundation
 import MatrixClientKitCore
 
-/// A drivable authenticated session for tests: exposes a ready-made ``MockRoomService``,
-/// ``MockSyncController``, ``MockEncryptionService``, ``MockNotificationService`` and ``MockMediaService``, ``MockProfileService`` and ``MockAccountService``, lets you
-/// push authentication states, and records calls to ``logout()``. ``reauthenticate(_:)`` returns or
-/// throws ``reauthenticateResult``; ``beginOAuthReauthentication(_:)`` returns
-/// ``oauthReauthenticationFlow``.
+/// A drivable authenticated session for tests.
+///
+/// It exposes ready-made ``MockRoomService``, ``MockSyncController``, ``MockEncryptionService``,
+/// ``MockNotificationService``, ``MockMediaService``, ``MockProfileService`` and
+/// ``MockAccountService`` instances, lets you push authentication states, and records calls to
+/// ``logout()``. ``reauthenticate(_:)`` returns or throws ``reauthenticateResult``;
+/// ``beginOAuthReauthentication(_:)`` returns ``oauthReauthenticationFlow``.
 public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
     private let lock = NSLock()
 
@@ -91,6 +93,7 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
         authStateContinuation.yield(state)
     }
 
+    /// Marks the session as signed out (``didLogout``), then throws ``logoutError`` when one is set.
     public func logout() async throws {
         let error = lock.withLock {
             _didLogout = true

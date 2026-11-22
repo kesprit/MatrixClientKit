@@ -3,7 +3,7 @@ import MatrixClientKitCore
 import MatrixClientKitMocks
 import Testing
 
-@Suite struct MockRoomHandleTypingTests {
+@Suite(.timeLimit(.minutes(1))) struct MockRoomHandleTypingTests {
     private func makeHandle() -> MockRoomHandle {
         MockRoomHandle(id: RoomID(rawValue: "!r:e.org")!, timeline: MockTimeline())
     }

@@ -28,6 +28,9 @@ public protocol AccountService: Sendable {
     /// is not reported, since the call did succeed. On failure nothing is erased and the session
     /// stays usable.
     ///
+    /// A refused password throws ``MatrixError/authentication(_:)`` with `.invalidCredentials`; a
+    /// session that already ended throws ``MatrixError/unexpected(message:details:)``.
+    ///
     /// - Important: a failure can be reported although the account was deactivated on the server
     ///   (for example the network dropping on the second request, after the server accepted the
     ///   first authenticated one). The session is then dead: the next sync receives

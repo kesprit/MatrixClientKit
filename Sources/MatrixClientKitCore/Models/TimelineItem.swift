@@ -56,6 +56,14 @@ public struct Message: Sendable, Hashable {
     /// The sender's avatar at the time of sending, when known. Pass it to ``MediaService``.
     public let senderAvatar: MediaSource?
 
+    /// Creates a message.
+    ///
+    /// - Parameters:
+    ///   - media: the media the message carries; `nil` (the default) for a text message.
+    ///   - uploadProgress: the upload progress; `nil` (the default) when the message is not an
+    ///     upload in progress.
+    ///   - senderAvatar: the sender's avatar, when known; `nil` by default, which is also what a
+    ///     received message holds until the sender's profile is loaded.
     public init(
         eventID: EventID?,
         sender: UserID,
@@ -108,13 +116,20 @@ public struct TimelineItem: Sendable, Hashable, Identifiable {
     public let kind: Kind
     /// The other members whose latest read item is this one, most recent first — whatever the
     /// item holds: a message, but also a membership change, a redacted or undecryptable event,
-    /// or an event this version does not render. Always empty for an item with no associated
-    /// event (``Kind/dateSeparator(_:)``, ``Kind/readMarker``).
+    /// or an event this version does not render. The current user is never listed.
+    ///
+    /// It is empty for an item with no associated event: a ``Kind/dateSeparator(_:)``, a
+    /// ``Kind/readMarker``, and an ``Kind/unsupported(description:)`` item that stands for no event
+    /// — the start of the timeline, or a debugging fallback.
     ///
     /// A receipt sits only on the latest item a member read: they read an item `M` when their
-    /// receipt is on `M` or on any later item of the timeline.
+    /// receipt is on `M` or on any later item of the timeline. For example, Bob reads everything,
+    /// then Carol joins the room: Bob's receipt is on the item showing Carol's arrival, not on the
+    /// last message. To know whether Bob read that message, look for his receipt on it **or on any
+    /// later item**. See <doc:ReadReceiptsTypingAndProfile> for a worked example.
     public let readReceipts: [ReadReceipt]
 
+    /// Creates a timeline item. `readReceipts` is empty by default.
     public init(id: String, kind: Kind, readReceipts: [ReadReceipt] = []) {
         self.id = id
         self.kind = kind
