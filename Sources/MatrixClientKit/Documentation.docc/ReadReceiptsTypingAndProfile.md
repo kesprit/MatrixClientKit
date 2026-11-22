@@ -132,11 +132,13 @@ try await session.profile.setPresence(.online)
 Know the limits before relying on it:
 
 - **The package publishes nothing itself.** Until your application calls `setPresence(_:)`, the
-  user reads `offline` from another account on Synapse, at every launch: the state is not
+  server reports the user `offline` before any publication, at every launch: the state is not
   persisted. Publish it again each time the application starts, for instance when it comes to the
   foreground.
-- **The server rate limits it**: on Synapse, a second update within about 10 seconds throws
-  ``MatrixError/rateLimited(retryAfter:)``. Wait, then retry.
+- **The server rate limits it**: on Synapse, a second update in quick succession can wait about
+  10 seconds before it succeeds, the upstream SDK replaying the refusal itself. Do not call it from
+  a path that blocks the interface on the answer. ``MatrixError/rateLimited(retryAfter:)`` stays
+  possible if the upstream SDK gives up, which was not observed.
 - **The state applies to the following syncs even when the call throws.**
 - **Observing other people's presence is not possible**: the upstream SDK does not expose it.
 
@@ -243,7 +245,7 @@ try await session.account.deactivate(password: password, eraseData: false)
 - A read receipt is on the latest item a member read, which is not always a message.
 - ``Timeline/markAsRead(visibility:)`` resolves "the latest item" twice; use
   ``Timeline/markAsRead(upTo:visibility:)`` for one fixed target.
-- The presence reads `offline` until you publish it, is not persisted and is rate limited; observing it is not possible.
+- The presence reads `offline` until you publish it, is not persisted and may be slowed by the server's rate limit; observing it is not possible.
 - The current user's profile is not observable.
 - Account deactivation is refused in an OAuth session: use the management URL.
 

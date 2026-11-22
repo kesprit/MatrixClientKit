@@ -74,11 +74,13 @@ follows [SemVer](https://semver.org/).
 - **The package publishes nothing by itself**: no receipt, no typing notice and no presence.
   The upstream SDK's initial presence, `unavailable`, is only what its sync requests carry.
 - **The presence is publish-only and is not persisted.** Against Synapse, a user whose
-  application has not called `setPresence(_:)` reads `offline` from another account — not
+  application has not called `setPresence(_:)` is reported `offline` by the server — not
   `unavailable` — and is so again at every launch: publish it each time the application starts.
-  The state applies to the following syncs even when the call throws. **`setPresence(_:)` is rate
-  limited by the server**: a second update within about 10 seconds (Synapse) throws
-  `MatrixError.rateLimited`; retry after the delay. Observing other users' presence is not
+  The state applies to the following syncs even when the call throws. **The server rate limits
+  presence updates**: on Synapse, a second update in quick succession can wait about 10 seconds
+  before it succeeds, the upstream SDK replaying the refusal itself. Do not call `setPresence(_:)`
+  from a path that blocks the interface on the answer. `MatrixError.rateLimited` stays possible if
+  the upstream SDK gives up, which was not observed. Observing other users' presence is not
   possible: the upstream SDK does not expose it.
 - **The current user's profile is not observable**, and nothing is cached: every `profile(of:)`
   asks the homeserver. After `setDisplayName(_:)` — which does not validate the name — update your
