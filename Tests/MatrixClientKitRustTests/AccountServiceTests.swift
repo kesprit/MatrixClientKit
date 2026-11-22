@@ -108,8 +108,9 @@ private let forbidden = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDD
 /// portant `auth_error` (erreur relevée telle quelle contre le harnais).
 private let uiaaRefusal = ClientError.Generic(
     msg: "the server returned an error: User-Interactive Authentication required.",
-    details: "Api(Server(AuthResponse(UiaaInfo { flows: [AuthFlow { stages: [Password] }], completed: [], "
-        + "params: None, session: Some(\"s\"), auth_error: Some(StandardErrorBody { kind: Forbidden, "
+    details: "Api(Server(AuthResponse(UiaaInfo { flows: [AuthFlow { stages: [\"m.login.password\"] }], "
+        + "completed: [], params: Some(RawValue({})), session: Some(\"ontiejDvRzOFqTlYlMOnVHss\"), "
+        + "auth_error: Some(StandardErrorBody { kind: Forbidden, "
         + "message: \"Invalid username or password\" }) })))")
 
 @Suite struct AccountServiceTests {

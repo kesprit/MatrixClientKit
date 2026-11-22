@@ -6,16 +6,18 @@ import MatrixClientKit
 extension HarnessTests {
     // Profil, présence, compte et durée de vie contre le harnais (PRD 0.6, §8 critères 6 à 11).
     // Les constats « amont » sont imprimés avec le préfixe `[T11]` et consignés dans les rulings
-    // 0.6. Aucun cas ne modifie `mck-other` ; les cas qui changent `mck-user` (nom, avatar,
-    // présence, utilisateur ignoré) le remettent en l'état en sortant. La désactivation ne touche
-    // qu'un compte jetable créé par l'API admin.
+    // 0.6. Aucun cas ne modifie `mck-other`. Les cas qui changent `mck-user` ne le remettent
+    // qu'en partie en l'état : l'utilisateur ignoré est retiré ; l'avatar est retiré (non
+    // restauré) et le nom est remplacé par l'ancien, ou par le localpart s'il n'y en avait pas ;
+    // la présence reste à `unavailable`, où le dernier appel la laisse. La
+    // désactivation ne touche qu'un compte jetable créé par l'API admin.
     @Suite
     struct ProfileAndAccountHarnessTests {
         // MARK: Présence (critère 6)
 
         /// `setPresence(.online)` puis `.unavailable` : l'API HTTP du serveur rend l'état publié.
-        /// Constat : l'état que le serveur rend avant tout appel (l'amont annonce `unavailable`
-        /// comme état initial des requêtes de sync).
+        /// Constat : l'état que le serveur rend avant tout appel est imprimé ; relevé `offline` sur
+        /// Synapse, bien que l'amont annonce `unavailable` comme état initial des requêtes de sync.
         @Test(.timeLimit(.minutes(3)))
         func publishedPresenceIsVisibleOverHTTP() async throws {
             let configuration = try #require(HarnessConfiguration.current)
@@ -68,7 +70,8 @@ extension HarnessTests {
                     let withoutAvatar = try await profile(of: session.userID, in: session) { $0.avatar == nil }
                     #expect(withoutAvatar.avatar == nil, "avatar after removeAvatar: \(describe(withoutAvatar))")
                 }
-                // Remise en l'état, que le cas ait réussi ou non.
+                // Remise en l'état partielle, que le cas ait réussi ou non : l'avatar est retiré (pas
+                // restauré) et le nom devient l'ancien, ou le localpart s'il n'y en avait pas.
                 try? await session.profile.removeAvatar()
                 try? await session.profile.setDisplayName(restoredName)
                 try outcome.get()
@@ -88,8 +91,8 @@ extension HarnessTests {
             }
         }
 
-        /// `profile(of:)` d'un compte inexistant : `.notFound(.user)` (remappé depuis
-        /// `.notFound(.unspecified)`).
+        /// `profile(of:)` d'un compte inexistant : `.notFound(.user)` (Synapse répond 404
+        /// `M_UNKNOWN`, que le package mappe).
         @Test(.timeLimit(.minutes(2)))
         func anUnknownUsersProfileIsNotFound() async throws {
             let configuration = try #require(HarnessConfiguration.current)

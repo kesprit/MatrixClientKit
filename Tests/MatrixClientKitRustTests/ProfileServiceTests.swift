@@ -131,7 +131,8 @@ private let alice = UserID(rawValue: "@alice:example.org")!
         let driver = FakeProfileDriver()
         driver.error = ClientError.MatrixApi(
             kind: .unknown, code: "M_UNKNOWN", msg: "No row found (profiles)",
-            details: "Error { status_code: 404, headers: {}, body: Json(Object {}), kind: Unknown }")
+            details: "M_UNKNOWN: Error { status_code: 404, body: Standard(StandardErrorBody { kind: Unknown, "
+                + "message: \"No row found (profiles)\" }) }")
         let service = makeService(driver)
         await #expect(throws: MatrixError.notFound(.user)) { try await service.profile(of: alice) }
     }
