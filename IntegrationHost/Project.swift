@@ -71,7 +71,9 @@ let project = Project(
             ],
             dependencies: [.target(name: "IntegrationHost"), .target(name: "IntegrationLegacySeeder")]
                 + packageDependencies,
-            settings: .settings(base: signing)
+            // Le bundle est chargé par l'hôte (`-bundle_loader`), qui ne référence rien du package :
+            // Tuist ne relie pas pour autant la bibliothèque Rust que le code des tests tire.
+            settings: .settings(base: signing.merging(["OTHER_LDFLAGS": "$(inherited) -lmatrix_sdk_ffi"]) { $1 })
         ),
     ]
 )
