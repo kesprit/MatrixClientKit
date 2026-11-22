@@ -104,6 +104,14 @@ private func isUnexpected(_ error: any Error) -> Bool {
 
 private let forbidden = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDDEN", msg: "no", details: nil)
 
+/// Le refus du mot de passe au second appel contre Synapse : pas de `M_FORBIDDEN`, une réponse UIAA
+/// portant `auth_error` (erreur relevée telle quelle contre le harnais).
+private let uiaaRefusal = ClientError.Generic(
+    msg: "the server returned an error: User-Interactive Authentication required.",
+    details: "Api(Server(AuthResponse(UiaaInfo { flows: [AuthFlow { stages: [Password] }], completed: [], "
+        + "params: None, session: Some(\"s\"), auth_error: Some(StandardErrorBody { kind: Forbidden, "
+        + "message: \"Invalid username or password\" }) })))")
+
 @Suite struct AccountServiceTests {
     private func makeService(
         _ driver: FakeAccountDriver,
@@ -333,6 +341,35 @@ private let forbidden = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDD
 
         #expect(journal.all.isEmpty)
         #expect(lifecycle.current == .signedIn)
+    }
+
+    @Test func deactivateWithAUIAAForbiddenAuthErrorMapsToInvalidCredentials() async {
+        let driver = FakeAccountDriver()
+        driver.deactivationOutcomes = [ClientError.Generic(msg: "uiaa", details: nil), uiaaRefusal]
+        let journal = Journal()
+        let lifecycle = makeLifecycle(journal: journal)
+        let service = makeService(driver, lifecycle: lifecycle)
+
+        await #expect(throws: MatrixError.authentication(.invalidCredentials)) {
+            try await service.deactivate(password: "wrong", eraseData: false)
+        }
+
+        #expect(journal.all.isEmpty)
+        #expect(lifecycle.current == .signedIn)
+    }
+
+    @Test func deactivateKeepsAUIAAFailureWithoutAForbiddenAuthErrorUnexpected() async {
+        let driver = FakeAccountDriver()
+        let message = "the server returned an error: User-Interactive Authentication required."
+        let details = "Api(Server(AuthResponse(UiaaInfo { flows: [], auth_error: None })))"
+        driver.deactivationOutcomes = [
+            ClientError.Generic(msg: "uiaa", details: nil), ClientError.Generic(msg: message, details: details),
+        ]
+        let service = makeService(driver, lifecycle: makeLifecycle(journal: Journal()))
+
+        await #expect(throws: MatrixError.unexpected(message: message, details: details)) {
+            try await service.deactivate(password: "pw", eraseData: false)
+        }
     }
 
     @Test(arguments: [
