@@ -8,6 +8,9 @@ let package = Package(
         .library(name: "MatrixClientKit", targets: ["MatrixClientKit"]),
         .library(name: "MatrixClientKitCore", targets: ["MatrixClientKitCore"]),
         .library(name: "MatrixClientKitMocks", targets: ["MatrixClientKitMocks"]),
+        // Réservé au projet `IntegrationHost/` (Tuist), qui n'importe que des produits : la suite
+        // d'intégration utilise des symboles `package` de cette cible. Pas une API : ne pas en dépendre.
+        .library(name: "MatrixClientKitRust", targets: ["MatrixClientKitRust"]),
     ],
     dependencies: [
         .package(
@@ -32,19 +35,6 @@ let package = Package(
         ),
         .testTarget(name: "MatrixClientKitRustTests", dependencies: ["MatrixClientKitRust"]),
         .testTarget(name: "MatrixClientKitTests", dependencies: ["MatrixClientKit"]),
-        // Réservé à la suite d'intégration, jamais dans `products:` : crée un store sans verrou
-        // (comportement 0.2) dans un processus à part. La dépendance de la suite sur lui garantit
-        // qu'il est construit avant les tests.
-        .executableTarget(
-            name: "IntegrationLegacySeeder",
-            dependencies: ["MatrixClientKit", "MatrixClientKitRust"],
-            path: "Tests/IntegrationLegacySeeder"
-        ),
-        .testTarget(
-            name: "MatrixClientKitIntegrationTests",
-            dependencies: ["MatrixClientKit", "MatrixClientKitRust", "IntegrationLegacySeeder"],
-            exclude: ["README.md"]
-        ),
     ],
     swiftLanguageModes: [.v6]
 )

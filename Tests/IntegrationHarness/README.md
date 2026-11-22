@@ -8,8 +8,9 @@ Le jeton d'accès de `synapse-expiring` ne vit que 20 s : tout client connecté 
 Ce répertoire n'est pas une cible SwiftPM ; le harnais se lance à la main, jamais en CI.
 
 `Scripts/integration-harness.sh up` démarre les conteneurs et crée les comptes de test ;
-`eval "$(Scripts/integration-harness.sh env)"` exporte les variables `MCK_HARNESS_*` ; puis
-`swift test --filter 'MatrixClientKitIntegrationTests\.HarnessTests'` (voir plus bas) ; `Scripts/integration-harness.sh down` arrête tout et efface les volumes.
+`Scripts/integration-harness.sh test` récupère les variables `MCK_HARNESS_*`, génère le projet Tuist
+`IntegrationHost/` et lance `HarnessTests` avec `xcodebuild` (voir plus bas) ;
+`Scripts/integration-harness.sh down` arrête tout et efface les volumes.
 
 Tous les secrets de ce répertoire (secret d'enregistrement, mots de passe, clés) sont des valeurs
 de TEST, sans valeur hors de ce harnais local.
@@ -34,19 +35,36 @@ contacte directement) ; Synapse joint MAS par le réseau compose (`http://mas:80
 - Ports 8010 et 8082 liés à 127.0.0.1 ; secrets (config MAS, secret partagé, mots de passe Postgres)
   sont tous des valeurs de TEST.
 
-## Suites à lancer séparément
+## Lancer la suite (macOS signé)
+
+La suite n'est plus une cible SwiftPM : le trousseau data protection refuse (`-34018`) tout
+exécutable non signé avec `keychain-access-groups`, et `swift test` ne signe pas. Elle tourne donc
+dans l'hôte signé `IntegrationHost`, projet Tuist du répertoire `IntegrationHost/` (sources de la suite
+dans `Tests/MatrixClientKitIntegrationTests`, seeder dans `Tests/IntegrationLegacySeeder`).
+
+Prérequis : macOS, Xcode 26 connecté à un compte développeur (signature automatique), Tuist (`mise
+install`) et votre Team ID dans `TUIST_MCK_DEVELOPMENT_TEAM` (défaut : celui du mainteneur,
+`59ZC26E65Z`).
+
+    Scripts/integration-harness.sh up
+    Scripts/integration-harness.sh test        # HarnessTests (défaut)
+    Scripts/integration-harness.sh down
+
+L'argument de `test` est un identifiant `-only-testing` de xcodebuild :
+`Scripts/integration-harness.sh test IntegrationHostTests/HarnessTests/<cas>` n'en lance qu'un.
+Les variables `MCK_HARNESS_*` (et `MATRIX_TEST_*`) ne parviennent au processus de test que préfixées
+par `TEST_RUNNER_` : le script le fait lui-même. À la main, après `eval "$(Scripts/integration-harness.sh env)"` :
+`TEST_RUNNER_MCK_HARNESS_USER="$MCK_HARNESS_USER" …`.
 
 La suite `HarnessTests` (ce harnais) et la suite `IntegrationTests` (Tuwunel, variables
 `MATRIX_TEST_*`) sont chacune sérialisée, mais pas l'une par rapport à l'autre : le Keychain ne
 garde qu'une session persistée par processus. Lancer les deux l'une après l'autre, jamais ensemble :
 
-    eval "$(Scripts/integration-harness.sh env)" && swift test --filter 'MatrixClientKitIntegrationTests\.HarnessTests'
-    ./Scripts/check-integration-env.sh && swift test --filter 'MatrixClientKitIntegrationTests\.IntegrationTests'
+    Scripts/integration-harness.sh test IntegrationHostTests/HarnessTests
+    ./Scripts/check-integration-env.sh && Scripts/integration-harness.sh test IntegrationHostTests/IntegrationTests
 
-`--filter` est une expression régulière appliquée à l'identifiant complet
-(`Module.Suite/…/cas()`) : `--filter IntegrationTests` seul sélectionne aussi `HarnessTests`, dont
-le module s'appelle `MatrixClientKitIntegrationTests`. D'où le préfixe de module et le point
-échappé ; `swift test list | grep -cE '<filtre>'` vérifie ce qu'un filtre sélectionne.
+`-only-testing` est un préfixe d'identifiant exact (`Cible/Suite/cas`), pas une expression
+régulière : `IntegrationHostTests/IntegrationTests` ne sélectionne pas `HarnessTests`.
 
 Le cas de soft logout attend jusqu'à 60 s que le jeton de 20 s de `synapse-expiring` soit refusé.
 Les appareils qu'il ouvre ne peuvent pas être déconnectés côté serveur (jeton expiré) : ils

@@ -8,3 +8,7 @@ docs-build/
 .xcode-spm/
 .xcode-derived/
 .claude/worktrees/
+
+# IntegrationHost (Tuist) : projet généré, jamais committé
+IntegrationHost/Derived/
+IntegrationHost/Tuist/.build/

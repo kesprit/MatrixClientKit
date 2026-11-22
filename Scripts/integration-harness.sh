@@ -2,10 +2,17 @@
 # Démarre, arrête et décrit le harnais d'intégration Docker de MatrixClientKit.
 #   up    démarre les conteneurs, attend leur santé, crée les comptes de test
 #   down  arrête et efface tout (volumes compris)
-#   env   affiche les variables d'environnement à exporter pour `swift test`
+#   env   affiche les variables d'environnement à exporter (les `MCK_HARNESS_*`)
+#   test  [filtre]  génère IntegrationHost/ (Tuist) et lance la suite d'intégration signée avec
+#         xcodebuild ; sans filtre, uniquement `HarnessTests`. Le filtre est un identifiant
+#         `-only-testing` (ex. `IntegrationHostTests/HarnessTests`, ou
+#         `IntegrationHostTests/IntegrationTests` avec des variables `MATRIX_TEST_*` dans
+#         l'environnement). Les variables `MCK_HARNESS_*` et `MATRIX_TEST_*` sont transmises au
+#         processus de test via le préfixe `TEST_RUNNER_` de xcodebuild.
 set -euo pipefail
 
-cd "$(dirname "$0")/../Tests/IntegrationHarness"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT/Tests/IntegrationHarness"
 COMPOSE=(docker compose -p mck-harness)
 
 USER_NAME="mck-user"
@@ -118,8 +125,35 @@ case "${1:-}" in
     echo "export MCK_HARNESS_ADMIN_TOKEN_PASSWORD=$token_password"
     echo "export MCK_HARNESS_ADMIN_TOKEN_EXPIRING=$token_expiring"
     ;;
+  test)
+    # `env` joint le harnais Docker pour obtenir les jetons admin. Sans harnais, on continue si
+    # l'environnement porte déjà des `MATRIX_TEST_*` (suite `IntegrationTests`, serveur réel).
+    if harness_env=$("$0" env 2>/dev/null); then
+      eval "$harness_env"
+    elif [[ -z "${MATRIX_TEST_HOMESERVER:-}" ]]; then
+      echo "harnais Docker injoignable (lancez \`$0 up\`) et MATRIX_TEST_HOMESERVER absent" >&2
+      exit 1
+    fi
+    # xcodebuild ne transmet à l'hôte de tests que les variables préfixées `TEST_RUNNER_`
+    # (le préfixe est retiré) : on réexporte donc chaque MCK_HARNESS_* / MATRIX_TEST_* présent.
+    while IFS='=' read -r name value; do
+      case "$name" in
+        MCK_HARNESS_* | MATRIX_TEST_*) export "TEST_RUNNER_$name=$value" ;;
+      esac
+    done < <(env)
+    filter="${2:-IntegrationHostTests/HarnessTests}"
+    cd "$ROOT/IntegrationHost"
+    tuist install
+    tuist generate --no-open
+    # `-allowProvisioningUpdates` laisse Xcode créer le profil de développement (compte connecté).
+    xcodebuild test -allowProvisioningUpdates \
+      -workspace IntegrationHost.xcworkspace -scheme IntegrationHost \
+      -destination 'platform=macOS' \
+      -derivedDataPath "$ROOT/.xcode-derived/IntegrationHost" \
+      -only-testing:"$filter"
+    ;;
   *)
-    echo "usage: $0 up|down|env" >&2
+    echo "usage: $0 up|down|env|test [filtre]" >&2
     exit 64
     ;;
 esac
