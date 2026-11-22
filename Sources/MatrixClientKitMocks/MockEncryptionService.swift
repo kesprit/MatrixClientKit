@@ -143,6 +143,8 @@ public final class MockEncryptionService: EncryptionService, @unchecked Sendable
     public func hasDevicesToVerifyAgainst() async throws -> Bool { try hasDevicesToVerifyAgainstResult.get() }
     public func backupExistsOnServer() async throws -> Bool { try backupExistsOnServerResult.get() }
 
+    /// Counts the call, then throws the configured error when one is set; otherwise reports the
+    /// configured progress steps and returns the recovery key.
     public func enableRecovery(
         waitForBackupUpload: Bool,
         progress: @escaping @Sendable (RecoveryProgress) -> Void
@@ -156,6 +158,7 @@ public final class MockEncryptionService: EncryptionService, @unchecked Sendable
         return key
     }
 
+    /// Records `key`, then throws the configured error when one is set.
     public func recover(with key: String) async throws {
         let error = lock.withLock {
             _recoverAttempts.append(key)
@@ -164,6 +167,7 @@ public final class MockEncryptionService: EncryptionService, @unchecked Sendable
         if let error { throw error }
     }
 
+    /// Counts the call, then throws the configured error when one is set.
     public func resetRecoveryKey() async throws -> RecoveryKey {
         let (error, key) = lock.withLock {
             _resetRecoveryKeyCallCount += 1
@@ -173,6 +177,7 @@ public final class MockEncryptionService: EncryptionService, @unchecked Sendable
         return key
     }
 
+    /// Counts the call, then throws the configured error when one is set.
     public func disableRecovery() async throws {
         let error = lock.withLock {
             _disableRecoveryCallCount += 1
@@ -181,6 +186,7 @@ public final class MockEncryptionService: EncryptionService, @unchecked Sendable
         if let error { throw error }
     }
 
+    /// Counts the call, then throws the configured error when one is set.
     public func enableBackups() async throws {
         let error = lock.withLock {
             _enableBackupsCallCount += 1

@@ -39,12 +39,19 @@ for await rooms in session.rooms.list(filter: .joined) {
 
 ## Scope
 
-v0.5 adds media and the send handle: received images, videos, audio, voice messages and files
+v0.6 adds read receipts, typing, presence and the user's identity: marking a room as read, publicly
+or privately (`Timeline.markAsRead(visibility:)`), who read what (`TimelineItem.readReceipts`), who
+is typing (`RoomHandle.typingUsers`, `setTyping(_:)`), publishing the user's presence, reading and
+editing profiles, the sender's avatar of each message (`Message.senderAvatar`), ignoring users,
+opening the account management of the authorization server (`AccountService.managementURL(for:)`),
+and deactivating an account that has a password. The package sends none of this by itself: the
+application decides when. It builds on v0.5, which adds media and the send handle: received images,
+videos, audio, voice messages and files
 (`MediaService`: content, thumbnails, temporary files, the homeserver's upload limit), sending
 attachments with upload progress (`Timeline.send(_: Attachment)`), and cancelling or retrying a send
 from its local echo (`Timeline.sendHandle(for:)`). Thumbnails, blurhashes and waveforms of the media
-you send are produced by your application, and the package keeps no media cache. It builds on v0.4,
-which covers authentication: server discovery from a name, a URL or a user ID,
+you send are produced by your application, and the package keeps no media cache. It also builds on
+v0.4, which covers authentication: server discovery from a name, a URL or a user ID,
 `MatrixClient.loginDetails()` to learn which methods a server accepts, password and email sign-in,
 OAuth (including account creation where the server offers it), QR-code login in both directions —
 on homeservers that delegate to an OAuth server and support MSC4108 —, and signing in again on the
@@ -58,18 +65,20 @@ notification settings.
 End-to-end encryption is **active** — the Rust SDK handles it, with no opt-in on your part. An
 application can verify a new device by comparing emojis with another of the user's devices, set up
 recovery, restore keys with the recovery key, and learn that the server ended the session. What
-v0.5 does **not** expose:
+v0.6 does **not** expose:
 
 - QR-code verification — the bundled Rust SDK does not expose it;
 - verifying other users, and resetting a lost cryptographic identity;
 - account-wide notification settings (mentions, invitations, calls, keywords);
+- observing the presence of other users — the upstream SDK exposes publishing it only — and
+  observing the current user's own profile;
+- sending several media as one gallery;
 - registering an account with a password, legacy single sign-on (reported by `loginDetails()`, not
-  supported), granting a QR-code login from this device, and managing the account through the
-  authorization server.
+  supported), and granting a QR-code login from this device.
 
 Because a lost identity cannot be reset yet, set up recovery early: a user who never does and then
 loses or signs out of their last device cannot verify any device of that account again — identity
-reset is still not part of v0.5.
+reset is still not part of v0.6.
 
 | Version | Contents |
 | --- | --- |
@@ -79,19 +88,26 @@ reset is still not part of v0.5.
 | 0.4 | Authentication: server discovery, `loginDetails()`, OAuth, email, QR-code login, same-device sign-in after soft logout |
 | 0.5 | Media: received images, videos, audio and files, attachment upload with progress, send handle (cancel, retry) |
 | 0.6 | Read receipts, typing, presence (publishing only — the SDK does not expose observing it), profile and account |
-| Later | Verifying other users, identity reset, QR-code verification once the SDK exposes it |
+| Later | Galleries (several media in one message), verifying other users, identity reset, QR-code verification once the SDK exposes it |
 | 1.0 | API freeze |
 
 ## Installation
 
 ```swift
-.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.5.0")
+.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.6.0")
 ```
+
+Products whose name starts with an underscore (`_MatrixClientKitRust`) are internal: they carry no SemVer guarantee and must not be used.
+
+### macOS: sign your executable
+
+On macOS, the package keeps the session in the data protection keychain, which requires an executable **signed** with the `keychain-access-groups` entitlement (or an application identifier). An unsigned executable — a command-line tool, `swift test` — cannot save a session: writing it throws `MatrixError.storage(.keychainFailure(status: -34018))`. iOS is not affected: applications are always signed. A session saved by an earlier version in the legacy macOS keychain is migrated on the first read, by the application. If adding it to the data protection keychain fails — for example with -34018 — the old session stays intact, the read throws, and the next read tries again.
 
 ## Compatibility
 
 | MatrixClientKit | Bundled Matrix Rust SDK | iOS | macOS | Swift |
 | --- | --- | --- | --- | --- |
+| 0.6.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 | 0.5.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 | 0.4.x | 26.09.07 | 18+ | 15+ | 6.2+ |
 | 0.3.x | 26.09.07 | 18+ | 15+ | 6.2+ |

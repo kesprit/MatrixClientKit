@@ -1,14 +1,14 @@
 import Testing
 import Foundation
+import Synchronization
 import MatrixClientKit
 
 // Sérialisée pour la même raison que ``IntegrationTests`` : une seule entrée Keychain de session
 // par processus. Les deux suites parentes ne sont pas sérialisées **entre elles** — il faudrait un
 // parent commun, donc toucher à l'existant — : lancer séparément
-// `--filter 'MatrixClientKitIntegrationTests\.HarnessTests'` et
-// `--filter 'MatrixClientKitIntegrationTests\.IntegrationTests'`. Le filtre est une expression
-// régulière sur l'identifiant complet : `IntegrationTests` seul désigne aussi cette suite, par le
-// nom du module (voir `Tests/IntegrationHarness/README.md`).
+// `Scripts/integration-harness.sh test IntegrationHostTests/HarnessTests` et
+// `Scripts/integration-harness.sh test IntegrationHostTests/IntegrationTests` (`-only-testing` de
+// xcodebuild ; voir `Tests/IntegrationHarness/README.md`).
 @Suite(.enabled(if: HarnessConfiguration.isAvailable), .serialized)
 struct HarnessTests {}
 
@@ -221,4 +221,270 @@ private func harnessJSON(for request: URLRequest, step: String) async throws -> 
     try #require(status == 200, "\(step) answered HTTP \(status): \(body)")
     let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
     return try #require(object, "\(step) answered a non-object body: \(body)")
+}
+
+// MARK: - Sessions SDK
+
+/// Session connectée sur `synapse-password` avec les identifiants du harnais, sync en cours.
+func signedInSession(
+    _ configuration: HarnessConfiguration, directory: URL, deviceName: String
+) async throws -> any MatrixSession {
+    try await signedInSession(
+        homeserver: configuration.passwordHomeserver, username: configuration.user,
+        password: configuration.password, directory: directory, deviceName: deviceName)
+}
+
+/// Session connectée avec un compte donné, sync en cours : sert à ouvrir une **seconde** session
+/// (un autre compte, un autre répertoire de store) à côté de celle de l'utilisateur du harnais.
+func signedInSession(
+    homeserver: URL, username: String, password: String, directory: URL, deviceName: String
+) async throws -> any MatrixSession {
+    let client = Matrix.client(homeserver: homeserver, storage: .local(directory: directory))
+    let session = try await client.login(
+        .password(username: username, password: password, deviceName: deviceName)
+    )
+    let states = session.sync.state
+    await session.sync.start()
+    let state = await waitUntilRunning(states)
+    guard state == .running else {
+        await cleaningUp {
+            await session.sync.stop()
+            try? await session.logout()
+        }
+        throw MatrixError.unexpected(message: "sync reached \(String(describing: state))", details: nil)
+    }
+    return session
+}
+
+/// La timeline d'un salon, une fois que la sync l'a remonté (`room(_:)` ne résout que ceux-là).
+func openTimeline(
+    _ roomID: RoomID, in session: any MatrixSession, sourceLocation: SourceLocation = #_sourceLocation
+) async throws -> any Timeline {
+    let joined = await firstValue(of: session.rooms.list(filter: .joined), within: .seconds(20)) { rooms in
+        rooms.contains { $0.id == roomID }
+    }
+    try #require(
+        joined != nil, "room \(roomID.rawValue) never appeared in the joined list", sourceLocation: sourceLocation)
+    return try await session.rooms.room(roomID).timeline()
+}
+
+// MARK: - Deux sessions dans un salon commun
+
+/// Deux sessions SDK ouvertes en même temps sur `synapse-password`, membres d'un même salon.
+struct HarnessPair {
+    let configuration: HarnessConfiguration
+    /// L'utilisateur du harnais (`MCK_HARNESS_USER`), créateur du salon.
+    let first: any MatrixSession
+    /// Le second compte du harnais (`MCK_HARNESS_OTHER_USER`), invité puis entré dans le salon.
+    let second: any MatrixSession
+    let roomID: RoomID
+}
+
+/// Crée un salon à deux membres par l'API brute, ouvre une session SDK pour chacun, exécute
+/// `body`, puis arrête les syncs, déconnecte les deux sessions et supprime leurs répertoires, que
+/// `body` ait réussi ou non.
+///
+/// Le second compte est `MCK_HARNESS_OTHER_USER`, que le script du harnais exporte : le compte
+/// admin n'est exporté que par jeton, son mot de passe n'est pas dans l'environnement. Les deux
+/// sessions vivent dans le même processus : l'entrée Keychain de session est celle de la dernière
+/// connexion, sans effet puisqu'aucun cas ne restaure de session.
+func withTwoSessions(
+    encrypted: Bool = false,
+    _ body: (HarnessPair) async throws -> Void
+) async throws {
+    let configuration = try #require(HarnessConfiguration.current)
+    let otherUser = try #require(configuration.otherUser, "MCK_HARNESS_OTHER_USER is not exported")
+    let otherPassword = try #require(configuration.otherPassword, "MCK_HARNESS_OTHER_PASSWORD is not exported")
+    let firstDirectory = newHarnessDirectory()
+    let secondDirectory = newHarnessDirectory()
+    defer {
+        removeDirectory(firstDirectory)
+        removeDirectory(secondDirectory)
+    }
+    try FileManager.default.createDirectory(at: firstDirectory, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: secondDirectory, withIntermediateDirectories: true)
+
+    let roomID = try await createSharedRoom(
+        on: configuration.passwordHomeserver,
+        creator: (configuration.user, configuration.password),
+        member: (otherUser, otherPassword),
+        encrypted: encrypted
+    )
+    let first = try await signedInSession(configuration, directory: firstDirectory, deviceName: "Harness (first)")
+    let second: any MatrixSession
+    do {
+        second = try await signedInSession(
+            homeserver: configuration.passwordHomeserver, username: otherUser, password: otherPassword,
+            directory: secondDirectory, deviceName: "Harness (second)")
+    } catch {
+        await cleaningUp {
+            await first.sync.stop()
+            try? await first.logout()
+        }
+        throw error
+    }
+
+    let outcome: Result<Void, any Error>
+    do {
+        try await body(HarnessPair(configuration: configuration, first: first, second: second, roomID: roomID))
+        outcome = .success(())
+    } catch {
+        outcome = .failure(error)
+    }
+    await cleaningUp {
+        await first.sync.stop()
+        await second.sync.stop()
+        try? await first.logout()
+        try? await second.logout()
+    }
+    try outcome.get()
+}
+
+/// Crée un salon par l'API brute au nom de `creator`, y invite `member` et l'y fait entrer, avec
+/// des jetons propres déconnectés ensuite. L'API publique n'expose pas d'adhésion à un salon.
+func createSharedRoom(
+    on homeserver: URL,
+    creator: (user: String, password: String),
+    member: (user: String, password: String),
+    encrypted: Bool
+) async throws -> RoomID {
+    let memberLogin = try await rawLogin(on: homeserver, user: member.user, password: member.password)
+    let creatorLogin: RawLogin
+    do {
+        creatorLogin = try await rawLogin(on: homeserver, user: creator.user, password: creator.password)
+    } catch {
+        await rawLogout(on: homeserver, token: memberLogin.token)
+        throw error
+    }
+    let outcome: Result<RoomID, any Error>
+    do {
+        var body: [String: Any] = [
+            "preset": "private_chat",
+            "name": "MatrixClientKit Harness \(UUID())",
+            "invite": [memberLogin.userID],
+        ]
+        if encrypted {
+            body["initial_state"] = [
+                ["type": "m.room.encryption", "state_key": "", "content": ["algorithm": "m.megolm.v1.aes-sha2"]]
+            ]
+        }
+        let created = try await rawRequest(
+            "POST", "_matrix/client/v3/createRoom", on: homeserver, token: creatorLogin.token, body: body)
+        let rawRoomID = try #require(created["room_id"] as? String)
+        _ = try await rawRequest(
+            "POST", "_matrix/client/v3/join/\(rawRoomID)", on: homeserver, token: memberLogin.token, body: [:])
+        outcome = .success(try #require(RoomID(rawValue: rawRoomID)))
+    } catch {
+        outcome = .failure(error)
+    }
+    await rawLogout(on: homeserver, token: creatorLogin.token)
+    await rawLogout(on: homeserver, token: memberLogin.token)
+    return try outcome.get()
+}
+
+/// Change le nom du salon par l'API brute, au nom de `user` : l'API publique ne modifie pas un
+/// salon. Produit un événement d'état `m.room.name`.
+func renameRoom(
+    _ roomID: RoomID, to name: String, on homeserver: URL, user: String, password: String
+) async throws {
+    let login = try await rawLogin(on: homeserver, user: user, password: password)
+    let outcome: Result<Void, any Error>
+    do {
+        _ = try await rawRequest(
+            "PUT", "_matrix/client/v3/rooms/\(roomID.rawValue)/state/m.room.name", on: homeserver,
+            token: login.token, body: ["name": name])
+        outcome = .success(())
+    } catch {
+        outcome = .failure(error)
+    }
+    await rawLogout(on: homeserver, token: login.token)
+    try outcome.get()
+}
+
+private struct RawLogin {
+    let token: String
+    let userID: String
+}
+
+private func rawLogin(on homeserver: URL, user: String, password: String) async throws -> RawLogin {
+    let object = try await rawRequest(
+        "POST", "_matrix/client/v3/login", on: homeserver, token: nil,
+        body: [
+            "type": "m.login.password",
+            "identifier": ["type": "m.id.user", "user": user],
+            "password": password,
+            "initial_device_display_name": "MatrixClientKit Harness (raw)",
+        ])
+    return RawLogin(
+        token: try #require(object["access_token"] as? String), userID: try #require(object["user_id"] as? String))
+}
+
+private func rawLogout(on homeserver: URL, token: String) async {
+    _ = try? await rawRequest("POST", "_matrix/client/v3/logout", on: homeserver, token: token, body: [:])
+}
+
+private func rawRequest(
+    _ method: String, _ path: String, on homeserver: URL, token: String?, body: [String: Any]
+) async throws -> [String: Any] {
+    var request = URLRequest(url: homeserver.appending(path: path))
+    request.httpMethod = method
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    if let token {
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    return try await harnessJSON(for: request, step: "\(method) \(path)")
+}
+
+// MARK: - Observation d'une timeline
+
+/// Itère un flux `items` en tâche de fond et garde chaque instantané reçu : les assertions portent
+/// sur le dernier, ou sur tout l'historique (« l'écho a-t-il été vu ? »).
+final class TimelineRecorder: Sendable {
+    private final class Log: Sendable {
+        let snapshots = Mutex<[[TimelineItem]]>([])
+    }
+
+    private let log: Log
+    private let task: Task<Void, Never>
+
+    init(_ items: AsyncStream<[TimelineItem]>) {
+        let log = Log()
+        self.log = log
+        self.task = Task {
+            for await snapshot in items {
+                log.snapshots.withLock { $0.append(snapshot) }
+            }
+        }
+    }
+
+    deinit {
+        task.cancel()
+    }
+
+    /// Le dernier instantané, `nil` avant le premier.
+    var latest: [TimelineItem]? {
+        log.snapshots.withLock { $0.last }
+    }
+
+    func everSaw(_ predicate: (TimelineItem) -> Bool) -> Bool {
+        let snapshots = log.snapshots.withLock { $0 }
+        return snapshots.contains { $0.contains(where: predicate) }
+    }
+
+    /// Le premier dernier-instantané qui satisfait `predicate`, sondé toutes les 100 ms ; `nil`
+    /// après `timeout`.
+    func waitUntil(within timeout: Duration, _ predicate: ([TimelineItem]) -> Bool) async -> [TimelineItem]? {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if let latest, predicate(latest) { return latest }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return nil
+    }
+
+    /// Termine l'itération ; le flux est alors libéré et sa souscription amont annulée.
+    func stop() {
+        task.cancel()
+    }
 }

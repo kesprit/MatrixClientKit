@@ -14,6 +14,10 @@ public protocol MatrixSession: Sendable {
     var notifications: any NotificationService { get }
     /// Media: content, thumbnails and files of received media, and the upload size limit.
     var media: any MediaService { get }
+    /// The current user's profile and presence.
+    var profile: any ProfileService { get }
+    /// Account management pages, ignored users and account deactivation.
+    var account: any AccountService { get }
 
     /// A stream of the session's authentication state, starting with the current value. Every
     /// access opens an independent subscription.

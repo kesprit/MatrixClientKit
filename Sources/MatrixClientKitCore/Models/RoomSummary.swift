@@ -33,7 +33,8 @@ public struct RoomSummary: Sendable, Hashable, Identifiable {
     public let isEncrypted: Bool?
     /// How many members have joined the room.
     public let joinedMemberCount: Int
-    /// How many unread events produce a notification.
+    /// How many unread events produce a notification, according to the user's notification
+    /// settings (computed by the SDK, not the homeserver's count).
     public let notificationCount: Int
     /// The subset of `notificationCount` that is a mention or a highlighted keyword.
     public let highlightCount: Int

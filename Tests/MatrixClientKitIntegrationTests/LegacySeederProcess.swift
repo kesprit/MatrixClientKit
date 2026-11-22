@@ -1,4 +1,4 @@
-// Pilotage de l'exécutable `IntegrationLegacySeeder` (Tests/IntegrationLegacySeeder), qui crée un
+// Pilotage de l'application `IntegrationLegacySeeder` (Tests/IntegrationLegacySeeder), qui crée un
 // store 0.2 dans un processus à part pour ``IntegrationTests/NotificationTests``. macOS uniquement :
 // `Foundation.Process` n'existe pas sur iOS, où la suite doit tout de même compiler.
 #if os(macOS)
@@ -31,24 +31,19 @@
         }
     }
 
-    /// Repère du bundle de test pour ``legacySeederURL()``.
-    private final class LegacySeederLocator {}
-
     /// Emplacement de l'exécutable du seeder.
     ///
-    /// SwiftPM (`swift test`) comme Xcode placent le bundle `.xctest` et les exécutables du package dans
-    /// le même répertoire de produits ; la dépendance de la suite sur la cible garantit qu'il y est
-    /// construit. `Bundle(for:)` résout l'image qui contient réellement ce code (via `dladdr`), quel que
-    /// soit le processus hôte — `xctest`, `swiftpm-testing-helper` ou l'agent de Xcode —, là où
-    /// `Bundle.main` désignerait l'hôte et `#filePath` les sources.
+    /// Le seeder est l'application `IntegrationLegacySeeder.app` du projet `IntegrationHost/`, signée
+    /// avec les mêmes entitlements que l'hôte. Xcode la construit dans le même répertoire de produits
+    /// que `IntegrationHost.app` ; le bundle de tests est chargé par l'hôte, donc `Bundle.main` est
+    /// `IntegrationHost.app` et son répertoire parent celui des produits.
     func legacySeederURL() throws -> URL {
-        let products = Bundle(for: LegacySeederLocator.self).bundleURL.deletingLastPathComponent()
-        let url = products.appending(path: "IntegrationLegacySeeder")
-        try #require(
-            FileManager.default.isExecutableFile(atPath: url.path),
-            "IntegrationLegacySeeder not found at \(url.path): build it with `swift build --build-tests`"
+        let url = Bundle.main.bundleURL.deletingLastPathComponent()
+            .appending(path: "IntegrationLegacySeeder.app/Contents/MacOS/IntegrationLegacySeeder")
+        return try #require(
+            FileManager.default.isExecutableFile(atPath: url.path) ? url : nil,
+            "IntegrationLegacySeeder.app not found at \(url.path): run the suite through `Scripts/integration-harness.sh test`, which builds the IntegrationHost project"
         )
-        return url
     }
 
     /// Lit un descripteur jusqu'à sa fin sur un fil de Dispatch, pour ne bloquer aucun fil du pool

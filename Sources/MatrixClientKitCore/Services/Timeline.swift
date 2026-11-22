@@ -41,4 +41,11 @@ public protocol Timeline: Sendable {
     /// - Note: only items that a subscription to ``items`` has seen are known — which is always
     ///   the case of a displayed item.
     func sendHandle(for item: TimelineItem) -> (any SendHandle)?
+
+    /// Marks the room as read up to its latest visible message, and moves your read marker there.
+    func markAsRead(visibility: ReadReceiptVisibility) async throws
+
+    /// Marks the room as read up to `eventID` — the last message the user actually saw — and moves
+    /// your read marker there.
+    func markAsRead(upTo eventID: EventID, visibility: ReadReceiptVisibility) async throws
 }

@@ -92,28 +92,18 @@ enum TimelineMapper {
         }
     }
 
-    static func item(from item: MatrixRustSDK.TimelineItem) -> MatrixClientKitCore.TimelineItem {
+    static func item(
+        from item: MatrixRustSDK.TimelineItem,
+        ownUserID: String
+    ) -> MatrixClientKitCore.TimelineItem {
         let id = item.uniqueId().id
 
         if let event = item.asEvent() {
-            return MatrixClientKitCore.TimelineItem(id: id, kind: kind(from: event))
+            return self.item(id: id, event: event, ownUserID: ownUserID)
         }
 
         if let virtual = item.asVirtual() {
-            switch virtual {
-            case let .dateDivider(timestamp):
-                return MatrixClientKitCore.TimelineItem(
-                    id: id,
-                    kind: .dateSeparator(date(from: timestamp))
-                )
-            case .readMarker:
-                return MatrixClientKitCore.TimelineItem(id: id, kind: .readMarker)
-            case .timelineStart:
-                return MatrixClientKitCore.TimelineItem(
-                    id: id,
-                    kind: .unsupported(description: "Start of the timeline")
-                )
-            }
+            return self.item(id: id, virtual: virtual)
         }
 
         return MatrixClientKitCore.TimelineItem(
@@ -122,7 +112,36 @@ enum TimelineMapper {
         )
     }
 
-    private static func kind(
+    /// Les accusés sont calculés ici, pour tout événement, et non dans ``kind(from:)`` : ils
+    /// sont posés sur l'item quel que soit son `Kind`.
+    static func item(
+        id: String,
+        event: EventTimelineItem,
+        ownUserID: String
+    ) -> MatrixClientKitCore.TimelineItem {
+        MatrixClientKitCore.TimelineItem(
+            id: id,
+            kind: kind(from: event),
+            readReceipts: ReceiptMapper.receipts(from: event.readReceipts, excluding: ownUserID)
+        )
+    }
+
+    static func item(
+        id: String,
+        virtual: VirtualTimelineItem
+    ) -> MatrixClientKitCore.TimelineItem {
+        switch virtual {
+        case let .dateDivider(timestamp):
+            MatrixClientKitCore.TimelineItem(id: id, kind: .dateSeparator(date(from: timestamp)))
+        case .readMarker:
+            MatrixClientKitCore.TimelineItem(id: id, kind: .readMarker)
+        case .timelineStart:
+            MatrixClientKitCore.TimelineItem(
+                id: id, kind: .unsupported(description: "Start of the timeline"))
+        }
+    }
+
+    static func kind(
         from event: EventTimelineItem
     ) -> MatrixClientKitCore.TimelineItem.Kind {
         guard case let .msgLike(content) = event.content else {
@@ -146,7 +165,8 @@ enum TimelineMapper {
                     isEdited: message.isEdited,
                     sendState: sendState(from: event.localSendState),
                     media: MediaMapper.attachment(from: message.msgType),
-                    uploadProgress: MediaMapper.uploadProgress(from: event.localSendState)
+                    uploadProgress: MediaMapper.uploadProgress(from: event.localSendState),
+                    senderAvatar: senderAvatar(from: event.senderProfile)
                 )
             )
         case .redacted:
@@ -170,24 +190,32 @@ enum TimelineMapper {
         return displayName
     }
 
+    static func senderAvatar(from profile: ProfileDetails) -> MatrixClientKitCore.MediaSource? {
+        guard case let .ready(_, _, avatarUrl?, _, _) = profile else { return nil }
+        return MatrixClientKitCore.MediaSource(url: avatarUrl)
+    }
+
     private static func date(from timestamp: Timestamp) -> Date {
         Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000)
     }
 
     /// Traduit une mise à jour de timeline amont en diff de collection du domaine.
-    static func diff(from update: TimelineDiff) -> CollectionDiff<MatrixClientKitCore.TimelineItem> {
+    static func diff(
+        from update: TimelineDiff,
+        ownUserID: String
+    ) -> CollectionDiff<MatrixClientKitCore.TimelineItem> {
         switch update {
-        case let .append(values): .append(values.map(item(from:)))
+        case let .append(values): .append(values.map { item(from: $0, ownUserID: ownUserID) })
         case .clear: .clear
-        case let .pushFront(value): .pushFront(item(from: value))
-        case let .pushBack(value): .pushBack(item(from: value))
+        case let .pushFront(value): .pushFront(item(from: value, ownUserID: ownUserID))
+        case let .pushBack(value): .pushBack(item(from: value, ownUserID: ownUserID))
         case .popFront: .popFront
         case .popBack: .popBack
-        case let .insert(index, value): .insert(index: Int(index), item(from: value))
-        case let .set(index, value): .set(index: Int(index), item(from: value))
+        case let .insert(index, value): .insert(index: Int(index), item(from: value, ownUserID: ownUserID))
+        case let .set(index, value): .set(index: Int(index), item(from: value, ownUserID: ownUserID))
         case let .remove(index): .remove(index: Int(index))
         case let .truncate(length): .truncate(length: Int(length))
-        case let .reset(values): .reset(values.map(item(from:)))
+        case let .reset(values): .reset(values.map { item(from: $0, ownUserID: ownUserID) })
         }
     }
 }

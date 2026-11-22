@@ -3,8 +3,22 @@
 These tests do not run in continuous integration. They exercise the whole chain against a real
 homeserver and must be run **manually before every bump of the Rust SDK**.
 
+## Prerequisites
+
+The suite runs only on macOS, inside the signed `IntegrationHost` app of the Tuist project in
+`IntegrationHost/`: the data protection Keychain refuses (`-34018`) any executable that is not
+signed with `keychain-access-groups`, and `swift test` does not sign. You need:
+
+- Xcode 26 signed in to an Apple developer account (Settings > Accounts), for automatic signing;
+- [Tuist](https://tuist.dev), pinned by `mise.toml` (`mise install`);
+- your Team ID, in `TUIST_MCK_DEVELOPMENT_TEAM` (default: the maintainer's, `59ZC26E65Z`).
+
+The suite is no longer a SwiftPM target: its sources stay here and `IntegrationHost/Project.swift`
+compiles them into `IntegrationHostTests`, together with `Tests/IntegrationLegacySeeder`.
+
 ## Running them
 
+    export TUIST_MCK_DEVELOPMENT_TEAM=YOURTEAMID   # unless you are the default team
     MATRIX_TEST_HOMESERVER=https://your-homeserver \
     MATRIX_TEST_USERNAME=username \
     MATRIX_TEST_PASSWORD=secret \
@@ -12,14 +26,18 @@ homeserver and must be run **manually before every bump of the Rust SDK**.
     MATRIX_TEST_RECOVERY_KEY='EsTc …' \
     MATRIX_TEST_SENDER_USERNAME=sender \
     MATRIX_TEST_SENDER_PASSWORD=secret \
-    swift test --filter 'MatrixClientKitIntegrationTests\.IntegrationTests'
+    Scripts/integration-harness.sh test IntegrationHostTests/IntegrationTests
 
-Without the first three variables the suite is skipped, which is the expected behaviour in CI.
+`xcodebuild` forwards to the test process only the variables prefixed with `TEST_RUNNER_` (the
+prefix is stripped). `Scripts/integration-harness.sh test` re-exports every `MATRIX_TEST_*` and
+`MCK_HARNESS_*` variable of its environment with that prefix, so you export the plain names and
+the script does the rest. Without the first three variables the suite is skipped.
 
-`--filter` is a regular expression over the full test identifier: keep the module prefix and the
-escaped dot. A bare `IntegrationTests` also selects `HarnessTests` (the local Synapse harness suite,
-see `Tests/IntegrationHarness/README.md`), which must never run in the same process — both suites
-share the single Keychain session entry.
+The argument is an `-only-testing` identifier: `IntegrationHostTests/IntegrationTests` selects this
+suite only, while `HarnessTests` (the local Synapse harness suite, see
+`Tests/IntegrationHarness/README.md`) must never run in the same process: both suites share the
+single Keychain session entry. Without an argument the script runs `HarnessTests`, so always name
+the suite here.
 
 `MATRIX_TEST_ROOM_ID` is a room **ID**, which starts with `!` — not an alias, which starts with
 `#`. Element X does not show it; ask the homeserver to resolve the alias instead:
@@ -72,6 +90,8 @@ Use an account **dedicated** to testing, for two reasons:
 - The Keychain holds one persisted session per service, so the verification case — which signs the
   same account in twice in one process — overwrites the first session's entry with the second's.
   The case never restores a session, so this does not affect it.
+- The suite passes no `keychainAccessGroup`: items go to the first group of the host's
+  entitlement (`<Team ID>.dev.kesprit.mck.IntegrationHost`), shared with the seeder.
 - The notification cases use an App Group storage. On macOS, outside a sandbox, `FileManager`
   creates its container under `~/Library/Group Containers/group.com.matrixclientkit.integration.*`;
   each case removes its own. An interrupted run may leave one behind: delete them by hand.
@@ -80,8 +100,8 @@ Use an account **dedicated** to testing, for two reasons:
   separate process that exits before the test restores the store with the lock. Two clients on one
   store in one process never happen in an application, and that setup hung intermittently. The
   seeder hands its Keychain secrets back through a pipe and the test writes them itself: on macOS, an
-  entry written by another executable cannot be read without an authorization dialog. `swift test`
-  builds the seeder automatically; run it on its own only for debugging, from the environment.
+  entry written by another executable cannot be read without an authorization dialog. Xcode builds the seeder (`IntegrationLegacySeeder.app`, signed like
+  the host) next to the host; run it on its own only for debugging, from the environment.
 - In the two-account case, the sender signs in **before** the main account and signs out **after**
   the extension opened: the Keychain holds one session entry per process, which every sign-in
   overwrites and every sign-out erases.

@@ -49,6 +49,8 @@ public final class MockSessionVerification: SessionVerification, @unchecked Send
         continuation.finish()
     }
 
+    // Each command records itself in ``calls``, then throws the error set with
+    // ``setError(_:for:)`` for it, when there is one.
     public func requestVerification() async throws { try record(.requestVerification) }
     public func accept() async throws { try record(.accept) }
     public func startSAS() async throws { try record(.startSAS) }

@@ -37,6 +37,8 @@ public final class MockSendHandle: SendHandle, @unchecked Sendable {
     /// How many times ``retry()`` was called, whether it threw or not.
     public var retryCount: Int { lock.withLock { _retryCount } }
 
+    /// Counts the call (``cancelCount``), then throws ``cancelError`` when one is set, or returns
+    /// ``cancelResult``.
     @discardableResult
     public func cancel() async throws -> Bool {
         let (result, error) = lock.withLock {
@@ -47,6 +49,7 @@ public final class MockSendHandle: SendHandle, @unchecked Sendable {
         return result
     }
 
+    /// Counts the call (``retryCount``), then throws ``retryError`` when one is set.
     public func retry() async throws {
         let error = lock.withLock {
             _retryCount += 1

@@ -20,6 +20,10 @@ discovery, OAuth, email and QR-code login.
 Use ``MatrixStorage/appGroup(_:keychainAccessGroup:accessibility:)`` as soon as an extension needs
 to reach the same session. Otherwise ``MatrixStorage/local(directory:accessibility:)`` is enough.
 
+### Signing on macOS
+
+On macOS, the package keeps the session in the data protection keychain, which requires an executable **signed** with the `keychain-access-groups` entitlement (or an application identifier). An unsigned executable — a command-line tool, `swift test` — cannot save a session: writing it throws ``MatrixError/storage(_:)`` with `keychainFailure(status: -34018)`. iOS is not affected: applications are always signed. A session saved by an earlier version in the legacy macOS keychain is migrated on the first read, by the application. If adding it to the data protection keychain fails — for example with -34018 — the old session stays intact, the read throws, and the next read tries again.
+
 ## Open a session
 
 At launch, restore the stored session from storage alone — its homeserver address is stored with
@@ -77,7 +81,9 @@ try await timeline.send(.text("hello"))
 ```
 
 The local echo of the message you sent shows up in `timeline.items` on its own. For images, files
-and the other media, and for cancelling or retrying a send, see <doc:WorkingWithMedia>.
+and the other media, and for cancelling or retrying a send, see <doc:WorkingWithMedia>. For
+marking the room as read, showing who read what and who is typing, see
+<doc:ReadReceiptsTypingAndProfile>.
 
 Note that ``RoomService/room(_:)`` resolves against the synced room list, not against the server:
 right after signing in, wait for the room to appear in ``RoomService/list(filter:)`` before asking

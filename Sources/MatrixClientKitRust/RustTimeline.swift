@@ -32,7 +32,11 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
     /// interne, d'où la même libération que ``ffiTimeline``.
     nonisolated(unsafe) private var registryStorage: SendHandleRegistry<MatrixRustSDK.SendHandle>?
 
-    init(timeline: MatrixRustSDK.Timeline, lifetime: ClientLifetime) {
+    /// User ID de la session, pour écarter son propre accusé de ``TimelineItem/readReceipts``.
+    private let ownUserID: String
+
+    init(timeline: MatrixRustSDK.Timeline, ownUserID: String, lifetime: ClientLifetime) {
+        self.ownUserID = ownUserID
         self.lifetime = lifetime
         self.ffiTimeline = timeline
         self.registryStorage = SendHandleRegistry()
@@ -70,13 +74,15 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
             // qu'elle reçoit. Les mêmes diffs appliqués deux fois sont sans effet de bord
             // (`track` / `untrack` idempotents, `reset` repart de zéro).
             let subscription = SubscriptionIDs()
+            let ownUserID = self.ownUserID
             // `self` faible : le listener vit côté amont tant que la souscription dure, et ne
             // doit retenir ni la timeline ni le registre — sinon des handles amont pourraient
             // être libérés hors de ``lifetime``. Le temps d'un appel, `self` retenu garantit le
             // client vivant pendant les appels FFI du suivi.
             let listener = ItemsListener { [weak self] updates in
                 self?.track(updates, in: subscription)
-                continuation.yield(updates.map(TimelineMapper.diff(from:)))
+                continuation.yield(
+                    updates.map { TimelineMapper.diff(from: $0, ownUserID: ownUserID) })
             }
             let task = Task {
                 // `self` plutôt que la timeline FFI : la tâche ne doit pas en devenir le dernier
@@ -108,6 +114,22 @@ public final class RustTimeline: MatrixClientKitCore.Timeline {
         } catch {
             throw ErrorMapper.map(error)
         }
+    }
+
+    /// Marks the room as read up to its latest visible message, then moves the read marker there.
+    ///
+    /// The read marker is not moved when the receipt fails.
+    public func markAsRead(visibility: ReadReceiptVisibility) async throws {
+        try await timeline.markAsRead(visibility: visibility)
+    }
+
+    /// Marks the room as read up to `eventID`, the last message the user saw, then moves the read
+    /// marker there.
+    ///
+    /// The read marker is not moved when the receipt fails. An unknown event surfaces the
+    /// upstream error, mapped.
+    public func markAsRead(upTo eventID: EventID, visibility: ReadReceiptVisibility) async throws {
+        try await timeline.markAsRead(upTo: eventID, visibility: visibility)
     }
 
     @discardableResult

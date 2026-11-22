@@ -137,6 +137,24 @@ func mockRoomServiceStreamCanBeFinished() async {
     #expect(received.count == 1)
 }
 
+/// Un abonnement ouvert après `finish()` se termine aussitôt, sans valeur, comme la frappe : sans
+/// cela, la boucle `for await` ne rendrait jamais la main.
+@Test(.timeLimit(.minutes(1)))
+func mockRoomServiceListOpenedAfterFinishEndsWithoutValue() async {
+    let service = MockRoomService(rooms: SampleData.roomSummaries(count: 2))
+    service.finish()
+
+    let stream = service.list(filter: .all)
+    service.emit(SampleData.roomSummaries(count: 3))
+
+    var received: [[RoomSummary]] = []
+    for await rooms in stream {
+        received.append(rooms)
+    }
+
+    #expect(received.isEmpty)
+}
+
 @Test(.timeLimit(.minutes(1)))
 func mockTimelineStreamCanBeFinished() async {
     let timeline = MockTimeline()

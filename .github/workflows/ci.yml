@@ -42,10 +42,12 @@ jobs:
       - name: Build (macOS)
         run: swift build --build-tests
 
-      # The integration suite needs a real homeserver and real credentials: it never runs in CI,
-      # by design (see Tests/MatrixClientKitIntegrationTests/README.md).
+      # The integration suite is no longer a package target: it lives in the Tuist project
+      # IntegrationHost/ (compiled by the integration-host job). It needs a real homeserver and a
+      # signed host, so it never runs in CI, by design (see
+      # Tests/MatrixClientKitIntegrationTests/README.md).
       - name: Test (unitaires)
-        run: swift test --skip MatrixClientKitIntegrationTests
+        run: swift test
 
       # The package declares .iOS(.v18): without this step, nothing guarantees it compiles for
       # the platform that is its main target.
@@ -81,3 +83,48 @@ jobs:
             --fallback-bundle-identifier com.kesprit.MatrixClientKit \
             --fallback-bundle-version 0.1.0 \
             --warnings-as-errors
+
+  # The integration suite (Tests/MatrixClientKitIntegrationTests) and its legacy seeder are compiled
+  # by the Tuist project IntegrationHost/, no longer by the package: this job only guarantees they
+  # still build. Unsigned (no developer account in CI) and never run (they need a homeserver).
+  integration-host:
+    name: Build integration host
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+
+      # Tuist version pinned by mise.toml.
+      - uses: jdx/mise-action@v3
+
+      # Same reason as in `verify`: the upstream XCFramework is large. Tuist resolves the package
+      # into IntegrationHost/Tuist/.build, with SwiftPM's own cache in ~/.cache/swifterpm.
+      - name: Cache Tuist dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            IntegrationHost/Tuist/.build
+            ~/.cache/swifterpm
+          key: tuist-${{ runner.os }}-${{ hashFiles('Package.swift', 'IntegrationHost/Tuist/Package.resolved') }}
+          restore-keys: tuist-${{ runner.os }}-
+
+      - name: Generate the project
+        working-directory: IntegrationHost
+        run: |
+          tuist install
+          tuist generate --no-open
+
+      - name: Build for testing (unsigned)
+        working-directory: IntegrationHost
+        run: |
+          xcodebuild build-for-testing -quiet \
+            -workspace IntegrationHost.xcworkspace \
+            -scheme IntegrationHost \
+            -destination 'platform=macOS' \
+            -derivedDataPath .derived \
+            CODE_SIGNING_ALLOWED=NO

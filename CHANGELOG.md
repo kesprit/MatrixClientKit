@@ -3,6 +3,143 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
 follows [SemVer](https://semver.org/).
 
+## [0.6.0] - 2026-11-22
+
+### Breaking
+
+- On macOS, an unsigned executable (command-line tool, `swift test`) can no longer save a session:
+  the data protection keychain needs a signature carrying `keychain-access-groups` (or an
+  application identifier), otherwise writing throws `MatrixError.storage(.keychainFailure(status: -34018))`.
+  Sign it with `keychain-access-groups`. iOS is not affected.
+- `Timeline` requires two new members, `markAsRead(visibility:)` and
+  `markAsRead(upTo:visibility:)`. `RoomHandle` requires `typingUsers: AsyncStream<[UserID]>` and
+  `setTyping(_:)`. `MatrixSession` requires `profile: any ProfileService` and
+  `account: any AccountService`. An application that implements these protocols itself —
+  typically in a test double — must complete them, or use `MockTimeline` / `MockRoomHandle` /
+  `MockMatrixSession`.
+- Not breaking: `TimelineItem.readReceipts` and `Message.senderAvatar` come with default values
+  in their initialisers, and so do the new `profile:` and `account:` parameters of
+  `MockMatrixSession.init`.
+
+### Added
+
+- Internal product `_MatrixClientKitRust`, reserved for the integration tests and outside SemVer.
+- Read receipts: `Timeline.markAsRead(visibility:)` marks the room as read up to its latest visible
+  message, `Timeline.markAsRead(upTo:visibility:)` up to a given event, and both move the read
+  marker as well. `ReadReceiptVisibility` chooses who can see the receipt, `.public` (`m.read`) or
+  `.private` (`m.read.private`); it is required at every call.
+- `TimelineItem.readReceipts` (`ReadReceipt`: `userID`, `timestamp`): the other members whose
+  latest read item is this one, most recent first, the current user excluded. It is carried by
+  every item that holds an event — a message, but also a membership change, a redacted or
+  undecryptable event, a sticker or a poll — and is empty for a date separator, the read marker and
+  the `.unsupported` items that stand for no event.
+- Typing: `RoomHandle.typingUsers`, a stream of snapshots of the members typing in the room (the
+  current user excluded), and `RoomHandle.setTyping(_:)`.
+- `MatrixSession.profile`, a `ProfileService`: `profile(of:)` (a `UserProfile`: user ID, display
+  name, avatar as a `MediaSource`), `setDisplayName(_:)`, `setAvatar(_:mimeType:)`,
+  `removeAvatar()` and `setPresence(_:)` (`Presence`: `.online`, `.unavailable`, `.offline`).
+- `Message.senderAvatar`: the sender's avatar, a `MediaSource` for `MediaService`.
+- `MatrixSession.account`, an `AccountService`: `managementURL(for:)` (an `AccountManagementAction`
+  — overview, profile, devices, one device, deleting a device, deactivating the account — on the
+  authorization server of a homeserver that delegates its accounts — `https`, or `http` on a loopback
+  host for local development — `nil` otherwise), `ignoredUsers`
+  (a stream of snapshots), `ignore(_:)`, `unignore(_:)` and `deactivate(password:eraseData:)`.
+- `MockProfileService`, `MockAccountService`, the new members of `MockTimeline`, `MockRoomHandle`
+  and `MockMatrixSession`, and `SampleData.userProfile(...)`, `SampleData.readReceipt(...)` and
+  the `senderAvatar:` parameter of `SampleData.message(...)`.
+- The DocC article *Read receipts, typing, profile and account*.
+
+### Fixed
+
+- `MockRoomService.list(filter:)` opened after `finish()` stayed open forever, so a `for await` loop
+  over it never returned. It now ends at once without any value, like the real service when its
+  subscription fails.
+- `RoomSummary.notificationCount` and `highlightCount` stayed at 0 with sliding sync: they now take
+  the counters the SDK computes from the user's notification settings.
+- A notification service extension on macOS was refused the session read
+  (`CSSMERR_CSP_NO_USER_INTERACTION`): the keychain items now go in the data protection keychain,
+  which an extension with another code identity can read through the shared access group.
+
+### Changed
+
+- `MockRoomHandle` is now a `final class`, not a `struct`: a test drives and inspects the very
+  handle the code under test holds. `MockRoomService.room(_:)` returns the same handle for a given
+  `RoomID`, and the new synchronous `MockRoomService.handle(for:)` gives it without awaiting.
+- `MockRoomService.finish()` also ends the typing streams of its handles, and a typing
+  subscription opened after it ends at once without any value, as the real services do when their
+  subscription fails.
+- `PackageInfo.version` is `0.6.0`.
+
+### Behaviours to know
+
+- **`markAsRead(visibility:)` resolves "the latest visible item" twice**, once for the receipt and
+  once for the read marker. If an event arrives in between, they can land on two different items.
+  Use `markAsRead(upTo:visibility:)` for one fixed target. If the receipt fails, the read marker is
+  not attempted.
+- **A read receipt sits only on the latest item a member read**, which is not necessarily a
+  message. A member read a message `M` when their receipt is on `M` **or on any later item**. The
+  package does not do that lookup for you.
+- **The package publishes nothing by itself**: no receipt, no typing notice and no presence.
+  The upstream SDK's initial presence, `unavailable`, is only what its sync requests carry.
+- **The presence is publish-only and is not persisted.** Against Synapse, a user whose
+  application has not called `setPresence(_:)` is reported `offline` by the server — not
+  `unavailable` — and is so again at every launch: publish it each time the application starts.
+  The state applies to the following syncs even when the call throws. **The server rate limits
+  presence updates**: on Synapse, a second update in quick succession can wait about 10 seconds
+  before it succeeds, the upstream SDK replaying the refusal itself. Do not call `setPresence(_:)`
+  from a path that blocks the interface on the answer. `MatrixError.rateLimited` stays possible if
+  the upstream SDK gives up, which was not observed. Observing other users' presence is not
+  possible: the upstream SDK does not expose it.
+- **The current user's profile is not observable**, and nothing is cached: every `profile(of:)`
+  asks the homeserver. After `setDisplayName(_:)` — which does not validate the name — update your
+  display yourself.
+- **`ignoredUsers` ends without any value when reading the initial list fails**, like
+  `RoomService.list(filter:)`.
+- **`deactivate(password:eraseData:)` is irreversible, and refused in an OAuth session** before any
+  server call: use `managementURL(for: .deactivateAccount)`. On success, the local erasure is best
+  effort — an erasure error is not reported once the server has deactivated the account. On
+  failure, nothing is erased and the session stays usable: a refused password throws
+  `MatrixError.authentication` with `.invalidCredentials`, and a session that already ended throws
+  `.unexpected`. A reported failure can match an account
+  that was deactivated all the same (the network dropping after the server accepted the request):
+  the next sync then fails with an unknown-token error and the hard logout erases the local data.
+- **An unknown user in `profile(of:)` throws `MatrixError.notFound` with `.user`** — Synapse
+  answers 404 `M_UNKNOWN` for it, which the package maps to that error.
+- **After a deactivation, signing in to the account throws `.authentication(.invalidCredentials)`**
+  against Synapse, which erases the password and does not answer `M_USER_DEACTIVATED`. A refused
+  password in `deactivate(password:eraseData:)` throws the same error.
+- **`managementURL(for:)` accepts `https`, and `http` only towards a loopback host** (`localhost`,
+  `*.localhost`, `127.0.0.0/8`, `::1`), for local development: a local authorization server
+  announces itself in `http`. Any other scheme or `http` host throws
+  `MatrixError.unexpected`. A `*.localhost` host relies on the system resolving it locally, as
+  RFC 6761 asks.
+- **The sender of a message has an implicit receipt on it**: other members see the receipt of the
+  author on their own message, before anyone reads it.
+- **A member who joins has an implicit receipt on their own membership event**, put by the server
+  when they join and visible to the others before they read anything.
+- **The current user is excluded** from `TimelineItem.readReceipts` and from `typingUsers`: each
+  member sees only the others.
+- **Typing notices are batched upstream**: 10 `setTyping(true)` calls over about 2 seconds reached
+  the other member as 5 snapshots. None failed; the package adds no throttling of its own.
+- **`RoomSummary.notificationCount` and `highlightCount` are computed by the SDK from the user's
+  notification settings**, not read from the server. After a long absence they can be lower than
+  the real count, because the sync timeline is limited. In an encrypted room, an event counts only
+  once it is decrypted.
+- **On macOS, the package stores the session in the data protection keychain**, and the
+  application migrates a session written by an earlier version on its first read: the legacy item
+  is read, added to the data protection keychain, read back, and only then deleted, so a failure
+  in between loses nothing and the next read starts again. The migration only adds, never
+  overwrites, and the data protection copy wins when another reader migrated first. The
+  notification extension cannot migrate: until the application has run once after the update, the
+  extension's read throws a storage error. This keychain requires a signed application carrying
+  `keychain-access-groups`: an unsigned binary gets `errSecMissingEntitlement` (-34018), which
+  surfaces as `MatrixError.storage`. iOS is unchanged. See the *Push notifications* article.
+- **A residual window exists at the very first read after the update**: a logout
+  (`removeValue`) by another instance that lands between the legacy read and the add can bring a
+  revoked session back. No lock covers it — the `CrossProcessLock` serialises the SDK's SQLite
+  store, not the keychain. It resolves itself at the first authentication refusal, which erases
+  the session, with no data loss.
+
 ## [0.5.0] - 2026-10-26
 
 ### Breaking

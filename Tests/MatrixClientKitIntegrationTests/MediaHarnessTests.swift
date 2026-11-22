@@ -615,39 +615,6 @@ private func withMediaSession(
     try outcome.get()
 }
 
-/// Session connectée sur `synapse-password`, sync en cours.
-private func signedInSession(
-    _ configuration: HarnessConfiguration, directory: URL, deviceName: String
-) async throws -> any MatrixSession {
-    let client = Matrix.client(homeserver: configuration.passwordHomeserver, storage: .local(directory: directory))
-    let session = try await client.login(
-        .password(username: configuration.user, password: configuration.password, deviceName: deviceName)
-    )
-    let states = session.sync.state
-    await session.sync.start()
-    let state = await waitUntilRunning(states)
-    guard state == .running else {
-        await cleaningUp {
-            await session.sync.stop()
-            try? await session.logout()
-        }
-        throw MatrixError.unexpected(message: "sync reached \(String(describing: state))", details: nil)
-    }
-    return session
-}
-
-/// La timeline d'un salon, une fois que la sync l'a remonté (`room(_:)` ne résout que ceux-là).
-private func openTimeline(
-    _ roomID: RoomID, in session: any MatrixSession, sourceLocation: SourceLocation = #_sourceLocation
-) async throws -> any Timeline {
-    let joined = await firstValue(of: session.rooms.list(filter: .joined), within: .seconds(20)) { rooms in
-        rooms.contains { $0.id == roomID }
-    }
-    try #require(
-        joined != nil, "room \(roomID.rawValue) never appeared in the joined list", sourceLocation: sourceLocation)
-    return try await session.rooms.room(roomID).timeline()
-}
-
 /// Le message `sent` qui porte le média nommé `filename`.
 private func sentMessage(named filename: String, in items: [TimelineItem]) -> Message? {
     items.compactMap(\.message).last { $0.media?.filename == filename && $0.sendState == .sent }
@@ -724,55 +691,4 @@ private func makePNG(width: Int, height: Int) throws -> Data {
     CGImageDestinationAddImage(destination, image, nil)
     try #require(CGImageDestinationFinalize(destination))
     return data as Data
-}
-
-/// Itère un flux `items` en tâche de fond et garde chaque instantané reçu : les assertions portent
-/// sur le dernier, ou sur tout l'historique (« l'écho a-t-il été vu ? »).
-private final class TimelineRecorder: Sendable {
-    private final class Log: Sendable {
-        let snapshots = Mutex<[[TimelineItem]]>([])
-    }
-
-    private let log: Log
-    private let task: Task<Void, Never>
-
-    init(_ items: AsyncStream<[TimelineItem]>) {
-        let log = Log()
-        self.log = log
-        self.task = Task {
-            for await snapshot in items {
-                log.snapshots.withLock { $0.append(snapshot) }
-            }
-        }
-    }
-
-    deinit {
-        task.cancel()
-    }
-
-    /// Le dernier instantané, `nil` avant le premier.
-    var latest: [TimelineItem]? {
-        log.snapshots.withLock { $0.last }
-    }
-
-    func everSaw(_ predicate: (TimelineItem) -> Bool) -> Bool {
-        let snapshots = log.snapshots.withLock { $0 }
-        return snapshots.contains { $0.contains(where: predicate) }
-    }
-
-    /// Le premier dernier-instantané qui satisfait `predicate`, sondé toutes les 100 ms ; `nil`
-    /// après `timeout`.
-    func waitUntil(within timeout: Duration, _ predicate: ([TimelineItem]) -> Bool) async -> [TimelineItem]? {
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
-            if let latest, predicate(latest) { return latest }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        return nil
-    }
-
-    /// Termine l'itération ; le flux est alors libéré et sa souscription amont annulée.
-    func stop() {
-        task.cancel()
-    }
 }

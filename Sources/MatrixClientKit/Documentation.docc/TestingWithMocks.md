@@ -28,16 +28,19 @@ test suite runs without pulling in the Rust binary, and starts at its usual spee
 | Double | Stands in for | Driven with |
 | --- | --- | --- |
 | `MockMatrixClient` | ``MatrixClient`` | `loginResult`, `restoreResult`, `loginAttempts`, `loginDetailsResult`, `oauthFlow`, `oauthRequests`, `oauthLoginError`, `qrCodeLogin` |
-| `MockMatrixSession` | ``MatrixSession`` | `emitAuthState(_:)`, `logoutError`, `didLogout`, `reauthenticateResult`, `reauthenticationAttempts`, `oauthReauthenticationFlow` |
+| `MockMatrixSession` | ``MatrixSession`` | `profile`, `account`, `emitAuthState(_:)`, `logoutError`, `didLogout`, `reauthenticateResult`, `reauthenticationAttempts`, `oauthReauthenticationFlow` |
 | `MockOAuthLoginFlow` | ``OAuthLoginFlow`` | `completeResult`, `completedCallbackURLs`, `cancelCount` |
 | `MockQRCodeLogin` | ``QRCodeLogin`` | `emit(_:)`, `startResult`, `submitError`, `submittedCheckCodes`, `didCancel` |
-| `MockRoomService` | ``RoomService`` | `emit(_:)`, `finish()` |
+| `MockRoomService` | ``RoomService`` | `emit(_:)`, `finish()`, `handle(for:)` |
+| `MockRoomHandle` | ``RoomHandle`` | `emitTypingUsers(_:)`, `finish()`, `typingNotices`, `typingError` |
 | `MockSyncController` | ``SyncController`` | `emit(_:)`, `finish()`, `startCallCount` |
-| `MockTimeline` | ``Timeline`` | `emit(_:)`, `finish()`, `sentMessages`, `sendError`, `paginationError`, `sentAttachments`, `attachmentSendError`, `nextAttachmentUpload`, `nextSendHandle`, `sendHandles` |
+| `MockTimeline` | ``Timeline`` | `emit(_:)`, `finish()`, `sentMessages`, `sendError`, `paginationError`, `sentAttachments`, `attachmentSendError`, `nextAttachmentUpload`, `nextSendHandle`, `sendHandles`, `markAsReadCalls`, `markAsReadUpToCalls`, `markAsReadError` |
 | `MockMediaService` | ``MediaService`` | `contents`, `error`, `maxUploadSizeResult`, `thumbnailRequests` |
 | `MockMediaFile` | ``MediaFile`` | built from a `url` |
 | `MockAttachmentUpload` | ``AttachmentUpload`` | `waitError`, `cancelCount` |
 | `MockSendHandle` | ``SendHandle`` | `cancelResult`, `cancelError`, `retryError`, `cancelCount`, `retryCount` |
+| `MockProfileService` | ``ProfileService`` | `profiles`, `error`, `displayNameChanges`, `avatarUploads`, `removeAvatarCount`, `publishedPresences` |
+| `MockAccountService` | ``AccountService`` | `managementURLs`, `emitIgnoredUsers(_:)`, `finish()`, `ignoredCalls`, `unignoredCalls`, `deactivations`, `error`, `deactivateError` |
 | `MockEncryptionService` | ``EncryptionService`` | `emitVerificationStatus(_:)`, `emitRecoveryState(_:)`, `emitBackupState(_:)`, `finish()`, injected results and errors |
 | `MockSessionVerification` | ``SessionVerification`` | `emit(_:)`, `finish()`, `setError(_:for:)`, `calls` |
 | `MockNotificationService` | ``NotificationService`` | `registeredPushers`, `unregisteredPushers`, `setSettings(_:for:)`, injected errors |
@@ -133,6 +136,59 @@ check *what* your code sent:
 ```swift
 #expect(timeline.sentMessages == [.text("hi")])
 ```
+
+## Read receipts, typing, profile and account
+
+`MockTimeline` records the calls to ``Timeline/markAsRead(visibility:)`` in `markAsReadCalls` and
+those to ``Timeline/markAsRead(upTo:visibility:)`` in `markAsReadUpToCalls`. Read receipts of other
+members sit on the item: `TimelineItem(id:kind:readReceipts:)`, with `SampleData.readReceipt(...)`.
+`MockRoomService.handle(for:)` gives, without awaiting, the `MockRoomHandle` that
+``RoomService/room(_:)`` returns for the same identifier — always the same one — so that a test can
+push typing users into it and read what the code under test sent:
+
+```swift
+@Test func typingIsReportedToTheRoom() async throws {
+    let rooms = MockRoomService()
+    let id = RoomID(rawValue: "!room:matrix.org")!
+    let model = ComposerModel(rooms: rooms, roomID: id)   // your code
+
+    try await model.textChanged("hel")
+
+    #expect(rooms.handle(for: id).typingNotices == [true])
+}
+```
+
+`MockProfileService` serves the profiles of `profiles` (built with `SampleData.userProfile(...)`)
+and records the edits; `MockAccountService` serves a URL per action from `managementURLs` and
+records `ignore`, `unignore` and `deactivate`. `MockMatrixSession` takes both as the `profile:` and
+`account:` parameters of its initialiser, with defaults. See <doc:ReadReceiptsTypingAndProfile>.
+
+### When a command fails
+
+The general rule: a mock **command** records the attempt first, then throws the error you
+configured, so a test can check both that the code tried the action and how it reacted to the
+failure. That is what `markAsRead(visibility:)`, `markAsRead(upTo:visibility:)`, `setTyping(_:)`,
+the profile edits, `setPresence(_:)`, `ignore`, `unignore`, `deactivate`, `logout()`,
+`reauthenticate(_:)`, the `SendHandle` commands, `submitCheckCode(_:)` and the commands of
+`MockSessionVerification` do.
+
+The exceptions, which throw **before** recording anything, are:
+
+- `MockTimeline.send(_:)`, for a message and for an attachment: a failed send leaves
+  `sentMessages` and `sentAttachments` as they were;
+- `MockNotificationService.registerPusher(_:)` and `unregisterPusher(_:)`;
+- `MockNotificationService.setNotificationMode(_:for:)` and `restoreDefaultNotificationMode(for:)`:
+  on error, the room's settings are left as they were.
+
+Reads (`profile(of:)`, `managementURL(for:)`, `content(of:)`) record nothing. The `///`
+documentation of each double states what it records and when it throws.
+
+### Ending the streams
+
+`finish()` ends the open streams of `MockRoomService` (the room list and the typing streams of its
+handles) and of `MockAccountService` (`ignoredUsers`). A subscription opened **after** `finish()`
+ends at once without any value, which is also how the real services behave when their subscription
+fails: a `for await` loop over it returns, instead of hanging.
 
 ## Media
 

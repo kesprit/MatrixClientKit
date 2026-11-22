@@ -177,9 +177,31 @@ public final class RustRoomHandle: RoomHandle {
         return ffiRoom
     }
 
+    /// A stream of snapshots of the members typing, the current user excluded. Every access opens
+    /// an independent upstream subscription, cancelled when the stream ends.
+    public var typingUsers: AsyncStream<[UserID]> {
+        let room = room
+        return TypingMapper.stream(ownUserID: room.ownUserId()) { listener in
+            room.subscribeToTypingNotifications(listener: listener)
+        }
+    }
+
+    /// Tells the room whether the current user is typing.
+    public func setTyping(_ isTyping: Bool) async throws {
+        do {
+            try await room.typingNotice(isTyping: isTyping)
+        } catch {
+            throw ErrorMapper.map(error)
+        }
+    }
+
     public func timeline() async throws -> any MatrixClientKitCore.Timeline {
         do {
-            return RustTimeline(timeline: try await room.timeline(), lifetime: lifetime)
+            return RustTimeline(
+                timeline: try await room.timeline(),
+                ownUserID: room.ownUserId(),
+                lifetime: lifetime
+            )
         } catch {
             throw ErrorMapper.map(error)
         }

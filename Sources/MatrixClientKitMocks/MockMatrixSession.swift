@@ -1,11 +1,13 @@
 import Foundation
 import MatrixClientKitCore
 
-/// A drivable authenticated session for tests: exposes a ready-made ``MockRoomService``,
-/// ``MockSyncController``, ``MockEncryptionService``, ``MockNotificationService`` and ``MockMediaService``, lets you
-/// push authentication states, and records calls to ``logout()``. ``reauthenticate(_:)`` returns or
-/// throws ``reauthenticateResult``; ``beginOAuthReauthentication(_:)`` returns
-/// ``oauthReauthenticationFlow``.
+/// A drivable authenticated session for tests.
+///
+/// It exposes ready-made ``MockRoomService``, ``MockSyncController``, ``MockEncryptionService``,
+/// ``MockNotificationService``, ``MockMediaService``, ``MockProfileService`` and
+/// ``MockAccountService`` instances, lets you push authentication states, and records calls to
+/// ``logout()``. ``reauthenticate(_:)`` returns or throws ``reauthenticateResult``;
+/// ``beginOAuthReauthentication(_:)`` returns ``oauthReauthenticationFlow``.
 public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
     private let lock = NSLock()
 
@@ -16,6 +18,8 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
     public let encryption: any EncryptionService
     public let notifications: any NotificationService
     public let media: any MediaService
+    public let profile: any ProfileService
+    public let account: any AccountService
 
     private let authStateStream: AsyncStream<AuthState>
     private let authStateContinuation: AsyncStream<AuthState>.Continuation
@@ -62,7 +66,9 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
         sync: MockSyncController = MockSyncController(),
         encryption: MockEncryptionService = MockEncryptionService(),
         notifications: MockNotificationService = MockNotificationService(),
-        media: MockMediaService = MockMediaService()
+        media: MockMediaService = MockMediaService(),
+        profile: MockProfileService = MockProfileService(),
+        account: MockAccountService = MockAccountService()
     ) {
         self.userID = UserID(rawValue: userID) ?? UserID(rawValue: "@alice:matrix.org")!
         self.deviceID = DeviceID(rawValue: deviceID) ?? DeviceID(rawValue: "DEV1")!
@@ -71,6 +77,8 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
         self.encryption = encryption
         self.notifications = notifications
         self.media = media
+        self.profile = profile
+        self.account = account
         (authStateStream, authStateContinuation) = AsyncStream<AuthState>.makeStream(
             bufferingPolicy: .bufferingNewest(1)
         )
@@ -85,6 +93,7 @@ public final class MockMatrixSession: MatrixSession, @unchecked Sendable {
         authStateContinuation.yield(state)
     }
 
+    /// Marks the session as signed out (``didLogout``), then throws ``logoutError`` when one is set.
     public func logout() async throws {
         let error = lock.withLock {
             _didLogout = true

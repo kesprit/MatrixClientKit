@@ -43,7 +43,8 @@ public enum SampleData: Sendable {
     public static func message(
         _ body: String,
         from sender: String = "@alice:matrix.org",
-        isOwn: Bool = false
+        isOwn: Bool = false,
+        senderAvatar: MediaSource? = nil
     ) -> TimelineItem {
         TimelineItem(
             id: UUID().uuidString,
@@ -56,10 +57,28 @@ public enum SampleData: Sendable {
                     timestamp: Date(),
                     isOwn: isOwn,
                     isEdited: false,
-                    sendState: .sent
+                    sendState: .sent,
+                    senderAvatar: senderAvatar
                 )
             )
         )
+    }
+
+    /// Builds a sample ``UserProfile``, without an avatar unless you pass one.
+    public static func userProfile(
+        userID: UserID = UserID(rawValue: "@alice:matrix.org")!,
+        displayName: String? = "Alice",
+        avatar: MediaSource? = nil
+    ) -> UserProfile {
+        UserProfile(userID: userID, displayName: displayName, avatar: avatar)
+    }
+
+    /// Builds a sample ``ReadReceipt``.
+    public static func readReceipt(
+        userID: UserID = UserID(rawValue: "@bob:matrix.org")!,
+        timestamp: Date? = Date()
+    ) -> ReadReceipt {
+        ReadReceipt(userID: userID, timestamp: timestamp)
     }
 
     /// Builds a sample ``MediaSource`` at `mxc://example.org/<id>`.
