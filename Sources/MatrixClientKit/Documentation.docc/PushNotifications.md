@@ -51,29 +51,19 @@ the application, even with the same access group; the data protection keychain d
 there is only one keychain and the key changes nothing. This has these consequences:
 
 - the application and the extension must both be **signed**, and carry the **same**
-  `keychain-access-groups` entitlement. An unsigned binary — a command-line tool, a test run
-  without a signing identity — gets `errSecMissingEntitlement` (-34018), thrown as
-  ``MatrixError/storage(_:)``;
-- the extension's `Info.plist` declares its extension service subsystem:
+  `keychain-access-groups` entitlement (or an application identifier). An unsigned executable —
+  a command-line tool, a test run without a signing identity — cannot save a session: writing it
+  throws ``MatrixError/storage(_:)`` with `keychainFailure(status: -34018)`. iOS is not affected;
+- the extension's `Info.plist` declares:
 
-  ```xml
-  <key>NSExtension</key>
-  <dict>
-      <key>NSExtensionPointIdentifier</key>
-      <string>com.apple.usernotifications.service</string>
-      <key>NSExtensionPrincipalClass</key>
-      <string>$(PRODUCT_MODULE_NAME).NotificationService</string>
-      <key>Subsystems</key>
-      <array>
-          <string>NSExtensionService_Subsystem</string>
-      </array>
-  </dict>
+  ```text
+  NSExtension.Subsystems = ["NSExtensionService_Subsystem"]
   ```
 
 - a session written by an earlier version in the legacy keychain is migrated on the first read, by
   whichever of the application or the extension reads first: the item is read, rewritten in the
   data protection keychain, read back, and only then deleted. A failure before the deletion leaves
-  the legacy item in place and the next read retries; logging out deletes both copies.
+  the legacy item in place, the read throws, and the next read retries; logging out deletes both copies.
 
 ## Register the pusher
 

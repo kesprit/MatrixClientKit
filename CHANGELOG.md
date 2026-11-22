@@ -7,6 +7,10 @@ follows [SemVer](https://semver.org/).
 
 ### Breaking
 
+- On macOS, an unsigned executable (command-line tool, `swift test`) can no longer save a session:
+  the data protection keychain needs a signature carrying `keychain-access-groups` (or an
+  application identifier), otherwise writing throws `MatrixError.storage(.keychainFailure(-34018))`.
+  Sign it with `keychain-access-groups`. iOS is not affected.
 - `Timeline` requires two new members, `markAsRead(visibility:)` and
   `markAsRead(upTo:visibility:)`. `RoomHandle` requires `typingUsers: AsyncStream<[UserID]>` and
   `setTyping(_:)`. `MatrixSession` requires `profile: any ProfileService` and
