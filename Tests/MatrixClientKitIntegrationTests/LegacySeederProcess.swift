@@ -31,35 +31,18 @@
         }
     }
 
-    /// Repère du bundle de test pour ``legacySeederURL()``.
-    private final class LegacySeederLocator {}
-
     /// Emplacement de l'exécutable du seeder.
     ///
     /// Le seeder est l'application `IntegrationLegacySeeder.app` du projet `IntegrationHost/`, signée
-    /// avec les mêmes entitlements que l'hôte : Xcode la construit dans le même répertoire de produits
-    /// que `IntegrationHost.app` et le bundle `.xctest` (dépendance de la cible de tests). `Bundle(for:)`
-    /// résout l'image qui contient réellement ce code, quel que soit le processus hôte, là où
-    /// `Bundle.main` désignerait l'hôte et `#filePath` les sources ; le répertoire de produits est
-    /// celui du bundle `.xctest` ou, une fois celui-ci copié dans `IntegrationHost.app/Contents/PlugIns`,
-    /// trois niveaux plus haut.
+    /// avec les mêmes entitlements que l'hôte. Xcode la construit dans le même répertoire de produits
+    /// que `IntegrationHost.app` ; le bundle de tests est chargé par l'hôte, donc `Bundle.main` est
+    /// `IntegrationHost.app` et son répertoire parent celui des produits.
     func legacySeederURL() throws -> URL {
-        let relativePath = "IntegrationLegacySeeder.app/Contents/MacOS/IntegrationLegacySeeder"
-        var directory = Bundle(for: LegacySeederLocator.self).bundleURL.deletingLastPathComponent()
-        var candidates = [directory.appending(path: relativePath)]
-        // `…/Products/Debug/IntegrationHost.app/Contents/PlugIns/IntegrationHostTests.xctest`
-        for _ in 0..<3 {
-            directory = directory.deletingLastPathComponent()
-            candidates.append(directory.appending(path: relativePath))
-        }
-        let found = candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        let url = Bundle.main.bundleURL.deletingLastPathComponent()
+            .appending(path: "IntegrationLegacySeeder.app/Contents/MacOS/IntegrationLegacySeeder")
         return try #require(
-            found,
-            """
-            IntegrationLegacySeeder.app not found next to the host (looked in \
-            \(candidates.map(\.path).joined(separator: ", "))): run the suite through \
-            `Scripts/integration-harness.sh test`, which builds the IntegrationHost project
-            """
+            FileManager.default.isExecutableFile(atPath: url.path) ? url : nil,
+            "IntegrationLegacySeeder.app not found at \(url.path): run the suite through `Scripts/integration-harness.sh test`, which builds the IntegrationHost project"
         )
     }
 

@@ -22,8 +22,7 @@ Constats établis par l'exécution réelle sur le harnais (exécution du 2026-11
 Commande de reprise (hors agent, avec le Keychain déverrouillé et « Toujours autoriser » accordé au binaire de test) :
 
     ./Scripts/integration-harness.sh up
-    eval "$(./Scripts/integration-harness.sh env)"
-    swift test --filter 'MatrixClientKitIntegrationTests\.HarnessTests/RoomActivityHarnessTests'
+    ./Scripts/integration-harness.sh test IntegrationHostTests/HarnessTests/RoomActivityHarnessTests
     ./Scripts/integration-harness.sh down
 
 ## T11 — Intégration : profil, présence, compte, durée de vie

@@ -13,3 +13,5 @@ docs-build/
 IntegrationHost/Derived/
 IntegrationHost/Tuist/.build/
 Derived/
+!IntegrationHost/Tuist/Package.resolved
+IntegrationHost/.derived/

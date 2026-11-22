@@ -72,7 +72,10 @@ let project = Project(
             dependencies: [.target(name: "IntegrationHost"), .target(name: "IntegrationLegacySeeder")]
                 + packageDependencies,
             // Le bundle est chargé par l'hôte (`-bundle_loader`), qui ne référence rien du package :
-            // Tuist ne relie pas pour autant la bibliothèque Rust que le code des tests tire.
+            // Tuist ne relie aucune dépendance au bundle de tests hébergé, et la bibliothèque Rust
+            // libmatrix_sdk_ffi.a (xcframework de MatrixRustSDK) n'est pas autolinkée, d'où des
+            // symboles `_uniffi_*` non définis. Le nom est celui du binaire de
+            // matrix-rust-components-swift : à revoir si l'amont le renomme.
             settings: .settings(base: signing.merging(["OTHER_LDFLAGS": "$(inherited) -lmatrix_sdk_ffi"]) { $1 })
         ),
     ]

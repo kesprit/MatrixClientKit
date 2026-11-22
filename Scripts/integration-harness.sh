@@ -4,7 +4,8 @@
 #   down  arrête et efface tout (volumes compris)
 #   env   affiche les variables d'environnement à exporter (les `MCK_HARNESS_*`)
 #   test  [filtre]  génère IntegrationHost/ (Tuist) et lance la suite d'intégration signée avec
-#         xcodebuild ; sans filtre, uniquement `HarnessTests`. Le filtre est un identifiant
+#         xcodebuild ; sans filtre, uniquement `HarnessTests` (harnais Docker
+#         obligatoire) ; échoue si aucun test n'est passé. Le filtre est un identifiant
 #         `-only-testing` (ex. `IntegrationHostTests/HarnessTests`, ou
 #         `IntegrationHostTests/IntegrationTests` avec des variables `MATRIX_TEST_*` dans
 #         l'environnement). Les variables `MCK_HARNESS_*` et `MATRIX_TEST_*` sont transmises au
@@ -126,22 +127,29 @@ case "${1:-}" in
     echo "export MCK_HARNESS_ADMIN_TOKEN_EXPIRING=$token_expiring"
     ;;
   test)
-    # `env` joint le harnais Docker pour obtenir les jetons admin. Sans harnais, on continue si
-    # l'environnement porte déjà des `MATRIX_TEST_*` (suite `IntegrationTests`, serveur réel).
-    if harness_env=$("$0" env 2>/dev/null); then
+    filter="${2:-IntegrationHostTests/HarnessTests}"
+    [[ $# -le 2 ]] || echo "avertissement : arguments ignorés après le filtre : ${*:3}" >&2
+    if [[ "$filter" == *HarnessTests* ]]; then
+      # Le harnais Docker doit tourner : sans lui, tous les cas seraient « skipped ». Aucune
+      # variable `MATRIX_TEST_*` résiduelle ne remplace cet environnement ; l'échec de `env` est fatal.
+      # `$0` est relatif au répertoire de départ, que le script a quitté : passer par `$ROOT`.
+      harness_env=$("$ROOT/Scripts/integration-harness.sh" env) \
+        || { echo "harnais Docker injoignable : lancez Scripts/integration-harness.sh up" >&2; exit 1; }
       eval "$harness_env"
-    elif [[ -z "${MATRIX_TEST_HOMESERVER:-}" ]]; then
-      echo "harnais Docker injoignable (lancez \`$0 up\`) et MATRIX_TEST_HOMESERVER absent" >&2
-      exit 1
+    else
+      # Suite `IntegrationTests` : serveur réel, configuré par l'appelant.
+      [[ -n "${MATRIX_TEST_HOMESERVER:-}" ]] \
+        || { echo "MATRIX_TEST_HOMESERVER absent : voir Tests/MatrixClientKitIntegrationTests/README.md" >&2; exit 1; }
     fi
     # xcodebuild ne transmet à l'hôte de tests que les variables préfixées `TEST_RUNNER_`
     # (le préfixe est retiré) : on réexporte donc chaque MCK_HARNESS_* / MATRIX_TEST_* présent.
-    while IFS='=' read -r name value; do
+    for name in $(compgen -e); do
       case "$name" in
-        MCK_HARNESS_* | MATRIX_TEST_*) export "TEST_RUNNER_$name=$value" ;;
+        MCK_HARNESS_* | MATRIX_TEST_*) export "TEST_RUNNER_$name=${!name}" ;;
       esac
-    done < <(env)
-    filter="${2:-IntegrationHostTests/HarnessTests}"
+    done
+    result="$ROOT/.xcode-derived/IntegrationHost.xcresult"
+    rm -rf "$result"
     cd "$ROOT/IntegrationHost"
     tuist install
     tuist generate --no-open
@@ -150,7 +158,17 @@ case "${1:-}" in
       -workspace IntegrationHost.xcworkspace -scheme IntegrationHost \
       -destination 'platform=macOS' \
       -derivedDataPath "$ROOT/.xcode-derived/IntegrationHost" \
+      -resultBundlePath "$result" \
       -only-testing:"$filter"
+    # Une suite entièrement « skipped » (environnement absent) ou un filtre qui ne sélectionne rien
+    # sortent en succès : exige au moins un test réellement passé.
+    passed=$(xcrun xcresulttool get test-results summary --path "$result" --compact \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin)["passedTests"])')
+    if [[ "$passed" -lt 1 ]]; then
+      echo "aucun test n'a réellement tourné (passés : $passed) : environnement ou filtre « $filter » incorrect" >&2
+      exit 1
+    fi
+    echo "$passed test(s) passé(s)"
     ;;
   *)
     echo "usage: $0 up|down|env|test [filtre]" >&2

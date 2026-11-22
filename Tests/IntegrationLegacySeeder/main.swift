@@ -21,8 +21,8 @@ import Foundation
 import Synchronization
 import MatrixClientKit
 import MatrixClientKitCore
-// Import simple, pas `@testable` : ce que le seeder utilise est en portée `package`, et une cible
-// exécutable du package racine est construite aussi par `swift build -c release`, sans testabilité.
+// Import simple, pas `@testable` : ce que le seeder utilise est en portée `package` (accessible grâce
+// à `-package-name MatrixClientKit`, voir `IntegrationHost/Project.swift`), pas en portée interne.
 import MatrixClientKitRust
 
 enum Seeder {

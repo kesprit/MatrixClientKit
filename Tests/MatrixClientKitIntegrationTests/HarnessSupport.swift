@@ -6,10 +6,9 @@ import MatrixClientKit
 // Sérialisée pour la même raison que ``IntegrationTests`` : une seule entrée Keychain de session
 // par processus. Les deux suites parentes ne sont pas sérialisées **entre elles** — il faudrait un
 // parent commun, donc toucher à l'existant — : lancer séparément
-// `--filter 'MatrixClientKitIntegrationTests\.HarnessTests'` et
-// `--filter 'MatrixClientKitIntegrationTests\.IntegrationTests'`. Le filtre est une expression
-// régulière sur l'identifiant complet : `IntegrationTests` seul désigne aussi cette suite, par le
-// nom du module (voir `Tests/IntegrationHarness/README.md`).
+// `Scripts/integration-harness.sh test IntegrationHostTests/HarnessTests` et
+// `Scripts/integration-harness.sh test IntegrationHostTests/IntegrationTests` (`-only-testing` de
+// xcodebuild ; voir `Tests/IntegrationHarness/README.md`).
 @Suite(.enabled(if: HarnessConfiguration.isAvailable), .serialized)
 struct HarnessTests {}
 
