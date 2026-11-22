@@ -36,7 +36,8 @@ follows [SemVer](https://semver.org/).
 - `Message.senderAvatar`: the sender's avatar, a `MediaSource` for `MediaService`.
 - `MatrixSession.account`, an `AccountService`: `managementURL(for:)` (an `AccountManagementAction`
   — overview, profile, devices, one device, deleting a device, deactivating the account — on the
-  authorization server of a homeserver that delegates its accounts, `nil` otherwise), `ignoredUsers`
+  authorization server of a homeserver that delegates its accounts — `https`, or `http` on a loopback
+  host for local development — `nil` otherwise), `ignoredUsers`
   (a stream of snapshots), `ignore(_:)`, `unignore(_:)` and `deactivate(password:eraseData:)`.
 - `MockProfileService`, `MockAccountService`, the new members of `MockTimeline`, `MockRoomHandle`
   and `MockMatrixSession`, and `SampleData.userProfile(...)`, `SampleData.readReceipt(...)` and

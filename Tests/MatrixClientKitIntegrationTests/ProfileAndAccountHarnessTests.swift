@@ -119,10 +119,9 @@ extension HarnessTests {
             }
         }
 
-        /// Sur `synapse-oauth` + MAS : une URL `https` de l'hôte MAS. Le MAS du harnais annonce
-        /// `http://localhost:8082/account/` (sondé par HTTP) : la règle « https seul » de
-        /// `AccountMapper` doit donc lever `.unexpected`. Le cas échoue alors, message à l'appui ;
-        /// la règle et le test restent tels quels (voir les rulings 0.6).
+        /// Sur `synapse-oauth` + MAS : une URL de l'hôte MAS. Le MAS du harnais annonce
+        /// `http://localhost:8082/account/` (sondé par HTTP) : `http` est accepté parce que l'hôte
+        /// est en boucle locale (décision D4, rulings 0.6) ; `https` l'est partout.
         @Test(.enabled(if: HarnessConfiguration.current?.mas != nil), .timeLimit(.minutes(3)))
         func managementURLPointsAtMASOnAnOAuthHomeserver() async throws {
             try await withOAuthSession { session, mas, _ in
@@ -130,7 +129,8 @@ extension HarnessTests {
                     switch await attempt({ try await session.account.managementURL(for: action) }) {
                     case let .success(url):
                         #expect(
-                            url?.scheme == "https", "[T11] management URL for \(action): \(String(describing: url))")
+                            url?.scheme == "http" || url?.scheme == "https",
+                            "[T11] management URL for \(action): \(String(describing: url))")
                         #expect(url?.host == mas.host, "[T11] management URL for \(action): \(String(describing: url))")
                     case let .failure(error):
                         Issue.record(

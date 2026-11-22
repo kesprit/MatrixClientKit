@@ -28,11 +28,26 @@ import MatrixClientKitCore
         #expect(try AccountMapper.managementURL(from: nil) == nil)
     }
 
-    @Test(arguments: ["http://account.example.org/", "ftp://account.example.org/", "myapp://account"])
-    func aNonHTTPSURLIsUnexpected(_ string: String) {
+    @Test(arguments: [
+        "http://account.example.org/", "http://localhost.example.org/", "http://example.org:8082/",
+        "http://notlocalhost/", "http://128.0.0.1/", "http://[::2]/", "http://127.0.0.1.example.org/",
+        "ftp://account.example.org/", "myapp://account", "file:///etc/passwd", "javascript:alert(1)",
+        "ftp://localhost/", "myapp://localhost/",
+    ])
+    func aNonHTTPSNonLoopbackURLIsUnexpected(_ string: String) {
         #expect { try AccountMapper.managementURL(from: string) } throws: { error in
             if case MatrixError.unexpected = error { true } else { false }
         }
+    }
+
+    /// Le serveur d'autorisation d'un développement local (le harnais d'intégration) sert en `http`.
+    @Test(arguments: [
+        "http://localhost:8082/account/", "http://LOCALHOST/", "http://mas.localhost:8080/",
+        "http://127.0.0.1/account", "http://127.255.0.3:8080/", "http://[::1]:8080/account",
+        "HTTPS://account.example.org/",
+    ])
+    func httpOnLoopbackAndHTTPSAreAccepted(_ string: String) throws {
+        #expect(try AccountMapper.managementURL(from: string) == URL(string: string))
     }
 
     @Test func malformedURLIsUnexpected() {
