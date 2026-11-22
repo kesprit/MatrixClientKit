@@ -23,6 +23,7 @@ follows [SemVer](https://semver.org/).
 
 ### Added
 
+- Internal product `_MatrixClientKitRust`, reserved for the integration tests and outside SemVer.
 - Read receipts: `Timeline.markAsRead(visibility:)` marks the room as read up to its latest visible
   message, `Timeline.markAsRead(upTo:visibility:)` up to a given event, and both move the read
   marker as well. `ReadReceiptVisibility` chooses who can see the receipt, `.public` (`m.read`) or

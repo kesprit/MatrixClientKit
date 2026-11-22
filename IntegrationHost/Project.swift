@@ -27,7 +27,7 @@ let entitlements: Entitlements = .file(path: "Config/IntegrationHost.entitlement
 let packageDependencies: [TargetDependency] = [
     .external(name: "MatrixClientKit"),
     .external(name: "MatrixClientKitCore"),
-    .external(name: "MatrixClientKitRust"),
+    .external(name: "_MatrixClientKitRust"),
 ]
 
 let project = Project(

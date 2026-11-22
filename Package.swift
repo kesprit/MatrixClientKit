@@ -8,9 +8,9 @@ let package = Package(
         .library(name: "MatrixClientKit", targets: ["MatrixClientKit"]),
         .library(name: "MatrixClientKitCore", targets: ["MatrixClientKitCore"]),
         .library(name: "MatrixClientKitMocks", targets: ["MatrixClientKitMocks"]),
-        // Réservé au projet `IntegrationHost/` (Tuist), qui n'importe que des produits : la suite
-        // d'intégration utilise des symboles `package` de cette cible. Pas une API : ne pas en dépendre.
-        .library(name: "MatrixClientKitRust", targets: ["MatrixClientKitRust"]),
+        // Interne, hors SemVer, réservé à `IntegrationHost/` (Tuist), qui n'importe que des
+        // produits : la suite d'intégration utilise des symboles `package` de cette cible.
+        .library(name: "_MatrixClientKitRust", targets: ["MatrixClientKitRust"]),
     ],
     dependencies: [
         .package(
