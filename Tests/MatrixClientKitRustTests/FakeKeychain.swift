@@ -24,7 +24,13 @@ final class FakeKeychain: KeychainAccessing, @unchecked Sendable {
         let status: OSStatus
     }
 
+    private struct Interception {
+        let matches: (Call) -> Bool
+        let action: () -> Void
+    }
+
     private let lock = NSLock()
+    private var interceptions: [Interception] = []
     private var legacy: [String: Data] = [:]
     private var dataProtection: [String: Data] = [:]
     private var recorded: [Call] = []
@@ -38,6 +44,23 @@ final class FakeKeychain: KeychainAccessing, @unchecked Sendable {
     func legacyValue(account: String) -> Data? { lock.withLock { legacy[account] } }
     func dataProtectionValue(account: String) -> Data? { lock.withLock { dataProtection[account] } }
 
+    func removeLegacy(account: String) { lock.withLock { legacy[account] = nil } }
+    func clearFailures() { lock.withLock { failures = [] } }
+
+    /// Exécute `action` une seule fois, juste avant le premier appel qui satisfait `matches`,
+    /// hors du verrou : simule un autre acteur qui agit entre deux appels du store testé.
+    func beforeNext(_ matches: @escaping (Call) -> Bool, perform action: @escaping () -> Void) {
+        lock.withLock { interceptions.append(Interception(matches: matches, action: action)) }
+    }
+
+    private func intercept(_ call: Call) {
+        let pending: Interception? = lock.withLock {
+            guard let index = interceptions.firstIndex(where: { $0.matches(call) }) else { return nil }
+            return interceptions.remove(at: index)
+        }
+        pending?.action()
+    }
+
     /// Fait échouer toute opération `operation` visant le trousseau data protection
     /// (`dataProtection: true`) ou l'ancien (`false`).
     func fail(_ operation: Operation, dataProtection: Bool, with status: OSStatus) {
@@ -49,6 +72,7 @@ final class FakeKeychain: KeychainAccessing, @unchecked Sendable {
 
     func copyData(matching query: [String: Any]) -> (status: OSStatus, data: Data?) {
         let call = Call(operation: .copy, query: query)
+        intercept(call)
         return lock.withLock {
             recorded.append(call)
             if let status = failure(for: call) { return (status, nil) }
@@ -61,6 +85,7 @@ final class FakeKeychain: KeychainAccessing, @unchecked Sendable {
 
     func update(matching query: [String: Any], attributes: [String: Any]) -> OSStatus {
         let call = Call(operation: .update, query: query)
+        intercept(call)
         return lock.withLock {
             recorded.append(call)
             if let status = failure(for: call) { return status }
@@ -72,6 +97,7 @@ final class FakeKeychain: KeychainAccessing, @unchecked Sendable {
 
     func add(_ attributes: [String: Any]) -> OSStatus {
         let call = Call(operation: .add, query: attributes)
+        intercept(call)
         return lock.withLock {
             recorded.append(call)
             if let status = failure(for: call) { return status }
@@ -84,6 +110,7 @@ final class FakeKeychain: KeychainAccessing, @unchecked Sendable {
 
     func delete(matching query: [String: Any]) -> OSStatus {
         let call = Call(operation: .delete, query: query)
+        intercept(call)
         return lock.withLock {
             recorded.append(call)
             if let status = failure(for: call) { return status }

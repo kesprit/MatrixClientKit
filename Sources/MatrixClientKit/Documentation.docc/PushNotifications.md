@@ -51,19 +51,23 @@ the application, even with the same access group; the data protection keychain d
 there is only one keychain and the key changes nothing. This has these consequences:
 
 - the application and the extension must both be **signed**, and carry the **same**
-  `keychain-access-groups` entitlement (or an application identifier). An unsigned executable —
-  a command-line tool, a test run without a signing identity — cannot save a session: writing it
-  throws ``MatrixError/storage(_:)`` with `keychainFailure(status: -34018)`. iOS is not affected;
+  `keychain-access-groups` entitlement. An unsigned executable cannot save a session: writing it
+  throws ``MatrixError/storage(_:)`` with `keychainFailure(status: -34018)`. (A single executable
+  with no extension may carry an application identifier instead; an application and its extension
+  have different ones, so the shared access group is what they need.) iOS is not affected;
 - the extension's `Info.plist` declares:
 
   ```text
   NSExtension.Subsystems = ["NSExtensionService_Subsystem"]
   ```
 
-- a session written by an earlier version in the legacy keychain is migrated on the first read, by
-  whichever of the application or the extension reads first: the item is read, rewritten in the
-  data protection keychain, read back, and only then deleted. A failure before the deletion leaves
-  the legacy item in place, the read throws, and the next read retries; logging out deletes both copies.
+- a session written by an earlier version in the legacy keychain is migrated by the **application**,
+  on the first read after the update: the item is read, added to the data protection keychain, read
+  back, and only then deleted. The extension cannot migrate it — reading the legacy keychain is
+  what it is refused — so until the application has run once after the update, the extension's
+  read throws a storage error and the notification keeps its fallback content. A failure before the
+  deletion leaves the legacy item in place, the read throws, and the next read retries; logging out
+  deletes both copies.
 
 ## Register the pusher
 

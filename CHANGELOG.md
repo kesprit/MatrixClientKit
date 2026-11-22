@@ -9,7 +9,7 @@ follows [SemVer](https://semver.org/).
 
 - On macOS, an unsigned executable (command-line tool, `swift test`) can no longer save a session:
   the data protection keychain needs a signature carrying `keychain-access-groups` (or an
-  application identifier), otherwise writing throws `MatrixError.storage(.keychainFailure(-34018))`.
+  application identifier), otherwise writing throws `MatrixError.storage(.keychainFailure(status: -34018))`.
   Sign it with `keychain-access-groups`. iOS is not affected.
 - `Timeline` requires two new members, `markAsRead(visibility:)` and
   `markAsRead(upTo:visibility:)`. `RoomHandle` requires `typingUsers: AsyncStream<[UserID]>` and
@@ -124,13 +124,20 @@ follows [SemVer](https://semver.org/).
   notification settings**, not read from the server. After a long absence they can be lower than
   the real count, because the sync timeline is limited. In an encrypted room, an event counts only
   once it is decrypted.
-- **On macOS, the package stores the session in the data protection keychain**, and migrates a
-  session written by an earlier version on its first read: the legacy item is read, rewritten in
-  the data protection keychain and read back, and only then deleted, so a failure in between
-  loses nothing and the next read starts again. This keychain requires a signed application
-  carrying `keychain-access-groups` (or an application identifier): an unsigned binary gets
-  `errSecMissingEntitlement` (-34018), which surfaces as `MatrixError.storage`. iOS is unchanged.
-  See the *Push notifications* article.
+- **On macOS, the package stores the session in the data protection keychain**, and the
+  application migrates a session written by an earlier version on its first read: the legacy item
+  is read, added to the data protection keychain, read back, and only then deleted, so a failure
+  in between loses nothing and the next read starts again. The migration only adds, never
+  overwrites, and the data protection copy wins when another reader migrated first. The
+  notification extension cannot migrate: until the application has run once after the update, the
+  extension's read throws a storage error. This keychain requires a signed application carrying
+  `keychain-access-groups`: an unsigned binary gets `errSecMissingEntitlement` (-34018), which
+  surfaces as `MatrixError.storage`. iOS is unchanged. See the *Push notifications* article.
+- **A residual window exists at the very first read after the update**: a logout
+  (`removeValue`) by another instance that lands between the legacy read and the add can bring a
+  revoked session back. No lock covers it — the `CrossProcessLock` serialises the SDK's SQLite
+  store, not the keychain. It resolves itself at the first authentication refusal, which erases
+  the session, with no data loss.
 
 ## [0.5.0] - 2026-10-26
 

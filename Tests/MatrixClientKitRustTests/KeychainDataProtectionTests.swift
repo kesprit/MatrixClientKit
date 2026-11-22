@@ -36,13 +36,12 @@ private func makeStore(_ keychain: FakeKeychain) -> KeychainSecureStore {
         #expect(call.operation == .copy || call.operation == .delete)
     }
     let firstCopy = try #require(calls.first { $0.operation == .copy })
-    let firstDelete = try #require(calls.first { $0.operation == .delete })
+    #expect(calls.contains { $0.operation == .delete && $0.usesDataProtection })
     #expect(firstCopy.usesDataProtection)
-    #expect(firstDelete.usesDataProtection)
 }
 
 #if os(macOS)
-    @Test func migratesALegacyItemToTheDataProtectionKeychain() throws {
+    @Test func migratesALegacyItemToTheDataProtectionKeychainByAddingOnly() throws {
         let keychain = FakeKeychain()
         keychain.seedLegacy(secret, account: "a")
         let store = makeStore(keychain)
@@ -54,7 +53,7 @@ private func makeStore(_ keychain: FakeKeychain) -> KeychainSecureStore {
         #expect(keychain.legacyValue(account: "a") == nil)
         #expect(
             keychain.calls.map(\.label)
-                == ["copy-dp", "copy-legacy", "update-dp", "add-dp", "copy-dp", "delete-legacy"]
+                == ["copy-dp", "copy-legacy", "add-dp", "copy-dp", "delete-legacy"]
         )
         let legacyRead = try #require(keychain.calls.dropFirst().first).query
         #expect(legacyRead[dataProtectionKey] == nil)
@@ -79,7 +78,7 @@ private func makeStore(_ keychain: FakeKeychain) -> KeychainSecureStore {
         let store = makeStore(keychain)
 
         #expect(try store.data(forKey: "a") == nil)
-        #expect(keychain.calls.map(\.label) == ["copy-dp", "copy-legacy"])
+        #expect(keychain.calls.map(\.label) == ["copy-dp", "copy-legacy", "copy-dp"])
     }
 
     @Test func aFailedDataProtectionWriteKeepsTheLegacyCopyAndThrows() {
@@ -96,15 +95,20 @@ private func makeStore(_ keychain: FakeKeychain) -> KeychainSecureStore {
         #expect(!keychain.calls.contains { $0.operation == .delete })
     }
 
-    @Test func aFailedReadBackKeepsTheLegacyCopyAndThrows() {
+    @Test func aDivergentReadBackReturnsTheDataProtectionValueAndTheNextReadAgrees() throws {
         let keychain = FakeKeychain()
         keychain.seedLegacy(secret, account: "a")
         keychain.corruptNextDataProtectionWrite()
         let store = makeStore(keychain)
 
-        #expect(throws: MatrixError.self) { try store.data(forKey: "a") }
-        #expect(keychain.legacyValue(account: "a") == secret)
-        #expect(!keychain.calls.contains { $0.operation == .delete })
+        let first = try store.data(forKey: "a")
+        let stored = try #require(keychain.dataProtectionValue(account: "a"))
+        let callsAfterFirstRead = keychain.calls.count
+        let second = try store.data(forKey: "a")
+
+        #expect(first == stored)
+        #expect(second == stored)
+        #expect(keychain.calls.count == callsAfterFirstRead + 1)
     }
 
     @Test func aLegacyReadFailureSurfacesAndWritesNothing() {
@@ -118,7 +122,38 @@ private func makeStore(_ keychain: FakeKeychain) -> KeychainSecureStore {
         #expect(!keychain.calls.contains { $0.operation == .add || $0.operation == .update })
     }
 
-    @Test func aFailedLegacyDeletionStillReturnsTheValueAndIsRetriedOnRemoval() throws {
+    /// Lecteur L1 : rien en data protection. Avant sa lecture legacy, L2 migre et supprime le
+    /// legacy. Renvoyer `nil` ferait balayer une session valide (et purger le store local).
+    @Test func anEmptyLegacyReadRereadsTheDataProtectionKeychainBeforeReturningNil() throws {
+        let keychain = FakeKeychain()
+        keychain.seedLegacy(secret, account: "a")
+        keychain.beforeNext({ $0.label == "copy-legacy" }) {
+            keychain.seedDataProtection(secret, account: "a")
+            keychain.removeLegacy(account: "a")
+        }
+        let store = makeStore(keychain)
+
+        #expect(try store.data(forKey: "a") == secret)
+    }
+
+    /// L1 lit la valeur legacy T0 ; un autre acteur migre puis enregistre T1 (jeton tourné).
+    /// La migration n'écrit qu'en ajout : T1 ne doit jamais être écrasé par T0.
+    @Test func aConcurrentMigrationAndRefreshIsNeverOverwrittenByTheStaleLegacyValue() throws {
+        let newer = Data("jeton-tourné".utf8)
+        let keychain = FakeKeychain()
+        keychain.seedLegacy(secret, account: "a")
+        keychain.beforeNext({ $0.label == "add-dp" }) {
+            keychain.seedDataProtection(newer, account: "a")
+            keychain.removeLegacy(account: "a")
+        }
+        let store = makeStore(keychain)
+
+        #expect(try store.data(forKey: "a") == newer)
+        #expect(keychain.dataProtectionValue(account: "a") == newer)
+        #expect(!keychain.calls.contains { $0.operation == .update })
+    }
+
+    @Test func aFailedLegacyDeletionStillReturnsTheValueAndRemovalCleansBothCopies() throws {
         let keychain = FakeKeychain()
         keychain.seedLegacy(secret, account: "a")
         keychain.fail(.delete, dataProtection: false, with: errSecInteractionNotAllowed)
@@ -127,9 +162,15 @@ private func makeStore(_ keychain: FakeKeychain) -> KeychainSecureStore {
         #expect(try store.data(forKey: "a") == secret)
         #expect(keychain.dataProtectionValue(account: "a") == secret)
         #expect(keychain.legacyValue(account: "a") == secret)
+
+        keychain.clearFailures()
+        try store.removeValue(forKey: "a")
+
+        #expect(keychain.legacyValue(account: "a") == nil)
+        #expect(keychain.dataProtectionValue(account: "a") == nil)
     }
 
-    @Test func removeValueDeletesBothCopies() throws {
+    @Test func removeValueDeletesTheLegacyCopyBeforeTheDataProtectionOne() throws {
         let keychain = FakeKeychain()
         keychain.seedLegacy(secret, account: "a")
         keychain.seedDataProtection(secret, account: "a")
@@ -137,7 +178,25 @@ private func makeStore(_ keychain: FakeKeychain) -> KeychainSecureStore {
 
         try store.removeValue(forKey: "a")
 
+        #expect(keychain.calls.map(\.label) == ["delete-legacy", "delete-dp"])
         #expect(keychain.legacyValue(account: "a") == nil)
         #expect(keychain.dataProtectionValue(account: "a") == nil)
+    }
+
+    /// Si la suppression legacy échoue, la copie data protection doit rester : sinon la lecture
+    /// suivante « migrerait » une session révoquée depuis le legacy.
+    @Test func aFailedLegacyRemovalLeavesNoResurrectableCopy() throws {
+        let keychain = FakeKeychain()
+        keychain.seedLegacy(secret, account: "a")
+        keychain.seedDataProtection(secret, account: "a")
+        keychain.fail(.delete, dataProtection: false, with: errSecInteractionNotAllowed)
+        let store = makeStore(keychain)
+
+        #expect(throws: MatrixError.storage(.keychainFailure(status: errSecInteractionNotAllowed))) {
+            try store.removeValue(forKey: "a")
+        }
+        #expect(keychain.dataProtectionValue(account: "a") == secret)
+        #expect(try store.data(forKey: "a") == secret)
+        #expect(!keychain.calls.contains { $0.label == "add-dp" })
     }
 #endif
