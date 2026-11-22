@@ -99,7 +99,7 @@ reset is still not part of v0.6.
 
 ### macOS: sign your executable
 
-On macOS, the package keeps the session in the data protection keychain, which requires an executable **signed** with the `keychain-access-groups` entitlement (or an application identifier). An unsigned executable — a command-line tool, `swift test` — cannot save a session: writing it throws `MatrixError.storage(.keychainFailure(status: -34018))`. iOS is not affected: applications are always signed. A session saved by an earlier version in the legacy macOS keychain is migrated on the first read. If the migration fails — for example with -34018 — the old session stays intact, the read throws, and the next read tries again.
+On macOS, the package keeps the session in the data protection keychain, which requires an executable **signed** with the `keychain-access-groups` entitlement (or an application identifier). An unsigned executable — a command-line tool, `swift test` — cannot save a session: writing it throws `MatrixError.storage(.keychainFailure(status: -34018))`. iOS is not affected: applications are always signed. A session saved by an earlier version in the legacy macOS keychain is migrated on the first read, by the application. If adding it to the data protection keychain fails — for example with -34018 — the old session stays intact, the read throws, and the next read tries again.
 
 ## Compatibility
 
