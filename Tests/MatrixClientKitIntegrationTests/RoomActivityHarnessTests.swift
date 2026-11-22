@@ -212,19 +212,21 @@ extension HarnessTests {
 
                 try await b.timeline.markAsRead(visibility: .public)
 
+                // L'accusé de B est d'abord sur son adhésion (implicite, avant toute lecture) : on
+                // attend qu'il soit sur l'item `m.room.name`, postérieur au message.
+                let bID = pair.second.userID
                 let seen = await a.recorder.waitUntil(within: .seconds(30)) { items in
-                    items.contains { $0.readReceipts.contains { $0.userID == pair.second.userID } }
+                    renameItem(after: tag, in: items)?.readReceipts.contains { $0.userID == bID } == true
                 }
-                let items = try #require(seen, "B's receipt never reached A: \(kinds(a.recorder.latest))")
+                let items = try #require(seen, "B's receipt never reached the rename item: \(kinds(a.recorder.latest))")
                 print("[T10] A's timeline with B's receipt: \(kinds(items))")
-                let holder = try #require(
-                    items.first { $0.readReceipts.contains { $0.userID == pair.second.userID } })
-                #expect(holder.message == nil, "B's receipt is on a message, not on the rename: \(kinds(items))")
-                #expect(sentItem(tag, in: items)?.readReceipts.isEmpty == true)
-                if case .unsupported = holder.kind {
-                } else {
-                    Issue.record("the receipt holder is not an .unsupported item: \(kinds(items))")
-                }
+                #expect(
+                    sentItem(tag, in: items)?.readReceipts.contains { $0.userID == bID } == false,
+                    "B's receipt is on the message: \(kinds(items))")
+                let holders = items.filter { $0.readReceipts.contains { $0.userID == bID } }
+                #expect(
+                    holders.count == 1 && holders.first?.id == renameItem(after: tag, in: items)?.id,
+                    "B's receipt is not only on the rename item (the membership one should be gone): \(kinds(items))")
             }
         }
     }
@@ -257,6 +259,15 @@ private func openRoom(_ roomID: RoomID, in session: any MatrixSession) async thr
     }
     try #require(joined != nil, "room \(roomID.rawValue) never appeared in the joined list")
     return try await session.rooms.room(roomID)
+}
+
+/// L'item du changement de nom du salon (`m.room.name`) qui suit le message `body`.
+private func renameItem(after body: String, in items: [TimelineItem]) -> TimelineItem? {
+    guard let index = items.lastIndex(where: { $0.message?.body == body }) else { return nil }
+    return items[index...].first {
+        if case let .unsupported(description) = $0.kind { return description.contains("m.room.name") }
+        return false
+    }
 }
 
 /// L'item dont le message porte `body` et a atteint le serveur.

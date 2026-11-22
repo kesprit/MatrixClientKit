@@ -350,7 +350,13 @@ func createSharedRoom(
     encrypted: Bool
 ) async throws -> RoomID {
     let memberLogin = try await rawLogin(on: homeserver, user: member.user, password: member.password)
-    let creatorLogin = try await rawLogin(on: homeserver, user: creator.user, password: creator.password)
+    let creatorLogin: RawLogin
+    do {
+        creatorLogin = try await rawLogin(on: homeserver, user: creator.user, password: creator.password)
+    } catch {
+        await rawLogout(on: homeserver, token: memberLogin.token)
+        throw error
+    }
     let outcome: Result<RoomID, any Error>
     do {
         var body: [String: Any] = [
