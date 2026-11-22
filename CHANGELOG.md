@@ -48,6 +48,8 @@ follows [SemVer](https://semver.org/).
 - `MockRoomService.list(filter:)` opened after `finish()` stayed open forever, so a `for await` loop
   over it never returned. It now ends at once without any value, like the real service when its
   subscription fails.
+- `RoomSummary.notificationCount` and `highlightCount` stayed at 0 with sliding sync: they now take
+  the counters the SDK computes from the user's notification settings.
 
 ### Changed
 

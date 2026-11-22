@@ -264,11 +264,16 @@ private func waitForNotificationCount(
     in session: any MatrixSession, room: RoomID, sourceLocation: SourceLocation = #_sourceLocation,
     where predicate: @escaping @Sendable (Int) -> Bool
 ) async throws {
+    let seen = Mutex<[String]>([])
     let summary = await firstValue(of: session.rooms.list(filter: .joined), within: .seconds(30)) { rooms in
-        rooms.first { $0.id == room }.map { predicate($0.notificationCount) } ?? false
+        let found = rooms.first { $0.id == room }
+        seen.withLock { $0.append(found.map { "\($0.notificationCount)" } ?? "room absent") }
+        return found.map { predicate($0.notificationCount) } ?? false
     }
+    let values = seen.withLock { $0 }
     try #require(
-        summary != nil, "the room's notificationCount never satisfied the expectation", sourceLocation: sourceLocation)
+        summary != nil, "the room's notificationCount never satisfied the expectation; saw \(values)",
+        sourceLocation: sourceLocation)
 }
 
 private func describe(_ items: [TimelineItem]?) -> String { kinds(items) }

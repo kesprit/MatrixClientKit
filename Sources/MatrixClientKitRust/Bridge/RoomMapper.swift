@@ -45,9 +45,23 @@ enum RoomMapper {
             // Une valeur aberrante — serveur hostile ou bogué — ferait sinon planter
             // l'application appelante à la traduction d'un simple résumé de room.
             joinedMemberCount: Int(clamping: info?.joinedMembersCount ?? room.joinedMembersCount()),
-            notificationCount: Int(clamping: info?.notificationCount ?? 0),
-            highlightCount: Int(clamping: info?.highlightCount ?? 0),
+            notificationCount: unreadCounts(from: info).notifications,
+            highlightCount: unreadCounts(from: info).mentions,
             membership: info.map { membership(from: $0.membership) } ?? .unknown
+        )
+    }
+
+    /// Compteurs de non-lus d'une room, bornés (voir ``summary(from:)``).
+    ///
+    /// - Important: ce sont `numUnreadNotifications` et `numUnreadMentions`, calculés par le SDK
+    ///   selon les réglages de notification, et non `RoomInfo.notificationCount` /
+    ///   `highlightCount` : ces derniers sont les compteurs serveur, que la sliding sync ne fournit
+    ///   pas, et restent à 0. Les relire ferait redescendre le badge à 0 pour toute room.
+    ///   Verrouillé par `RoomMapperCountsTests`.
+    static func unreadCounts(from info: RoomInfo?) -> (notifications: Int, mentions: Int) {
+        (
+            Int(clamping: info?.numUnreadNotifications ?? 0),
+            Int(clamping: info?.numUnreadMentions ?? 0)
         )
     }
 
