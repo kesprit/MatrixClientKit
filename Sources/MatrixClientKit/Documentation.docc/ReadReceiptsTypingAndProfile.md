@@ -58,6 +58,10 @@ not necessarily a message. A membership change, a renamed room, a redacted or un
 a sticker or a poll carries a receipt like any message does. So a member read a message `M` when
 their receipt is on `M` **or on any later item** of the timeline.
 
+Two receipts are implicit, and seen by the others before anyone reads anything: the author of a
+message has a receipt on their own message, and a member who joins has one on their own
+membership event.
+
 For example, Bob reads everything, then Carol joins the room. The timeline is:
 
 | Item | Receipts |
@@ -112,8 +116,9 @@ func textChanged(_ text: String, room: any RoomHandle) async throws {
 }
 ```
 
-The package sends only what you call. How often the upstream SDK lets a repeated
-`setTyping(true)` through is its own business; read the *Behaviours to know* of the changelog.
+The package sends only what you call, and adds no throttling. The upstream SDK batches repeated
+`setTyping(true)` calls: in a test, 10 calls over about 2 seconds reached the other member as 5
+snapshots. The current user is never in their own `typingUsers`.
 
 ## Publish the presence
 
@@ -126,10 +131,12 @@ try await session.profile.setPresence(.online)
 
 Know the limits before relying on it:
 
-- **The package publishes nothing itself, except the initial state.** The upstream SDK's initial
-  state, `.unavailable`, goes out with every sync: until your application calls `setPresence(_:)`, the
-  user shows as `.unavailable` to their contacts, at every launch: the state is not persisted.
-  Publish it again each time the application starts, for instance when it comes to the foreground.
+- **The package publishes nothing itself.** Until your application calls `setPresence(_:)`, the
+  user reads `offline` from another account on Synapse, at every launch: the state is not
+  persisted. Publish it again each time the application starts, for instance when it comes to the
+  foreground.
+- **The server rate limits it**: on Synapse, a second update within about 10 seconds throws
+  ``MatrixError/rateLimited(retryAfter:)``. Wait, then retry.
 - **The state applies to the following syncs even when the call throws.**
 - **Observing other people's presence is not possible**: the upstream SDK does not expose it.
 
@@ -232,12 +239,11 @@ try await session.account.deactivate(password: password, eraseData: false)
 
 ## What to remember
 
-- The package sends no receipt and no typing notice by itself, and no presence other than the
-  initial `.unavailable` that every sync carries.
+- The package sends no receipt, no typing notice and no presence by itself.
 - A read receipt is on the latest item a member read, which is not always a message.
 - ``Timeline/markAsRead(visibility:)`` resolves "the latest item" twice; use
   ``Timeline/markAsRead(upTo:visibility:)`` for one fixed target.
-- The presence starts as `.unavailable` and is not persisted; observing it is not possible.
+- The presence reads `offline` until you publish it, is not persisted and is rate limited; observing it is not possible.
 - The current user's profile is not observable.
 - Account deactivation is refused in an OAuth session: use the management URL.
 

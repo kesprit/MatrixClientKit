@@ -1,6 +1,9 @@
 # MatrixClientKit 0.6 — PRD
 
 **Date :** 2026-11-21
+**Statut final (2026-11-22) :** implémentation livrée, suite d'intégration 16/16 contre le
+harnais ; constats d'exécution dans les rulings 0.6 et le CHANGELOG (*Behaviours to know*). D3 et
+D4 (§13.1) ont modifié le comportement prévu en §3.1 point 5 et §4.4.
 **Statut :** amendé le 2026-11-21 après relecture de T3 : les accusés de lecture sont portés par
 `TimelineItem`, plus par `Message` (§13.1, D2 ; tâche T3b). Q1 est tranchée : désactivation incluse
 (§13.1, D1). Les autres arbitrages non tranchés par la feuille de route restent marqués *décision de
@@ -65,8 +68,9 @@ privé), **afficher qui a lu quoi** et **qui écrit**, **publier la présence** 
   (`join()` rend la main à la mise en file). Rien ne bloque une 0.7 : l'API amont existe.
 - **Le package ne publie rien de lui-même.** *Décision de rédaction :* il n'envoie ni présence, ni
   accusé, ni frappe sans un appel explicite de l'application. Conséquence documentée : tant que
-  l'application n'appelle pas `setPresence(_:)`, l'utilisateur est `unavailable` (état initial
-  amont), à chaque lancement.
+  l'application n'appelle pas `setPresence(_:)`, rien n'est publié, à chaque lancement
+  (constaté à l'exécution : Synapse rend l'utilisateur `offline`, non `unavailable` ; l'état
+  initial amont n'est qu'un paramètre des requêtes de sync).
 - **Pas de visibilité par défaut des accusés.** *Décision de rédaction :* le paramètre
   `visibility` est exigé à chaque appel. Le choix public/privé est une décision de produit de
   l'application (réglage de confidentialité), pas du SDK.
@@ -99,7 +103,10 @@ Relevés dans `.build/checkouts/matrix-rust-components-swift/Sources/MatrixRustS
    constater en intégration** (T10).
 5. **Compteurs.** `RoomInfo.numUnreadMessages`, `numUnreadNotifications`, `numUnreadMentions`,
    `isMarkedUnread`, `fullyReadEventId` existent ; `RoomSummary` n'en reprend que les compteurs
-   serveur (`notificationCount`, `highlightCount`) — inchangé en 0.6.
+   serveur (`notificationCount`, `highlightCount`). *Corrigé en 0.6 (D3, §13.1) :* la sliding sync
+   ne fournit pas ces compteurs serveur (ils restaient à 0) ; `RoomSummary` reprend
+   `numUnreadNotifications` et `numUnreadMentions`, calculés par le SDK selon les réglages de
+   notification.
 
 ### 3.2 Présence et profil
 
@@ -345,7 +352,8 @@ public protocol AccountService: Sendable {
   une enum publique : une enum publique est exhaustive pour le consommateur (règle d'évolution du
   README), et l'amont a déjà un cas (`crossSigningReset`) volontairement non exposé tant que la
   réinitialisation d'identité est au palier « Later ».
-- `managementURL` : une chaîne amont qui n'est pas une URL valide → `.unexpected` explicite.
+- `managementURL` : une chaîne amont qui n'est pas une URL valide → `.unexpected` explicite. Depuis
+  D4 (§13.1), le schéma doit être `https`, ou `http` vers un hôte loopback seulement.
 - `ignoredUsers` : la valeur initiale vient de `ignoredUsers()`, les suivantes du listener ; un
   échec de la lecture initiale termine le flux **sans valeur** (même règle que
   `RoomService.list(filter:)`, documentée).
@@ -532,6 +540,9 @@ d'observation du profil propre.
 | --- | --- | --- | --- |
 | D1 | 2026-11-21 | **Q1 : la désactivation d'un compte à mot de passe est incluse** en 0.6. | T8 reste au plan ; §4.4 garde `deactivate(password:eraseData:)` ; critère 10 maintenu. Les mentions « sous réserve de Q1 » valent désormais « inclus ». |
 | D2 | 2026-11-21 | **Les accusés de lecture sont portés par `TimelineItem`, quel que soit son type**, et non plus par `Message.readReceipts`. Modification de l'API livrée par T1, acceptée avant la 0.6.0 (rien n'est publié). | §4.1 réécrit ; critère 14 ajouté ; §10 (`SampleData.message` sans `readReceipts:`) ; tâche T3b ajoutée avant T9. |
+
+| D3 | 2026-11-22 | **Les compteurs de notifications sont corrigés en 0.6** : `RoomSummary.notificationCount` et `highlightCount` reprennent `numUnreadNotifications` et `numUnreadMentions` (calculés par le SDK), car la sliding sync ne fournit pas les compteurs serveur lus jusque-là (toujours 0). Relevé en intégration (T10). | §3.1 point 5 corrigé ; CHANGELOG (*Fixed*) ; `RoomMapper.unreadCounts(from:)`. Les compteurs peuvent être inférieurs au réel après une longue absence, et un événement d'un salon chiffré ne compte qu'une fois déchiffré. |
+| D4 | 2026-11-22 | **Exception loopback pour l'URL de gestion** : `AccountService.managementURL(for:)` accepte `https`, et `http` seulement vers `localhost`, `*.localhost`, `127.0.0.0/8` ou `::1`. Relevé en intégration (T11) : le MAS du harnais s'annonce en `http://localhost:8082/`. | §4.4 : « https seul » devient « https, ou http loopback » ; tout autre schéma ou hôte reste `.unexpected`. Sans effet hors développement local. |
 
 Motif de D2, relevé en relecture de T3 : l'amont pose l'accusé d'un membre sur le dernier item
 *visible* qu'il a lu (§3.1, constat 2). Quand cet item n'est pas un message — adhésion, changement

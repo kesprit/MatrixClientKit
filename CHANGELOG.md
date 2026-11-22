@@ -3,7 +3,7 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
 follows [SemVer](https://semver.org/).
 
-## [0.6.0] - YYYY-MM-DD
+## [0.6.0] - 2026-11-22
 
 ### Breaking
 
@@ -71,13 +71,15 @@ follows [SemVer](https://semver.org/).
 - **A read receipt sits only on the latest item a member read**, which is not necessarily a
   message. A member read a message `M` when their receipt is on `M` **or on any later item**. The
   package does not do that lookup for you.
-- **The package publishes nothing by itself**: no receipt and no typing notice. As for the
-  presence, the only state that leaves is the upstream initial one, `unavailable`, which every sync
-  carries until the application sets another.
-- **The presence is publish-only and is not persisted.** The user shows as `.unavailable` — the
-  upstream initial state — until the application calls `setPresence(_:)`, at every launch. The
-  state applies to the following syncs even when the call throws. Observing other users' presence
-  is not possible: the upstream SDK does not expose it.
+- **The package publishes nothing by itself**: no receipt, no typing notice and no presence.
+  The upstream SDK's initial presence, `unavailable`, is only what its sync requests carry.
+- **The presence is publish-only and is not persisted.** Against Synapse, a user whose
+  application has not called `setPresence(_:)` reads `offline` from another account — not
+  `unavailable` — and is so again at every launch: publish it each time the application starts.
+  The state applies to the following syncs even when the call throws. **`setPresence(_:)` is rate
+  limited by the server**: a second update within about 10 seconds (Synapse) throws
+  `MatrixError.rateLimited`; retry after the delay. Observing other users' presence is not
+  possible: the upstream SDK does not expose it.
 - **The current user's profile is not observable**, and nothing is cached: every `profile(of:)`
   asks the homeserver. After `setDisplayName(_:)` — which does not validate the name — update your
   display yourself.
@@ -91,8 +93,28 @@ follows [SemVer](https://semver.org/).
   `.unexpected`. A reported failure can match an account
   that was deactivated all the same (the network dropping after the server accepted the request):
   the next sync then fails with an unknown-token error and the hard logout erases the local data.
-- **An unknown user in `profile(of:)` throws `MatrixError.notFound` with `.user`.**
-<!-- T10/T11: à compléter -->
+- **An unknown user in `profile(of:)` throws `MatrixError.notFound` with `.user`** — Synapse
+  answers 404 `M_UNKNOWN` for it, which the package maps to that error.
+- **After a deactivation, signing in to the account throws `.authentication(.invalidCredentials)`**
+  against Synapse, which erases the password and does not answer `M_USER_DEACTIVATED`. A refused
+  password in `deactivate(password:eraseData:)` throws the same error.
+- **`managementURL(for:)` accepts `https`, and `http` only towards a loopback host** (`localhost`,
+  `*.localhost`, `127.0.0.0/8`, `::1`), for local development: a local authorization server
+  announces itself in `http`. Any other scheme or `http` host throws
+  `MatrixError.unexpected`. A `*.localhost` host relies on the system resolving it locally, as
+  RFC 6761 asks.
+- **The sender of a message has an implicit receipt on it**: other members see the receipt of the
+  author on their own message, before anyone reads it.
+- **A member who joins has an implicit receipt on their own membership event**, put by the server
+  when they join and visible to the others before they read anything.
+- **The current user is excluded** from `TimelineItem.readReceipts` and from `typingUsers`: each
+  member sees only the others.
+- **Typing notices are batched upstream**: 10 `setTyping(true)` calls over about 2 seconds reached
+  the other member as 5 snapshots. None failed; the package adds no throttling of its own.
+- **`RoomSummary.notificationCount` and `highlightCount` are computed by the SDK from the user's
+  notification settings**, not read from the server. After a long absence they can be lower than
+  the real count, because the sync timeline is limited. In an encrypted room, an event counts only
+  once it is decrypted.
 
 ## [0.5.0] - 2026-10-26
 
