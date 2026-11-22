@@ -41,9 +41,9 @@ enum RoomMapper {
             avatarURL: info?.avatarUrl.flatMap(URL.init(string:)),
             isDirect: info?.isDirect ?? false,
             isEncrypted: info.map { $0.encryptionState == .encrypted },
-            // Compteurs `UInt64` venant du homeserver : bornés plutôt que convertis sèchement.
-            // Une valeur aberrante — serveur hostile ou bogué — ferait sinon planter
-            // l'application appelante à la traduction d'un simple résumé de room.
+            // Compteurs `UInt64` amont : bornés plutôt que convertis sèchement. Une valeur
+            // aberrante — serveur hostile ou bogué — ferait sinon planter l'application appelante
+            // à la traduction d'un simple résumé de room.
             joinedMemberCount: Int(clamping: info?.joinedMembersCount ?? room.joinedMembersCount()),
             notificationCount: unreadCounts(from: info).notifications,
             highlightCount: unreadCounts(from: info).mentions,
@@ -57,7 +57,8 @@ enum RoomMapper {
     ///   selon les réglages de notification, et non `RoomInfo.notificationCount` /
     ///   `highlightCount` : ces derniers sont les compteurs serveur, que la sliding sync ne fournit
     ///   pas, et restent à 0. Les relire ferait redescendre le badge à 0 pour toute room.
-    ///   Verrouillé par `RoomMapperCountsTests`.
+    ///   `RoomMapperCountsTests` verrouille le choix des champs ; le branchement dans
+    ///   ``summary(from:)`` n'est couvert que par le harnais (`markAsReadClearsTheNotificationCount`).
     static func unreadCounts(from info: RoomInfo?) -> (notifications: Int, mentions: Int) {
         (
             Int(clamping: info?.numUnreadNotifications ?? 0),
