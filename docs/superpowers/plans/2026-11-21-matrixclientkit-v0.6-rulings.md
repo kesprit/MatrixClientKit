@@ -24,3 +24,24 @@ Commande de reprise (hors agent, avec le Keychain déverrouillé et « Toujours 
     eval "$(./Scripts/integration-harness.sh env)"
     swift test --filter 'MatrixClientKitIntegrationTests\.HarnessTests/RoomActivityHarnessTests'
     ./Scripts/integration-harness.sh down
+
+## T11 — Intégration : profil, présence, compte, durée de vie
+
+Suite `ProfileAndAccountHarnessTests` écrite, **non exécutée** (blocage Keychain au premier login) ; constats sondés par HTTP sur le harnais réel avant écriture.
+
+- Ruling: comptes — `mck-user` pour présence, profil, ignorés et durée de vie (nom, avatar, utilisateur ignoré remis en l'état en sortie) ; `mck-other` en lecture seule (profil, cible de `ignore`) ; compte jetable `mck-t11-<hex>` créé par `PUT /_synapse/admin/v2/users/{id}` avec `MCK_HARNESS_ADMIN_TOKEN_PASSWORD` et désactivé par l'API admin en sortie. Script du harnais inchangé.
+- Ruling: `OAuthHarnessTests.swift` gagne `OAuthSignIn` (façade interne autour de `OAuthHarness`, qui reste privé car ses méthodes manipulent des types privés du fichier) — coût si faux : aucun.
+- Constat amont (sondé): MAS annonce `account_management_uri` = `http://localhost:8082/account/` (et `issuer` en `http://`). La règle « https seul » de `AccountMapper` lèvera donc `.unexpected` : `managementURLPointsAtMASOnAnOAuthHomeserver` ÉCHOUERA sur ce harnais, attendu. Règle et test non affaiblis ; à trancher par l'utilisateur (MAS du harnais en https, ou exception loopback documentée).
+- Constat amont (sondé): `PUT /presence/{id}/status` est limité en débit (`M_LIMIT_EXCEEDED`, `retry_after_ms` ≈ 10 s) dès la deuxième mise à jour consécutive. Le test rejoue après le délai annoncé ; à documenter en T12 (`setPresence` peut lever `.rateLimited`).
+- Constat amont (sondé): après `deactivate`, Synapse répond `M_FORBIDDEN "Invalid username or password"` (le mot de passe est effacé) et non `M_USER_DEACTIVATED` : une connexion ultérieure donnera `.authentication(.invalidCredentials)`, pas `.userDeactivated` (critère 10 du PRD). Le test accepte les deux et imprime l'erreur reçue `[T11]`. UIAA confirmé : premier appel sans auth → 401 avec flux `m.login.password` ; mauvais mot de passe → `M_FORBIDDEN` ; bon → 200.
+- Constat amont (sondé): `GET /profile/@inconnu` → 404 `M_UNKNOWN` ; le remappage `.notFound(.unspecified)` → `.notFound(.user)` reste à confirmer côté SDK (`[T11]` dans le message d'échec).
+- À constater à l'exécution : état de présence lu avant tout `setPresence` (`[T11] presence read over HTTP…`) ; nombre d'émissions de `ignoredUsers`/`typingUsers` avant `logout()`.
+
+Commande de reprise (Keychain déverrouillé, accès accordé au binaire de test) :
+
+    ./Scripts/integration-harness.sh up
+    eval "$(./Scripts/integration-harness.sh env)"
+    swift test --filter 'MatrixClientKitIntegrationTests\.HarnessTests/ProfileAndAccountHarnessTests'
+    ./Scripts/integration-harness.sh down
+
+Avec la suite de T10 : `--filter 'MatrixClientKitIntegrationTests\.HarnessTests/(RoomActivityHarnessTests|ProfileAndAccountHarnessTests)'`.
