@@ -199,14 +199,12 @@ extension HarnessTests {
                 let tag = "rename-\(UUID())"
                 _ = try await a.timeline.send(.text(tag))
                 _ = try #require(await a.recorder.waitUntil(within: .seconds(30)) { sentItem(tag, in: $0) != nil })
-                let before = try #require(
-                    await b.recorder.waitUntil(within: .seconds(30)) { sentItem(tag, in: $0) != nil })
-                let countBefore = before.count
+                _ = try #require(await b.recorder.waitUntil(within: .seconds(30)) { sentItem(tag, in: $0) != nil })
 
                 try await renameRoom(
                     pair.roomID, to: "Renamed \(UUID())", on: pair.configuration.passwordHomeserver,
                     user: pair.configuration.user, password: pair.configuration.password)
-                let after = await b.recorder.waitUntil(within: .seconds(30)) { $0.count > countBefore }
+                let after = await b.recorder.waitUntil(within: .seconds(30)) { renameItem(after: tag, in: $0) != nil }
                 print("[T10] B's timeline after the rename: \(kinds(b.recorder.latest))")
                 try #require(after != nil, "the room rename never showed in B's timeline: \(kinds(b.recorder.latest))")
 
