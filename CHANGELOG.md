@@ -51,6 +51,9 @@ follows [SemVer](https://semver.org/).
   subscription fails.
 - `RoomSummary.notificationCount` and `highlightCount` stayed at 0 with sliding sync: they now take
   the counters the SDK computes from the user's notification settings.
+- A notification service extension on macOS was refused the session read
+  (`CSSMERR_CSP_NO_USER_INTERACTION`): the keychain items now go in the data protection keychain,
+  which an extension with another code identity can read through the shared access group.
 
 ### Changed
 
@@ -117,6 +120,13 @@ follows [SemVer](https://semver.org/).
   notification settings**, not read from the server. After a long absence they can be lower than
   the real count, because the sync timeline is limited. In an encrypted room, an event counts only
   once it is decrypted.
+- **On macOS, the package stores the session in the data protection keychain**, and migrates a
+  session written by an earlier version on its first read: the legacy item is read, rewritten in
+  the data protection keychain and read back, and only then deleted, so a failure in between
+  loses nothing and the next read starts again. This keychain requires a signed application
+  carrying `keychain-access-groups` (or an application identifier): an unsigned binary gets
+  `errSecMissingEntitlement` (-34018), which surfaces as `MatrixError.storage`. iOS is unchanged.
+  See the *Push notifications* article.
 
 ## [0.5.0] - 2026-10-26
 
