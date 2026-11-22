@@ -50,7 +50,7 @@ extension HarnessTests {
             }
         }
 
-        /// Critère 1, volet `.private` : aucun accusé de B chez A. Critère 2 : B lit en privé, son
+        /// Critère 1, volet `.private` : aucun accusé de B sur le message de A ni après. Critère 2 : B lit en privé, son
         /// compteur retombe à zéro (la sync a donc bien tourné) sans que A ne voie quoi que ce soit.
         @Test(.timeLimit(.minutes(2)))
         func privateReceiptStaysInvisibleToTheSender() async throws {
@@ -67,10 +67,14 @@ extension HarnessTests {
                 try await waitForNotificationCount(in: pair.second, room: pair.roomID) { $0 == 0 }
 
                 try await Task.sleep(for: .seconds(5))
+                // L'adhésion de B lui donne un accusé implicite sur son propre événement
+                // d'adhésion, antérieur au message : seul compte le message et ce qui le suit.
                 let items = try #require(a.recorder.latest)
+                let messageIndex = try #require(
+                    items.lastIndex { $0.message?.body == tag }, "A's message is missing: \(describe(items))")
                 #expect(
-                    !items.contains { $0.readReceipts.contains { $0.userID == pair.second.userID } },
-                    "B's private receipt is visible to A: \(describe(a.recorder.latest))")
+                    !items[messageIndex...].contains { $0.readReceipts.contains { $0.userID == pair.second.userID } },
+                    "B's private receipt reached A's message or a later item: \(describe(items))")
             }
         }
 
