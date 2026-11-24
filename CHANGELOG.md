@@ -3,6 +3,28 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versioning
 follows [SemVer](https://semver.org/).
 
+## [0.6.1] - 2026-11-24
+
+### Fixed
+
+- `RoomHandle.typingUsers` could keep showing a member as typing forever. The SDK only relays the
+  `m.typing` events found in a sync response, with no initial state and no expiry: when the empty
+  list was lost — the application in the background, the device locked, the network cut — the last
+  list stayed in the stream until the room was reopened. A non-empty list that receives no new value
+  for 30 seconds now falls back to `[]`.
+
+### Behaviours to know
+
+- **A member typing without a pause for more than 30 seconds disappears from `typingUsers`** until
+  they pause and start again. The homeserver sends a new `m.typing` only when the list changes, not
+  when a member's client refreshes its typing notice, so a list that stays the same looks exactly
+  like a list whose end was lost. A wrong "nobody is typing" lasts at most until the next change; a
+  wrong "Hélène is typing" lasted forever.
+- **A lost update is corrected late**: the list falls back to `[]` up to 30 seconds after the
+  member stopped, not at once.
+- `MockRoomHandle` has no such delay: it emits exactly what `emitTypingUsers(_:)` is given, so a
+  test of your code stays instantaneous. Push `[]` to simulate the expiry.
+
 ## [0.6.0] - 2026-11-22
 
 ### Breaking

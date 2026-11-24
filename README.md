@@ -94,7 +94,7 @@ reset is still not part of v0.6.
 ## Installation
 
 ```swift
-.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.6.0")
+.package(url: "https://github.com/kesprit/MatrixClientKit", from: "0.6.1")
 ```
 
 Products whose name starts with an underscore (`_MatrixClientKitRust`) are internal: they carry no SemVer guarantee and must not be used.

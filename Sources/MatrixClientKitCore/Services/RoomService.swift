@@ -46,6 +46,10 @@ public protocol RoomHandle: Sendable {
 
     /// A stream of snapshots: every value is the complete, current list of members typing in this
     /// room, the current user excluded. Every access opens an independent subscription.
+    ///
+    /// A non-empty list that receives no new value for 30 seconds falls back to `[]`: the
+    /// homeserver's update is lost when sync is interrupted, and the stream has no initial value.
+    /// A member typing without a pause for longer disappears until their next change.
     var typingUsers: AsyncStream<[UserID]> { get }
 
     /// Tells the room whether the current user is typing. Call it with `true` as the user types and

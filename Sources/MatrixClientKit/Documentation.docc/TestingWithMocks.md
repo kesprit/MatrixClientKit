@@ -144,7 +144,8 @@ those to ``Timeline/markAsRead(upTo:visibility:)`` in `markAsReadUpToCalls`. Rea
 members sit on the item: `TimelineItem(id:kind:readReceipts:)`, with `SampleData.readReceipt(...)`.
 `MockRoomService.handle(for:)` gives, without awaiting, the `MockRoomHandle` that
 ``RoomService/room(_:)`` returns for the same identifier — always the same one — so that a test can
-push typing users into it and read what the code under test sent:
+push typing users into it and read what the code under test sent. Unlike the real handle, it does
+not clear a typing list after 30 seconds: push `[]` to simulate that expiry.
 
 ```swift
 @Test func typingIsReportedToTheRoom() async throws {

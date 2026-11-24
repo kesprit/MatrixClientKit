@@ -97,7 +97,8 @@ A few points to know:
 
 ``RoomHandle/typingUsers`` is a stream of snapshots: every value is the complete, current list of
 the members typing in the room, the current user excluded. Like the other streams of the package,
-leaving the loop cancels the upstream subscription.
+leaving the loop cancels the upstream subscription. Show the list as it comes: the stream already
+clears a list that went stale, your application needs no timer of its own.
 
 ```swift
 Task {
@@ -119,6 +120,18 @@ func textChanged(_ text: String, room: any RoomHandle) async throws {
 The package sends only what you call, and adds no throttling. The upstream SDK batches repeated
 `setTyping(true)` calls: in a test, 10 calls over about 2 seconds reached the other member as 5
 snapshots. The current user is never in their own `typingUsers`.
+
+### When the list goes stale
+
+The homeserver sends a new list only when it changes, and only to a client that is syncing. The
+stream gives no initial value, and a list whose end was lost — the application in the background,
+the device locked, the network cut — would stay forever. So **a non-empty list that receives no new
+value for 30 seconds is replaced by `[]`**, the usual typing timeout of Matrix.
+
+The price: a member who types without a single pause for more than 30 seconds disappears from the
+list, because refreshing their typing notice does not make the server send anything. They come back
+as soon as they pause and start again, or send. An empty stream opened in a room where someone is
+already typing stays empty until the next change.
 
 ## Publish the presence
 
@@ -242,6 +255,8 @@ try await session.account.deactivate(password: password, eraseData: false)
 ## What to remember
 
 - The package sends no receipt, no typing notice and no presence by itself.
+- A typing list that stays unchanged for 30 seconds falls back to `[]`, even when the member is
+  still typing without a pause.
 - A read receipt is on the latest item a member read, which is not always a message.
 - ``Timeline/markAsRead(visibility:)`` resolves "the latest item" twice; use
   ``Timeline/markAsRead(upTo:visibility:)`` for one fixed target.
