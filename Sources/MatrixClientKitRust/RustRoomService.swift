@@ -179,6 +179,9 @@ public final class RustRoomHandle: RoomHandle {
 
     /// A stream of snapshots of the members typing, the current user excluded. Every access opens
     /// an independent upstream subscription, cancelled when the stream ends.
+    ///
+    /// A non-empty list left without update for ``TypingMapper/staleDelay`` falls back to `[]`
+    /// (see ``RoomHandle/typingUsers``).
     public var typingUsers: AsyncStream<[UserID]> {
         let room = room
         return TypingMapper.stream(ownUserID: room.ownUserId()) { listener in

@@ -163,6 +163,9 @@ public final class MockRoomHandle: RoomHandle, @unchecked Sendable {
 
     /// A stream of typing snapshots, in `.bufferingNewest(1)` like the real handle. It emits
     /// nothing until ``emitTypingUsers(_:)`` is called.
+    ///
+    /// Unlike the real handle, a list is never cleared after 30 seconds without update: a test of
+    /// the code under test stays instantaneous. Emit `[]` to simulate that expiry.
     public var typingUsers: AsyncStream<[UserID]> {
         AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             let identifier = lock.withLock { () -> Int? in
